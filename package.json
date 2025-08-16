@@ -1,0 +1,8 @@
+{
+  "name": "clubschool-dashboard-prototype",
+  "version": "1.0.0",
+  "description": "Responsive project dashboard prototype",
+  "scripts": {
+    "test": "echo 'No tests specified'"
+  }
+}
