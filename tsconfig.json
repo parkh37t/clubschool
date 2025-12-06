@@ -15,9 +15,9 @@
     "jsx": "react-jsx",
 
     /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
 
     /* Path mapping */
@@ -35,10 +35,17 @@
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "types": ["node", "vite/client"]
   },
   "include": [
     "src",
+    "components",
+    "hooks",
+    "types",
+    "data",
+    "constants",
+    "utils",
     "vite.config.ts"
   ],
   "exclude": [

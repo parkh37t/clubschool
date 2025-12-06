@@ -23,16 +23,7 @@ export default defineConfig({
       '@/styles': path.resolve(__dirname, './src/styles'),
     },
   },
-  
-  css: {
-    postcss: {
-      plugins: [
-        require('tailwindcss'),
-        require('autoprefixer'),
-      ],
-    },
-  },
-  
+
   build: {
     target: 'esnext',
     minify: 'esbuild',
