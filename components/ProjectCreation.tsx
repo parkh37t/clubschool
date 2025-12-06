@@ -15,8 +15,8 @@ import { formatBudgetInput, parseCurrency } from '../utils/currency';
 import { ProjectDraft, Member } from '../types';
 import { useMobile } from '../hooks/useMobile';
 import { ArrowLeft, Calendar as CalendarIcon, Users, Settings, Check, ChevronRight, Plus, X, UserCheck, UserX, Clock, AlertCircle } from 'lucide-react';
-import { format } from 'date-fns@3.6.0';
-import { ko } from 'date-fns@3.6.0/locale';
+import { format } from 'date-fns';
+import { ko } from 'date-fns/locale';
 
 // 날짜 관련 유틸리티 함수들
 const formatDateSafely = (dateString: string): string => {
