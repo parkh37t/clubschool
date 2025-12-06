@@ -1,60 +1,75 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
 
-  import { defineConfig } from 'vite';
-  import react from '@vitejs/plugin-react-swc';
-  import path from 'path';
+// GitHub Pages 배포를 위한 base path 설정
+const isGitHubPages = process.env.GITHUB_ACTIONS === 'true'
+const repoName = 'clubschool' // 실제 저장소 이름으로 고정
 
-  export default defineConfig({
-    plugins: [react()],
-    resolve: {
-      extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
-      alias: {
-        'vaul@1.1.2': 'vaul',
-        'sonner@2.0.3': 'sonner',
-        'recharts@2.15.2': 'recharts',
-        'react-resizable-panels@2.1.7': 'react-resizable-panels',
-        'react-hook-form@7.55.0': 'react-hook-form',
-        'next-themes@0.4.6': 'next-themes',
-        'lucide-react@0.487.0': 'lucide-react',
-        'input-otp@1.4.2': 'input-otp',
-        'embla-carousel-react@8.6.0': 'embla-carousel-react',
-        'date-fns@3.6.0': 'date-fns',
-        'cmdk@1.1.1': 'cmdk',
-        'class-variance-authority@0.7.1': 'class-variance-authority',
-        '@radix-ui/react-tooltip@1.1.8': '@radix-ui/react-tooltip',
-        '@radix-ui/react-toggle@1.1.2': '@radix-ui/react-toggle',
-        '@radix-ui/react-toggle-group@1.1.2': '@radix-ui/react-toggle-group',
-        '@radix-ui/react-tabs@1.1.3': '@radix-ui/react-tabs',
-        '@radix-ui/react-switch@1.1.3': '@radix-ui/react-switch',
-        '@radix-ui/react-slot@1.1.2': '@radix-ui/react-slot',
-        '@radix-ui/react-slider@1.2.3': '@radix-ui/react-slider',
-        '@radix-ui/react-separator@1.1.2': '@radix-ui/react-separator',
-        '@radix-ui/react-select@2.1.6': '@radix-ui/react-select',
-        '@radix-ui/react-scroll-area@1.2.3': '@radix-ui/react-scroll-area',
-        '@radix-ui/react-radio-group@1.2.3': '@radix-ui/react-radio-group',
-        '@radix-ui/react-progress@1.1.2': '@radix-ui/react-progress',
-        '@radix-ui/react-popover@1.1.6': '@radix-ui/react-popover',
-        '@radix-ui/react-navigation-menu@1.2.5': '@radix-ui/react-navigation-menu',
-        '@radix-ui/react-menubar@1.1.6': '@radix-ui/react-menubar',
-        '@radix-ui/react-label@2.1.2': '@radix-ui/react-label',
-        '@radix-ui/react-hover-card@1.1.6': '@radix-ui/react-hover-card',
-        '@radix-ui/react-dropdown-menu@2.1.6': '@radix-ui/react-dropdown-menu',
-        '@radix-ui/react-dialog@1.1.6': '@radix-ui/react-dialog',
-        '@radix-ui/react-context-menu@2.2.6': '@radix-ui/react-context-menu',
-        '@radix-ui/react-collapsible@1.1.3': '@radix-ui/react-collapsible',
-        '@radix-ui/react-checkbox@1.1.4': '@radix-ui/react-checkbox',
-        '@radix-ui/react-avatar@1.1.3': '@radix-ui/react-avatar',
-        '@radix-ui/react-aspect-ratio@1.1.2': '@radix-ui/react-aspect-ratio',
-        '@radix-ui/react-alert-dialog@1.1.6': '@radix-ui/react-alert-dialog',
-        '@radix-ui/react-accordion@1.2.3': '@radix-ui/react-accordion',
-        '@': path.resolve(__dirname, './src'),
+// https://vitejs.dev/config/
+export default defineConfig({
+  // GitHub Pages 배포 시 base path 설정
+  base: isGitHubPages ? `/${repoName}/` : '/',
+  
+  plugins: [react()],
+  
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+      '@/components': path.resolve(__dirname, './src/components'),
+      '@/hooks': path.resolve(__dirname, './src/hooks'),
+      '@/data': path.resolve(__dirname, './src/data'),
+      '@/types': path.resolve(__dirname, './src/types'),
+      '@/styles': path.resolve(__dirname, './src/styles'),
+    },
+  },
+  
+  css: {
+    postcss: {
+      plugins: [
+        require('tailwindcss'),
+        require('autoprefixer'),
+      ],
+    },
+  },
+  
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    sourcemap: false,
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ui: ['lucide-react'],
+          charts: ['recharts'],
+        },
       },
     },
-    build: {
-      target: 'esnext',
-      outDir: 'build',
-    },
-    server: {
-      port: 3000,
-      open: true,
-    },
-  });
+    chunkSizeWarningLimit: 1000,
+  },
+  
+  server: {
+    port: 3000,
+    open: true,
+    host: true,
+  },
+  
+  preview: {
+    port: 4173,
+    open: true,
+    host: true,
+  },
+  
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'lucide-react', 'recharts'],
+  },
+  
+  // GitHub Pages 환경에서 에셋 경로 최적화
+  define: {
+    __IS_GITHUB_PAGES__: isGitHubPages,
+    __BASE_URL__: JSON.stringify(isGitHubPages ? `/${repoName}/` : '/'),
+  },
+})
