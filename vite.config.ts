@@ -3,13 +3,12 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // GitHub Pages 배포를 위한 base path 설정
-const isGitHubPages = process.env.GITHUB_ACTIONS === 'true'
 const repoName = 'clubschool' // 실제 저장소 이름으로 고정
 
 // https://vitejs.dev/config/
 export default defineConfig({
   // GitHub Pages 배포 시 base path 설정
-  base: isGitHubPages ? `/${repoName}/` : '/',
+  base: `/${repoName}/`,
   
   plugins: [react()],
   
@@ -60,7 +59,7 @@ export default defineConfig({
   
   // GitHub Pages 환경에서 에셋 경로 최적화
   define: {
-    __IS_GITHUB_PAGES__: isGitHubPages,
-    __BASE_URL__: JSON.stringify(isGitHubPages ? `/${repoName}/` : '/'),
+    __IS_GITHUB_PAGES__: true,
+    __BASE_URL__: JSON.stringify(`/${repoName}/`),
   },
 })
