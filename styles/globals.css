@@ -713,3 +713,408 @@
   max-height: 500px;
   opacity: 1;
 }
+
+/* =========================== */
+/* 추가 디자인 개선 */
+/* =========================== */
+
+/* 커스텀 스크롤바 (모던 브라우저) */
+@layer utilities {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--muted-foreground) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border-radius: 4px;
+    opacity: 0.5;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--foreground);
+    opacity: 0.8;
+  }
+
+  /* 모바일에서 스크롤바 숨기기 */
+  @media (max-width: 768px) {
+    *::-webkit-scrollbar {
+      display: none;
+    }
+
+    * {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  }
+}
+
+/* 개선된 간격 시스템 */
+@layer utilities {
+  .spacing-section { margin-bottom: 3rem; }
+  .spacing-card { margin-bottom: 1.5rem; }
+  .spacing-element { margin-bottom: 1rem; }
+  .spacing-tight { margin-bottom: 0.5rem; }
+
+  @media (max-width: 768px) {
+    .spacing-section { margin-bottom: 2rem; }
+    .spacing-card { margin-bottom: 1rem; }
+    .spacing-element { margin-bottom: 0.75rem; }
+  }
+}
+
+/* 그리드 시스템 개선 */
+@layer utilities {
+  .grid-auto-fill {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .grid-auto-fit {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .grid-responsive-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  .grid-responsive-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+  }
+
+  .grid-responsive-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.5rem;
+  }
+
+  @media (max-width: 1280px) {
+    .grid-responsive-4 { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  @media (max-width: 1024px) {
+    .grid-responsive-3, .grid-responsive-4 { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 768px) {
+    .grid-responsive-2, .grid-responsive-3, .grid-responsive-4 {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .grid-auto-fill, .grid-auto-fit {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+  }
+}
+
+/* 향상된 인터랙션 */
+@layer utilities {
+  .interactive {
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .interactive:hover {
+    transform: translateY(-2px);
+  }
+
+  .interactive:active {
+    transform: translateY(0);
+  }
+
+  .clickable {
+    cursor: pointer;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+  }
+}
+
+/* 스켈레톤 로더 */
+@layer utilities {
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--muted) 0%,
+      var(--accent) 50%,
+      var(--muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s ease-in-out infinite;
+    border-radius: var(--radius);
+  }
+
+  @keyframes skeleton-loading {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+}
+
+/* 펄스 애니메이션 */
+@layer utilities {
+  .pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
+/* 스핀 애니메이션 */
+@layer utilities {
+  .spin {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+}
+
+/* 바운스 애니메이션 */
+@layer utilities {
+  .bounce {
+    animation: bounce 1s infinite;
+  }
+
+  @keyframes bounce {
+    0%, 100% {
+      transform: translateY(-25%);
+      animation-timing-function: cubic-bezier(0.8, 0, 1, 1);
+    }
+    50% {
+      transform: translateY(0);
+      animation-timing-function: cubic-bezier(0, 0, 0.2, 1);
+    }
+  }
+}
+
+/* 페이드 인 애니메이션 (방향별) */
+@layer utilities {
+  .fade-in-up {
+    animation: fadeInUp 0.5s ease-out;
+  }
+
+  .fade-in-down {
+    animation: fadeInDown 0.5s ease-out;
+  }
+
+  .fade-in-left {
+    animation: fadeInLeft 0.5s ease-out;
+  }
+
+  .fade-in-right {
+    animation: fadeInRight 0.5s ease-out;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInDown {
+    from {
+      opacity: 0;
+      transform: translateY(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes fadeInLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fadeInRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+}
+
+/* 모바일 제스처 힌트 */
+@layer utilities {
+  .swipe-hint {
+    position: relative;
+  }
+
+  .swipe-hint::after {
+    content: '';
+    position: absolute;
+    bottom: -2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 40px;
+    height: 4px;
+    background: var(--muted-foreground);
+    border-radius: 2px;
+    opacity: 0.3;
+  }
+
+  @media (min-width: 769px) {
+    .swipe-hint::after {
+      display: none;
+    }
+  }
+}
+
+/* 포커스 가시성 개선 (접근성) */
+@layer utilities {
+  .focus-visible-enhanced:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 4px;
+    border-radius: var(--radius);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+}
+
+/* 텍스트 그라디언트 */
+@layer utilities {
+  .text-gradient {
+    background: linear-gradient(135deg, var(--primary), var(--chart-4));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .text-gradient-primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-hover));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* 배지 스타일 */
+@layer utilities {
+  .badge-success {
+    background: var(--chart-2);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .badge-warning {
+    background: var(--chart-3);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .badge-error {
+    background: var(--destructive);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-medium);
+  }
+
+  .badge-info {
+    background: var(--primary);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: calc(var(--radius) / 2);
+    font-size: 0.875rem;
+    font-weight: var(--font-weight-medium);
+  }
+}
+
+/* 그림자 호버 효과 */
+@layer utilities {
+  .shadow-hover {
+    transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .shadow-hover:hover {
+    box-shadow: var(--shadow-xl);
+  }
+}
+
+/* 컨테이너 쿼리 지원 */
+@layer utilities {
+  .container-responsive {
+    container-type: inline-size;
+  }
+
+  @container (min-width: 640px) {
+    .cq-sm\:grid-cols-2 {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @container (min-width: 768px) {
+    .cq-md\:grid-cols-3 {
+      grid-template-columns: repeat(3, 1fr);
+    }
+  }
+}
