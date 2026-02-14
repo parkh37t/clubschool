@@ -244,8 +244,8 @@ export const calculateGroupUtilization = (): GroupUtilization[] => {
     if (groupManmonths.length === 0) {
       return {
         group,
-        lastMonth: { utilizationRate: 0, idleManmonth: 0, idleCost: 0 },
-        thisMonth: { estimatedUtilizationRate: 0, estimatedIdleManmonth: 0, estimatedIdleCost: 0 },
+        lastMonth: { activeManmonth: 0, idleManmonth: 0, utilizationRate: 0, totalCost: 0, idleCost: 0 },
+        thisMonth: { estimatedActiveManmonth: 0, estimatedIdleManmonth: 0, estimatedUtilizationRate: 0, estimatedTotalCost: 0, estimatedIdleCost: 0 },
         memberCount: groupMembers.length,
         averageHourlyRate: 0
       };
@@ -255,20 +255,29 @@ export const calculateGroupUtilization = (): GroupUtilization[] => {
     
     const lastMonthUtil = groupManmonths.reduce((sum, mm) => sum + (mm.lastMonthActual * 100), 0) / groupManmonths.length;
     const thisMonthUtil = groupManmonths.reduce((sum, mm) => sum + (mm.thisMonthEstimated * 100), 0) / groupManmonths.length;
-    
+
+    const lastMonthActive = groupManmonths.reduce((sum, mm) => sum + mm.lastMonthActual, 0);
     const lastMonthIdle = groupManmonths.reduce((sum, mm) => sum + (1 - mm.lastMonthActual), 0);
+    const thisMonthActive = groupManmonths.reduce((sum, mm) => sum + mm.thisMonthEstimated, 0);
     const thisMonthIdle = groupManmonths.reduce((sum, mm) => sum + (1 - mm.thisMonthEstimated), 0);
+
+    const lastMonthTotalCost = groupMembers.length * workingHours * avgHourlyRate;
+    const thisMonthTotalCost = groupMembers.length * workingHours * avgHourlyRate;
 
     return {
       group,
       lastMonth: {
-        utilizationRate: lastMonthUtil,
+        activeManmonth: lastMonthActive,
         idleManmonth: lastMonthIdle,
+        utilizationRate: lastMonthUtil,
+        totalCost: lastMonthTotalCost,
         idleCost: lastMonthIdle * workingHours * avgHourlyRate
       },
       thisMonth: {
-        estimatedUtilizationRate: thisMonthUtil,
+        estimatedActiveManmonth: thisMonthActive,
         estimatedIdleManmonth: thisMonthIdle,
+        estimatedUtilizationRate: thisMonthUtil,
+        estimatedTotalCost: thisMonthTotalCost,
         estimatedIdleCost: thisMonthIdle * workingHours * avgHourlyRate
       },
       memberCount: groupMembers.length,

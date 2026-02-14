@@ -57,6 +57,7 @@ const groupLabels = {
 };
 
 interface MemberManagementProps {
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onViewMemberProfile: (memberId: string) => void;
 }
 

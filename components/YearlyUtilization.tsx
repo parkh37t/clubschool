@@ -114,7 +114,11 @@ const insights = [
   }
 ];
 
-export function YearlyUtilization() {
+interface YearlyUtilizationProps {
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
+}
+
+export function YearlyUtilization({ dataStore }: YearlyUtilizationProps) {
   const [selectedPeriod, setSelectedPeriod] = useState('current-year');
   const [selectedView, setSelectedView] = useState('overview');
   const isMobile = useMobile();

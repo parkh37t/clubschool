@@ -14,6 +14,7 @@ import { useMobile } from '../hooks/useMobile';
 
 
 interface ProjectReviewProps {
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onBack: () => void;
 }
 

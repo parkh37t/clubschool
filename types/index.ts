@@ -121,13 +121,17 @@ export interface UtilizationData {
 export interface GroupUtilization {
   group: 'planning' | 'design' | 'publishing' | 'management' | 'executive';
   lastMonth: {
-    utilizationRate: number;
+    activeManmonth: number;
     idleManmonth: number;
+    utilizationRate: number;
+    totalCost: number;
     idleCost: number;
   };
   thisMonth: {
-    estimatedUtilizationRate: number;
+    estimatedActiveManmonth: number;
     estimatedIdleManmonth: number;
+    estimatedUtilizationRate: number;
+    estimatedTotalCost: number;
     estimatedIdleCost: number;
   };
   memberCount: number;

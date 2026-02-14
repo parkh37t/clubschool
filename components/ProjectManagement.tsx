@@ -13,6 +13,7 @@ import { Search, Filter, Plus, Calendar, Users, Clock, CheckCircle2, AlertTriang
 
 
 interface ProjectManagementProps {
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onCreateProject: () => void;
   onProjectSelect: (project: Project) => void;
 }
