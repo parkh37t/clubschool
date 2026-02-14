@@ -60,6 +60,7 @@ const groupLabels = {
 
 interface MonthlyDetailsViewProps {
   month: 'last' | 'current';
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onBack: () => void;
 }
 

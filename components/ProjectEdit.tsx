@@ -93,6 +93,7 @@ const groupColors = {
 
 interface ProjectEditProps {
   project: Project;
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onBack: () => void;
   onSave: (updatedProject: Project) => void;
 }

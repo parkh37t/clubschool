@@ -13,6 +13,7 @@ import { mockMemberPerformances, mockMemberHistories, mockMembers } from '../dat
 
 interface MemberProfileProps {
   memberId: string;
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
   onBack: () => void;
 }
 

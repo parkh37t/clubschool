@@ -12,7 +12,11 @@ import { useMobile } from '../hooks/useMobile';
 
 const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)'];
 
-export function Analytics() {
+interface AnalyticsProps {
+  dataStore: ReturnType<typeof import('../hooks/useDataStore').useDataStore>;
+}
+
+export function Analytics({ dataStore }: AnalyticsProps) {
   const [selectedPeriod, setSelectedPeriod] = useState('last-6-months');
   const [selectedMetric, setSelectedMetric] = useState('utilization');
   const isMobile = useMobile();
