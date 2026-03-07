@@ -2,6 +2,7 @@ import React from 'react';
 import { Dashboard } from './Dashboard';
 import { Analytics } from './Analytics';
 import { YearlyUtilization } from './YearlyUtilization';
+import { ProfitLoss } from './ProfitLoss';
 import { MemberManagement } from './MemberManagement';
 import { MemberProfile } from './MemberProfile';
 import { ProjectDetail } from './ProjectDetail';
@@ -100,6 +101,8 @@ export function ViewRenderer({
   switch (currentView) {
     case VIEW_NAMES.YEARLY_UTILIZATION:
       return <YearlyUtilization dataStore={dataStore} />;
+    case VIEW_NAMES.PROFIT_LOSS:
+      return <ProfitLoss />;
     case VIEW_NAMES.ANALYTICS:
       return <Analytics dataStore={dataStore} />;
     case VIEW_NAMES.MEMBERS:

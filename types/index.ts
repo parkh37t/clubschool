@@ -234,6 +234,67 @@ export interface OptimizationRecommendation {
   expectedImprovement: number; // 예상 개선률 (%)
 }
 
+// ===== 월별 손익 관리 (P&L) 관련 타입 =====
+
+export interface PLMonthValue {
+  target: number;  // 목표
+  actual: number;  // 실적
+}
+
+export interface PLMonthData {
+  month: number; // 1-12
+  revenue: PLMonthValue;           // 매출액
+  deposits: PLMonthValue;          // 입금액
+  purchases: PLMonthValue;         // 매입
+  projectLaborInternal: PLMonthValue;  // 프로젝트인건비 (내부)
+  projectLaborExternal: PLMonthValue;  // 프로젝트인건비 (외주)
+  divisionLaborCommon: PLMonthValue;   // 사업부인건비 (공통)
+  divisionLaborProposal: PLMonthValue; // 사업부인건비 (제안)
+  idleLaborCost: PLMonthValue;         // 유휴인력비
+  directCostProject: PLMonthValue;     // 사업부직접비 (프로젝트)
+  directCostCommon: PLMonthValue;      // 사업부직접비 (공통)
+  indirectCost: PLMonthValue;          // 간접비
+}
+
+export interface PLAnnualTarget {
+  revenue: number;
+  deposits: number;
+  purchases: number;
+  projectLaborInternal: number;
+  projectLaborExternal: number;
+  divisionLaborCommon: number;
+  divisionLaborProposal: number;
+  idleLaborCost: number;
+  directCostProject: number;
+  directCostCommon: number;
+  indirectCost: number;
+}
+
+export interface PLDivision {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface AnnualPLRecord {
+  id: string;
+  divisionId: string;
+  year: number;
+  annualTarget: PLAnnualTarget;
+  prevYearCumulative: PLAnnualTarget;
+  monthlyData: PLMonthData[];
+}
+
+export interface PLSummary {
+  revenue: number;
+  totalCost: number;
+  grossProfit: number;
+  grossProfitRate: number;
+  indirectCost: number;
+  operatingProfit: number;
+  operatingProfitRate: number;
+}
+
 export interface QuarterlyReport {
   quarter: string; // "2024-Q1"
   totalManmonth: number;

@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { useIsMobile } from './ui/use-mobile';
-import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target } from 'lucide-react';
+import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, DollarSign } from 'lucide-react';
 
 interface NavigationProps {
   currentView: string;
@@ -13,6 +13,7 @@ interface NavigationProps {
 const navItems = [
   { id: 'dashboard', label: '대시보드', icon: BarChart3 },
   { id: 'yearly-utilization', label: '연간 가동률', icon: Target, badge: '목표 90%' },
+  { id: 'profit-loss', label: '월별 손익 관리', icon: DollarSign, badge: 'New' },
   { id: 'analytics', label: '데이터 분석', icon: TrendingUp },
   { id: 'members', label: '인력 관리', icon: Users },
   { id: 'projects', label: '프로젝트 관리', icon: FolderOpen },

@@ -1,6 +1,7 @@
 export const VIEW_NAMES = {
   DASHBOARD: 'dashboard',
   YEARLY_UTILIZATION: 'yearly-utilization',
+  PROFIT_LOSS: 'profit-loss',
   ANALYTICS: 'analytics',
   MEMBERS: 'members',
   PROJECTS: 'projects',
