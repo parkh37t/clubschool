@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>나의 한 달 라이프 사이클</title>
+  <meta name="description" content="한 달을 4주 사이클로 설계하는 개인 라이프 대시보드 — 주간 리듬, 하루 루틴, 월간 목표, 습관 트래커, 회고. 브라우저에서 직접 편집하면 자동 저장됩니다." />
+  <meta name="theme-color" content="#6366f1" />
+  <style>
+    :root {
+      --bg: #f4f5fb;
+      --ink: #1f2233;
+      --ink-soft: #5b5f75;
+      --ink-faint: #9aa0b8;
+      --card: #ffffff;
+      --line: #e7e9f2;
+      --brand: #6366f1;
+      --brand-2: #8b5cf6;
+      --accent-1: #22c55e; /* 1주차 */
+      --accent-2: #f97316; /* 2주차 */
+      --accent-3: #0ea5e9; /* 3주차 */
+      --accent-4: #a855f7; /* 4주차 */
+      --shadow: 0 8px 30px rgba(31, 34, 51, 0.06);
+      --shadow-sm: 0 2px 10px rgba(31, 34, 51, 0.05);
+      --radius: 20px;
+      --radius-sm: 12px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Pretendard", "Pretendard Variable", -apple-system, BlinkMacSystemFont,
+        "Apple SD Gothic Neo", "Malgun Gothic", "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+    }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 18px 80px; }
+
+    /* ---------- Header ---------- */
+    header.hero {
+      background: linear-gradient(135deg, var(--brand) 0%, var(--brand-2) 100%);
+      color: #fff;
+      border-radius: 0 0 28px 28px;
+      padding: 38px 24px 30px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    header.hero::after {
+      content: "";
+      position: absolute; right: -60px; top: -60px;
+      width: 240px; height: 240px; border-radius: 50%;
+      background: rgba(255,255,255,0.10);
+    }
+    .hero-inner { max-width: 1080px; margin: 0 auto; position: relative; z-index: 1; }
+    .hero h1 { margin: 0; font-size: clamp(24px, 4.4vw, 36px); font-weight: 800; letter-spacing: -0.02em; }
+    .hero p.sub { margin: 8px 0 22px; opacity: 0.92; font-size: 15px; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: center; }
+    .meta-block .label { font-size: 12px; opacity: 0.8; }
+    .meta-block .value { font-size: 20px; font-weight: 700; }
+    .progress-wrap { flex: 1 1 240px; min-width: 200px; }
+    .progress-row { display: flex; justify-content: space-between; font-size: 12px; opacity: 0.9; margin-bottom: 6px; }
+    .progress-track { height: 10px; background: rgba(255,255,255,0.25); border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #fff; border-radius: 999px; width: 0; transition: width 0.6s ease; }
+
+    /* ---------- Toolbar ---------- */
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      margin: 18px 0 4px;
+    }
+    .toolbar .hint { font-size: 13px; color: var(--ink-soft); margin-right: auto; display: flex; align-items: center; gap: 8px; }
+    .btn {
+      border: 1px solid var(--line); background: var(--card); color: var(--ink);
+      padding: 9px 16px; border-radius: 999px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: all 0.15s ease; box-shadow: var(--shadow-sm);
+    }
+    .btn:hover { transform: translateY(-1px); border-color: var(--brand); color: var(--brand); }
+    .btn.primary { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .btn.primary:hover { color: #fff; opacity: 0.92; }
+    .btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+    .saved-pill {
+      font-size: 12px; color: var(--accent-1); font-weight: 600;
+      opacity: 0; transition: opacity 0.3s ease;
+    }
+    .saved-pill.show { opacity: 1; }
+
+    /* ---------- Sections ---------- */
+    section { margin-top: 30px; }
+    .sec-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+    .sec-head h2 { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
+    .sec-head .desc { font-size: 13px; color: var(--ink-faint); }
+
+    .card {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    }
+
+    /* ---------- Monthly cycle (4 phases) ---------- */
+    .cycle-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .phase {
+      background: var(--card); border: 1px solid var(--line); border-top: 4px solid var(--pc, var(--brand));
+      border-radius: var(--radius-sm); padding: 16px 16px 14px; box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+    .phase .ico { font-size: 22px; }
+    .phase .wk { font-size: 12px; font-weight: 700; color: var(--pc); margin-top: 6px; }
+    .phase h3 { margin: 2px 0 6px; font-size: 16px; }
+    .phase ul { margin: 8px 0 0; padding-left: 18px; }
+    .phase li { font-size: 13px; color: var(--ink-soft); margin-bottom: 3px; }
+
+    /* ---------- Weekly rhythm ---------- */
+    .week-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+    .day {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius-sm);
+      padding: 12px 12px 14px; box-shadow: var(--shadow-sm); min-height: 120px;
+      display: flex; flex-direction: column;
+    }
+    .day .dname { font-weight: 800; font-size: 14px; }
+    .day.sat .dname { color: #2563eb; }
+    .day.sun .dname { color: #ef4444; }
+    .day .dtheme { font-size: 11px; color: var(--ink-faint); margin-bottom: 8px; }
+    .day .dbody { font-size: 13px; color: var(--ink-soft); flex: 1; }
+
+    /* ---------- Daily routine ---------- */
+    .routine-list { display: flex; flex-direction: column; gap: 0; padding: 6px 0; }
+    .rblock { display: flex; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--line); align-items: flex-start; }
+    .rblock:last-child { border-bottom: 0; }
+    .rblock .time { flex: 0 0 132px; }
+    .rblock .time .ico { font-size: 18px; }
+    .rblock .time .slot { font-weight: 700; font-size: 14px; }
+    .rblock .time .clock { font-size: 12px; color: var(--ink-faint); }
+    .rblock .ract { flex: 1; font-size: 14px; color: var(--ink-soft); }
+
+    /* ---------- Goals ---------- */
+    .goal-list { padding: 8px 6px; }
+    .goal {
+      display: flex; align-items: flex-start; gap: 12px; padding: 11px 14px;
+      border-radius: var(--radius-sm); transition: background 0.15s ease;
+    }
+    .goal:hover { background: #f8f9ff; }
+    .goal input[type="checkbox"] { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--brand); cursor: pointer; flex: 0 0 auto; }
+    .goal .gtext { flex: 1; font-size: 14.5px; }
+    .goal input:checked + .gtext { text-decoration: line-through; color: var(--ink-faint); }
+
+    /* ---------- Habit tracker ---------- */
+    .tracker-scroll { overflow-x: auto; padding: 6px; -webkit-overflow-scrolling: touch; }
+    table.tracker { border-collapse: collapse; width: 100%; min-width: 720px; }
+    table.tracker th, table.tracker td { text-align: center; padding: 0; }
+    table.tracker thead th {
+      font-size: 11px; color: var(--ink-faint); font-weight: 600; padding: 6px 0 8px; position: sticky; top: 0;
+    }
+    table.tracker thead th.today { color: var(--brand); font-weight: 800; }
+    table.tracker thead th.dow-6 { color: #2563eb; }
+    table.tracker thead th.dow-0 { color: #ef4444; }
+    .habit-name {
+      text-align: left !important; padding: 6px 12px 6px 6px !important;
+      font-size: 13.5px; font-weight: 600; white-space: nowrap; position: sticky; left: 0;
+      background: var(--card); z-index: 2; min-width: 120px;
+    }
+    .habit-pct { font-size: 12px; color: var(--brand); font-weight: 700; padding-left: 8px; }
+    .cell {
+      width: 26px; height: 26px; border-radius: 7px; border: 1px solid var(--line);
+      margin: 2px auto; cursor: pointer; transition: all 0.12s ease;
+    }
+    .cell.today-col { box-shadow: 0 0 0 2px rgba(99,102,241,0.35); }
+    .cell.on { background: var(--brand); border-color: var(--brand); }
+    .cell.on::after { content: "✓"; color: #fff; font-size: 14px; display: block; line-height: 24px; }
+    .tracker tbody tr:hover .habit-name { color: var(--brand); }
+
+    /* ---------- Reflection ---------- */
+    .reflect { padding: 18px; }
+    .reflect .q { font-size: 13px; font-weight: 700; color: var(--brand); margin: 14px 0 4px; }
+    .reflect .q:first-child { margin-top: 0; }
+
+    /* ---------- Editable ---------- */
+    [contenteditable="true"] {
+      outline: none; border-radius: 6px; transition: background 0.15s ease, box-shadow 0.15s ease;
+      cursor: text;
+    }
+    [contenteditable="true"]:hover { background: rgba(99,102,241,0.05); }
+    [contenteditable="true"]:focus { background: rgba(99,102,241,0.08); box-shadow: 0 0 0 2px rgba(99,102,241,0.25); }
+    [contenteditable="true"]:empty::before { content: attr(data-ph); color: var(--ink-faint); }
+
+    footer.foot { text-align: center; color: var(--ink-faint); font-size: 12px; margin-top: 50px; }
+
+    /* ---------- Responsive ---------- */
+    @media (max-width: 860px) {
+      .cycle-grid { grid-template-columns: repeat(2, 1fr); }
+      .week-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 520px) {
+      .cycle-grid { grid-template-columns: 1fr; }
+      .week-grid { grid-template-columns: 1fr; }
+      .rblock .time { flex-basis: 110px; }
+      .hero-meta { gap: 14px 20px; }
+    }
+
+    /* ---------- Print ---------- */
+    @media print {
+      body { background: #fff; }
+      .toolbar, footer.foot, .hint { display: none !important; }
+      header.hero { background: var(--brand) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-radius: 0; }
+      .card, .phase, .day { box-shadow: none; break-inside: avoid; }
+      section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <h1>🌙 나의 한 달 라이프 사이클</h1>
+      <p class="sub">한 달을 4주의 리듬으로 설계하고, 하루의 루틴과 습관을 꾸준히 쌓아가는 개인 대시보드</p>
+      <div class="hero-meta">
+        <div class="meta-block">
+          <div class="label">오늘</div>
+          <div class="value" id="todayLabel">—</div>
+        </div>
+        <div class="meta-block">
+          <div class="label">이번 달</div>
+          <div class="value" id="monthLabel">—</div>
+        </div>
+        <div class="progress-wrap">
+          <div class="progress-row"><span>이번 달 진행도</span><span id="progressText">0%</span></div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="toolbar">
+      <span class="hint">✏️ 모든 텍스트를 클릭하면 바로 수정할 수 있고, 변경 내용은 이 브라우저에 자동 저장됩니다.</span>
+      <span class="saved-pill" id="savedPill">저장됨 ✓</span>
+      <button class="btn" id="printBtn">🖨️ 인쇄 / PDF</button>
+      <button class="btn danger" id="resetBtn">↺ 이번 달 초기화</button>
+    </div>
+
+    <!-- 1. 월간 사이클 -->
+    <section>
+      <div class="sec-head">
+        <h2>📆 월간 사이클 — 4주의 흐름</h2>
+        <span class="desc">한 달을 4단계로 나눠 에너지를 배분합니다</span>
+      </div>
+      <div class="cycle-grid">
+        <div class="phase" style="--pc: var(--accent-1)">
+          <div class="ico">🌱</div>
+          <div class="wk">1주차 · 1–7일</div>
+          <h3 contenteditable="true" data-key="phase1-title">계획 &amp; 시작</h3>
+          <ul>
+            <li contenteditable="true" data-key="phase1-1">이번 달 목표 3가지 정하기</li>
+            <li contenteditable="true" data-key="phase1-2">캘린더 · 일정 정리</li>
+            <li contenteditable="true" data-key="phase1-3">새로운 습관 1개 시작</li>
+          </ul>
+        </div>
+        <div class="phase" style="--pc: var(--accent-2)">
+          <div class="ico">🔥</div>
+          <div class="wk">2주차 · 8–14일</div>
+          <h3 contenteditable="true" data-key="phase2-title">몰입 &amp; 실행</h3>
+          <ul>
+            <li contenteditable="true" data-key="phase2-1">핵심 과제에 집중</li>
+            <li contenteditable="true" data-key="phase2-2">루틴 안정화하기</li>
+            <li contenteditable="true" data-key="phase2-3">운동 · 컨디션 관리</li>
+          </ul>
+        </div>
+        <div class="phase" style="--pc: var(--accent-3)">
+          <div class="ico">🧭</div>
+          <div class="wk">3주차 · 15–21일</div>
+          <h3 contenteditable="true" data-key="phase3-title">점검 &amp; 조정</h3>
+          <ul>
+            <li contenteditable="true" data-key="phase3-1">목표 진행률 중간 점검</li>
+            <li contenteditable="true" data-key="phase3-2">우선순위 다시 정리</li>
+            <li contenteditable="true" data-key="phase3-3">충분한 휴식 챙기기</li>
+          </ul>
+        </div>
+        <div class="phase" style="--pc: var(--accent-4)">
+          <div class="ico">🌾</div>
+          <div class="wk">4주차 · 22–말일</div>
+          <h3 contenteditable="true" data-key="phase4-title">마무리 &amp; 회고</h3>
+          <ul>
+            <li contenteditable="true" data-key="phase4-1">남은 과제 마무리</li>
+            <li contenteditable="true" data-key="phase4-2">한 달 회고 작성</li>
+            <li contenteditable="true" data-key="phase4-3">다음 달 미리 계획</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 주간 리듬 -->
+    <section>
+      <div class="sec-head">
+        <h2>🗓️ 주간 리듬</h2>
+        <span class="desc">요일마다 반복되는 나만의 흐름</span>
+      </div>
+      <div class="week-grid">
+        <div class="day"><div class="dname">월</div><div class="dtheme" contenteditable="true" data-key="wk-mon-t" data-ph="테마">한 주 시동</div><div class="dbody" contenteditable="true" data-key="wk-mon-b" data-ph="할 일 적기">주간 계획 세우기, 가볍게 시작</div></div>
+        <div class="day"><div class="dname">화</div><div class="dtheme" contenteditable="true" data-key="wk-tue-t" data-ph="테마">집중</div><div class="dbody" contenteditable="true" data-key="wk-tue-b" data-ph="할 일 적기">가장 중요한 일에 몰입</div></div>
+        <div class="day"><div class="dname">수</div><div class="dtheme" contenteditable="true" data-key="wk-wed-t" data-ph="테마">유지</div><div class="dbody" contenteditable="true" data-key="wk-wed-b" data-ph="할 일 적기">루틴 점검, 운동하기</div></div>
+        <div class="day"><div class="dname">목</div><div class="dtheme" contenteditable="true" data-key="wk-thu-t" data-ph="테마">마무리 준비</div><div class="dbody" contenteditable="true" data-key="wk-thu-b" data-ph="할 일 적기">주중 과제 정리</div></div>
+        <div class="day"><div class="dname">금</div><div class="dtheme" contenteditable="true" data-key="wk-fri-t" data-ph="테마">정리</div><div class="dbody" contenteditable="true" data-key="wk-fri-b" data-ph="할 일 적기">한 주 회고, 다음 주 준비</div></div>
+        <div class="day sat"><div class="dname">토</div><div class="dtheme" contenteditable="true" data-key="wk-sat-t" data-ph="테마">충전</div><div class="dbody" contenteditable="true" data-key="wk-sat-b" data-ph="할 일 적기">취미 · 자기계발 · 사람들과</div></div>
+        <div class="day sun"><div class="dname">일</div><div class="dtheme" contenteditable="true" data-key="wk-sun-t" data-ph="테마">쉼 &amp; 준비</div><div class="dbody" contenteditable="true" data-key="wk-sun-b" data-ph="할 일 적기">충분한 휴식, 다음 주 세팅</div></div>
+      </div>
+    </section>
+
+    <!-- 3. 하루 루틴 -->
+    <section>
+      <div class="sec-head">
+        <h2>⏰ 하루 루틴</h2>
+        <span class="desc">시간대별 기본 흐름</span>
+      </div>
+      <div class="card routine-list">
+        <div class="rblock">
+          <div class="time"><div class="ico">🌅</div><div class="slot">아침</div><div class="clock">06:00–09:00</div></div>
+          <div class="ract" contenteditable="true" data-key="r-morning" data-ph="활동 적기">기상 · 물 한 잔 · 스트레칭 · 하루 계획 점검</div>
+        </div>
+        <div class="rblock">
+          <div class="time"><div class="ico">☀️</div><div class="slot">오전</div><div class="clock">09:00–12:00</div></div>
+          <div class="ract" contenteditable="true" data-key="r-am" data-ph="활동 적기">집중 업무 / 공부 — 가장 중요한 일 먼저</div>
+        </div>
+        <div class="rblock">
+          <div class="time"><div class="ico">🍱</div><div class="slot">오후</div><div class="clock">12:00–18:00</div></div>
+          <div class="ract" contenteditable="true" data-key="r-pm" data-ph="활동 적기">점심 · 회의 / 협업 · 처리할 일들</div>
+        </div>
+        <div class="rblock">
+          <div class="time"><div class="ico">🌆</div><div class="slot">저녁</div><div class="clock">18:00–22:00</div></div>
+          <div class="ract" contenteditable="true" data-key="r-evening" data-ph="활동 적기">운동 · 저녁 · 취미 · 가족 / 친구</div>
+        </div>
+        <div class="rblock">
+          <div class="time"><div class="ico">😴</div><div class="slot">밤</div><div class="clock">22:00–06:00</div></div>
+          <div class="ract" contenteditable="true" data-key="r-night" data-ph="활동 적기">독서 · 감사일기 · 하루 정리 · 수면</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 이달의 목표 -->
+    <section>
+      <div class="sec-head">
+        <h2>🎯 이달의 목표</h2>
+        <span class="desc">체크박스로 달성을 표시하세요</span>
+      </div>
+      <div class="card goal-list" id="goalList">
+        <label class="goal"><input type="checkbox" data-key="goal-1-chk" /><span class="gtext" contenteditable="true" data-key="goal-1" data-ph="목표 적기">목표 1 — 예: 책 2권 읽기</span></label>
+        <label class="goal"><input type="checkbox" data-key="goal-2-chk" /><span class="gtext" contenteditable="true" data-key="goal-2" data-ph="목표 적기">목표 2 — 예: 운동 주 3회</span></label>
+        <label class="goal"><input type="checkbox" data-key="goal-3-chk" /><span class="gtext" contenteditable="true" data-key="goal-3" data-ph="목표 적기">목표 3 — 예: 사이드 프로젝트 진척</span></label>
+        <label class="goal"><input type="checkbox" data-key="goal-4-chk" /><span class="gtext" contenteditable="true" data-key="goal-4" data-ph="목표 적기">목표 4 — 예: 저축 / 지출 관리</span></label>
+      </div>
+    </section>
+
+    <!-- 5. 습관 트래커 -->
+    <section>
+      <div class="sec-head">
+        <h2>✅ 습관 트래커</h2>
+        <span class="desc" id="trackerDesc">매일 칸을 눌러 체크하세요 · 이번 달 기준</span>
+      </div>
+      <div class="card tracker-scroll">
+        <table class="tracker" id="tracker">
+          <thead><tr id="trackerHead"></tr></thead>
+          <tbody id="trackerBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 6. 회고 -->
+    <section>
+      <div class="sec-head">
+        <h2>📝 이달의 회고</h2>
+        <span class="desc">월말에 채워보세요</span>
+      </div>
+      <div class="card reflect">
+        <div class="q">잘한 것 👍</div>
+        <div contenteditable="true" data-key="reflect-good" data-ph="이번 달 잘했던 점을 적어보세요">…</div>
+        <div class="q">아쉬운 것 🤔</div>
+        <div contenteditable="true" data-key="reflect-bad" data-ph="아쉬웠던 점을 적어보세요">…</div>
+        <div class="q">다음 달엔 🚀</div>
+        <div contenteditable="true" data-key="reflect-next" data-ph="다음 달에 시도할 것을 적어보세요">…</div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      나의 한 달 라이프 사이클 · 내용은 이 브라우저(localStorage)에 저장됩니다 · 다른 기기와는 공유되지 않아요
+    </footer>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+    var STORE_KEY = "lifecycle.v1";
+    var WD = ["일", "월", "화", "수", "목", "금", "토"];
+
+    // ----- date / month context -----
+    var now = new Date();
+    var year = now.getFullYear();
+    var month = now.getMonth();           // 0-based
+    var today = now.getDate();
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var monthKey = year + "-" + String(month + 1).padStart(2, "0");
+
+    document.getElementById("todayLabel").textContent =
+      (month + 1) + "월 " + today + "일 (" + WD[now.getDay()] + ")";
+    document.getElementById("monthLabel").textContent = year + "년 " + (month + 1) + "월";
+    document.getElementById("trackerDesc").textContent =
+      "매일 칸을 눌러 체크하세요 · " + (month + 1) + "월 (" + daysInMonth + "일)";
+
+    var pct = Math.round((today / daysInMonth) * 100);
+    document.getElementById("progressText").textContent = pct + "%";
+    requestAnimationFrame(function () {
+      document.getElementById("progressFill").style.width = pct + "%";
+    });
+
+    // ----- storage helpers -----
+    function load() {
+      try { return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+      catch (e) { return {}; }
+    }
+    function save(data) {
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); flashSaved(); }
+      catch (e) { /* storage may be unavailable */ }
+    }
+    var store = load();
+    if (!store.text) store.text = {};        // global editable text/checkboxes
+    if (!store.habits) store.habits = {};     // per-month: { "YYYY-MM": { "h-day": 1 } }
+    if (!store.habits[monthKey]) store.habits[monthKey] = {};
+
+    var savedTimer = null;
+    function flashSaved() {
+      var pill = document.getElementById("savedPill");
+      pill.classList.add("show");
+      clearTimeout(savedTimer);
+      savedTimer = setTimeout(function () { pill.classList.remove("show"); }, 1100);
+    }
+
+    // ----- editable text fields -----
+    var editables = document.querySelectorAll('[contenteditable="true"][data-key]');
+    editables.forEach(function (el) {
+      var k = el.getAttribute("data-key");
+      if (store.text[k] != null) el.innerHTML = store.text[k];
+      el.addEventListener("input", function () {
+        store.text[k] = el.innerHTML;
+        save(store);
+      });
+    });
+
+    // ----- goal checkboxes (global) -----
+    var checks = document.querySelectorAll('input[type="checkbox"][data-key]');
+    checks.forEach(function (cb) {
+      var k = cb.getAttribute("data-key");
+      if (store.text[k] === true) cb.checked = true;
+      cb.addEventListener("change", function () {
+        store.text[k] = cb.checked;
+        save(store);
+      });
+    });
+
+    // ----- habit tracker (per month) -----
+    var HABITS = ["운동 30분", "독서 20분", "물 2L", "일찍 자기", "감사일기"];
+    var head = document.getElementById("trackerHead");
+    var body = document.getElementById("trackerBody");
+
+    // header row: habit label column + day numbers
+    var corner = document.createElement("th");
+    corner.className = "habit-name";
+    corner.textContent = "습관 / 날짜";
+    head.appendChild(corner);
+    for (var d = 1; d <= daysInMonth; d++) {
+      var th = document.createElement("th");
+      var dow = new Date(year, month, d).getDay();
+      th.textContent = d;
+      th.className = "dow-" + dow + (d === today ? " today" : "");
+      head.appendChild(th);
+    }
+
+    function pctForRow(hi) {
+      var done = 0;
+      for (var d = 1; d <= daysInMonth; d++) {
+        if (store.habits[monthKey][hi + "-" + d]) done++;
+      }
+      return Math.round((done / daysInMonth) * 100);
+    }
+
+    HABITS.forEach(function (name, hi) {
+      var tr = document.createElement("tr");
+      var nameCell = document.createElement("th");
+      nameCell.className = "habit-name";
+      var label = document.createElement("span");
+      label.setAttribute("contenteditable", "true");
+      label.setAttribute("data-key", "habit-name-" + hi);
+      label.setAttribute("data-ph", "습관");
+      label.textContent = store.text["habit-name-" + hi] != null ? store.text["habit-name-" + hi] : name;
+      label.addEventListener("input", function () {
+        store.text["habit-name-" + hi] = label.textContent;
+        save(store);
+      });
+      var pctSpan = document.createElement("span");
+      pctSpan.className = "habit-pct";
+      pctSpan.textContent = pctForRow(hi) + "%";
+      nameCell.appendChild(label);
+      nameCell.appendChild(pctSpan);
+      tr.appendChild(nameCell);
+
+      for (var d = 1; d <= daysInMonth; d++) {
+        (function (day) {
+          var td = document.createElement("td");
+          var cell = document.createElement("div");
+          cell.className = "cell" + (day === today ? " today-col" : "");
+          var key = hi + "-" + day;
+          if (store.habits[monthKey][key]) cell.classList.add("on");
+          cell.addEventListener("click", function () {
+            if (store.habits[monthKey][key]) {
+              delete store.habits[monthKey][key];
+              cell.classList.remove("on");
+            } else {
+              store.habits[monthKey][key] = 1;
+              cell.classList.add("on");
+            }
+            pctSpan.textContent = pctForRow(hi) + "%";
+            save(store);
+          });
+          td.appendChild(cell);
+          tr.appendChild(td);
+        })(d);
+      }
+      body.appendChild(tr);
+    });
+
+    // ----- buttons -----
+    document.getElementById("printBtn").addEventListener("click", function () { window.print(); });
+    document.getElementById("resetBtn").addEventListener("click", function () {
+      if (!confirm("이번 달(" + (month + 1) + "월)의 습관 체크와 목표 달성 표시를 초기화할까요?\n(작성한 텍스트는 유지됩니다)")) return;
+      store.habits[monthKey] = {};
+      checks.forEach(function (cb) { cb.checked = false; store.text[cb.getAttribute("data-key")] = false; });
+      save(store);
+      location.reload();
+    });
+  })();
+  </script>
+</body>
+</html>
