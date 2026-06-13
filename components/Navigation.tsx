@@ -3,7 +3,10 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { useIsMobile } from './ui/use-mobile';
-import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target } from 'lucide-react';
+import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, CalendarHeart } from 'lucide-react';
+
+// 외부 정적 페이지(라이프 사이클) 경로 — 현재 문서 기준 상대 경로라 base 설정과 무관하게 동작
+const LIFE_CYCLE_URL = 'life-cycle.html';
 
 interface NavigationProps {
   currentView: string;
@@ -108,8 +111,21 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
             </Button>
           );
         })}
+
+        {/* 외부 라이프 사이클 페이지 링크 (SPA 뷰가 아닌 별도 정적 페이지) */}
+        <a
+          href={LIFE_CYCLE_URL}
+          className="glass-button flex items-center w-full h-auto py-3 px-4 rounded-xl transition-all duration-200 no-underline text-foreground"
+          onClick={() => { if (isMobile) setIsSheetOpen(false); }}
+        >
+          <CalendarHeart className="h-5 w-5 mr-4 flex-shrink-0" />
+          <span className="flex-1 text-left font-medium">라이프 사이클</span>
+          <Badge variant="secondary" className="ml-2 text-xs px-1.5 py-0.5 bg-green-100 text-green-800 border-green-200 flex-shrink-0">
+            New
+          </Badge>
+        </a>
       </nav>
-      
+
       {/* 푸터 섹션 */}
       <div className="p-2.5 border-t bg-gray-50">
         <div className="flex items-center gap-2.5">
