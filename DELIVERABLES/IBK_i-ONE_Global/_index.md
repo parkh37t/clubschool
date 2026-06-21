@@ -1,8 +1,10 @@
 # DELIVERABLES — IBK i-ONE Bank Global (배포 산출물 대장)
 
-> 도구 스택: **Figma + Adobe Express** · 폴더 체계: DELIVERABLES/프로젝트/업무
-> SSOT(스펙) = `PROJECT/*.md` → 본 폴더는 배포본(PPTX/PDF/HTML/Figma) 파생.
-> 네이밍: `IBK_<업무>_<문서명>_v<버전>.<확장자>`
+> 정책: **Claude Design First** (HTML=Claude Design이 1차 산출물·SSOT 디자인) ·
+> PDF/이미지는 **브라우저 인쇄(Ctrl/Cmd+P → PDF 저장)** 무손실 · Adobe Express/Canva는
+> 편집형 PPTX 필요 시 보조 출구 · Figma는 디자인/다이어그램 전용 · Google은 DOCX/XLSX.
+> 폴더 체계: DELIVERABLES/프로젝트/업무 · 네이밍: `IBK_<업무>_<문서명>_v<버전>.<확장자>`
+> 참고: `PROJECT/회의록/산출물도구-비교연구.md`
 
 ## 1차 생성분 (확정 4종)
 | 업무 | 산출물 | 포맷 | 위치 / 링크 | 상태 |

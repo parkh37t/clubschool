@@ -30,6 +30,13 @@ body{background:#dfe4ec;display:flex;flex-direction:column;align-items:center;ga
 .do{color:#1FA463;font-weight:600}.dont{color:#D64545;font-weight:600}
 .logo{display:inline-flex;align-items:center;gap:14px;font-weight:700;font-size:44px;color:#0A4DA2}
 .logo .mark{width:56px;height:56px;border-radius:12px;background:#0A4DA2;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px}
+/* 인쇄(브라우저 → PDF 저장): 슬라이드당 1페이지, 무손실 — Claude Design First */
+@page{size:1920px 1080px;margin:0}
+@media print{
+  body{background:#fff;padding:0;gap:0;display:block}
+  .slide{box-shadow:none;break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+}
 </style>
 </head>
 <body>
