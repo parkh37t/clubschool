@@ -16,6 +16,10 @@
 | 03 디자인 | 브랜드 가이드 | HTML(Claude Design, 인쇄용) + Adobe Express(보조) | `03_디자인/브랜드가이드_v1.html` · [Express](https://new.express.adobe.com/id/urn:aaid:sc:US:2fd8685b-3d84-43f8-a884-9c7cc0bb5b30?referrer=claude) | ✅ |
 | 04 퍼블리싱 | 프로토타입 | **HTML(동작본)** | `04_퍼블리싱/프로토타입_v1.html` | ✅ |
 | 05 개발준비 | KPI·이벤트 스키마 | **XLSX(Claude 네이티브)** | `05_개발준비/KPI-이벤트-스키마_v1.xlsx` | ✅ |
+| 02 기획 | 화면설계서 | **DOCX(Claude 네이티브)** | `02_기획/화면설계서_v1.docx` | ✅ |
+| 02 기획 | 인증서 예외 플로우 | **DOCX(Claude 네이티브)** | `02_기획/예외플로우-인증서_v1.docx` | ✅ |
+| 05 개발준비 | 연동 인터페이스 계약 | **DOCX(Claude 네이티브)** | `05_개발준비/연동-인터페이스-계약_v1.docx` | ✅ |
+| 00 회의록 | 회의록 01·02 통합 | **DOCX(Claude 네이티브)** | `00_회의록/회의록_v1.docx` | ✅ |
 | 02 기획 | IA·User Flow 다이어그램 | Figma | 플랜 선택 대기 | ⏳ |
 | 02/03 | 화면설계·UI 시안 | Figma | 플랜 선택 대기 | ⏳ |
 
