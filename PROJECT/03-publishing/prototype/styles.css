@@ -1,0 +1,153 @@
+/* i-ONE Bank Global 프로토타입 — 표준수(마크업/스타일)
+   디자인시스템.md 토큰을 그대로 구현. 색/간격/반경은 변수만 사용(하드코딩 금지). */
+:root{
+  --ibk-blue:#0A4DA2; --ibk-blue-dark:#073A7A; --ibk-sky:#1E9BE6;
+  --success:#1FA463; --warning:#E0930B; --danger:#D64545;
+  --fg:#1A1F2B; --fg-muted:#5A6473; --bg:#F4F6FA; --surface:#FFFFFF; --border:#E2E7EF;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
+  --shadow-card:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,Pretendard,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--fg); background:#E7EBF2; line-height:1.5;
+  display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:24px 12px;
+}
+.page-title{font-size:14px;color:var(--fg-muted);margin:0 0 12px}
+
+/* 모바일 프레임 */
+.phone{
+  width:375px; max-width:100%; height:812px; background:var(--surface);
+  border-radius:32px; box-shadow:0 12px 40px rgba(16,24,40,.25);
+  overflow:hidden; position:relative; display:flex; flex-direction:column;
+  border:1px solid var(--border);
+}
+.statusbar{height:28px;background:var(--ibk-blue);}
+
+/* AppBar */
+.appbar{display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-3) var(--space-4);background:var(--ibk-blue);color:#fff;min-height:52px}
+.appbar .title{font-size:16px;font-weight:600;flex:1}
+.appbar.home .brand{font-size:16px;font-weight:700;flex:1}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;
+  min-width:44px;min-height:44px;background:transparent;border:0;color:inherit;
+  border-radius:var(--r-pill);cursor:pointer}
+.iconbtn:focus-visible{outline:3px solid #fff;outline-offset:1px}
+.lang{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:var(--r-pill);
+  padding:6px 10px;font-size:13px;cursor:pointer;min-height:36px}
+
+/* 본문 */
+.screen{display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.screen.active{display:block}
+.body{padding:var(--space-4)}
+.section-title{font-size:16px;font-weight:600;margin:0 0 var(--space-3)}
+.muted{color:var(--fg-muted)}
+.caption{font-size:12px;color:var(--fg-muted)}
+.title-lg{font-size:20px;font-weight:700;margin:0 0 var(--space-2)}
+
+/* 카드 */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+  box-shadow:var(--shadow-card);padding:var(--space-4);margin-bottom:var(--space-3)}
+.balance{background:linear-gradient(135deg,var(--ibk-blue),var(--ibk-sky));color:#fff;border:0}
+.balance .amt{font-size:24px;font-weight:700}
+
+/* 리스트 항목 */
+.list{list-style:none;margin:0;padding:0}
+.listitem{display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:left;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:var(--space-4);margin-bottom:var(--space-2);cursor:pointer;min-height:56px;font:inherit;color:inherit}
+.listitem:hover{border-color:var(--ibk-sky)}
+.listitem:focus-visible{outline:3px solid var(--ibk-sky);outline-offset:2px}
+.listitem .grow{flex:1}
+.listitem .chev{color:var(--fg-muted)}
+.listitem[disabled]{opacity:.5;cursor:not-allowed}
+
+/* 증명서 카드 */
+.cert{display:flex;align-items:center;gap:var(--space-3)}
+.cert .ico{width:40px;height:40px;border-radius:var(--r-sm);background:rgba(10,77,162,.1);
+  color:var(--ibk-blue);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.cert .name{font-weight:600}
+.badge{display:inline-block;font-size:11px;font-weight:600;border-radius:var(--r-pill);padding:2px 8px}
+.badge.ok{background:rgba(31,164,99,.12);color:var(--success)}
+.badge.warn{background:rgba(224,147,11,.14);color:var(--warning)}
+
+/* 단계 표시 */
+.steps{display:flex;gap:var(--space-2);margin-bottom:var(--space-4)}
+.steps li{flex:1;text-align:center;font-size:12px;color:var(--fg-muted);
+  padding-top:var(--space-5);position:relative}
+.steps li::before{content:attr(data-n);position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:24px;height:24px;border-radius:var(--r-pill);background:var(--border);color:var(--fg-muted);
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.steps li.active::before{background:var(--ibk-blue);color:#fff}
+.steps li.done::before{content:"✓";background:var(--success);color:#fff}
+
+/* 폼 행 */
+.formrow{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;
+  border-bottom:1px solid var(--border)}
+.formrow:last-child{border-bottom:0}
+.formrow input{width:20px;height:20px;accent-color:var(--ibk-blue)}
+.seg{display:flex;gap:var(--space-2);margin:var(--space-2) 0}
+.seg button{flex:1;padding:10px;border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--r-sm);cursor:pointer;font:inherit;min-height:44px}
+.seg button[aria-pressed="true"]{border-color:var(--ibk-blue);background:rgba(10,77,162,.06);
+  color:var(--ibk-blue);font-weight:600}
+
+/* 버튼 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  min-height:48px;border:0;border-radius:var(--r-md);font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--ibk-blue);color:#fff}
+.btn.primary:hover{background:var(--ibk-blue-dark)}
+.btn.secondary{background:rgba(10,77,162,.08);color:var(--ibk-blue)}
+.btn.ghost{background:transparent;color:var(--ibk-blue)}
+.btn:disabled{background:var(--border);color:var(--fg-muted);cursor:not-allowed}
+.btn:focus-visible{outline:3px solid var(--ibk-sky);outline-offset:2px}
+.bottomcta{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+  padding:var(--space-3) var(--space-4);display:flex;gap:var(--space-2)}
+
+/* 상태 뷰(빈/로딩/오류/완료) */
+.status{text-align:center;padding:var(--space-6) var(--space-4)}
+.status .glyph{width:64px;height:64px;border-radius:var(--r-pill);margin:0 auto var(--space-3);
+  display:flex;align-items:center;justify-content:center;font-size:30px;
+  background:rgba(10,77,162,.08);color:var(--ibk-blue)}
+.status.success .glyph{background:rgba(31,164,99,.12);color:var(--success)}
+.status.error .glyph{background:rgba(214,69,69,.12);color:var(--danger)}
+.status h3{margin:0 0 var(--space-2)}
+.skeleton{height:64px;border-radius:var(--r-md);margin-bottom:var(--space-2);
+  background:linear-gradient(90deg,#eef1f6,#f7f9fc,#eef1f6);background-size:200% 100%;
+  animation:sk 1.2s ease-in-out infinite}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.inline-error{color:var(--danger);font-size:13px;margin-top:var(--space-2)}
+.banner{border-radius:var(--r-sm);padding:var(--space-3);margin-bottom:var(--space-3);font-size:13px}
+.banner.warn{background:rgba(224,147,11,.12);color:var(--warning)}
+
+/* 탭 */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin:-4px 0 var(--space-4)}
+.tabs button{flex:1;padding:var(--space-3) 0;background:transparent;border:0;border-bottom:2px solid transparent;
+  color:var(--fg-muted);cursor:pointer;font:inherit;min-height:44px}
+.tabs button[aria-selected="true"]{color:var(--ibk-blue);border-bottom-color:var(--ibk-blue);font-weight:600}
+.tabs button[disabled]{opacity:.4;cursor:not-allowed}
+
+/* 고객센터 */
+.contact{display:flex;align-items:center;gap:var(--space-3)}
+.contact .flag{font-size:24px}
+.contact .num{color:var(--ibk-blue);font-weight:600;text-decoration:none}
+.callbtn{margin-left:auto;background:var(--success);color:#fff;border:0;border-radius:var(--r-pill);
+  min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.callbtn:focus-visible{outline:3px solid var(--ibk-blue);outline-offset:2px}
+
+/* 토스트 */
+.toast{position:absolute;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);
+  background:var(--fg);color:#fff;padding:10px 16px;border-radius:var(--r-pill);font-size:13px;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90%}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* 데모 컨트롤(프로토타입 전용, 실제 화면 아님) */
+.demobar{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:375px}
+.demobar button{font-size:12px;padding:6px 10px;border:1px solid #c7cfdc;background:#fff;border-radius:8px;cursor:pointer}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
