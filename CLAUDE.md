@@ -82,20 +82,20 @@ npm run deploy-check # 배포 전 점검 스크립트
 에이전트를 호출하세요. 전체 워크플로우는 `RFP → 제안 → 전략 → 기획 → 디자인 → 퍼블리싱 →
 개발 → 분석/마케팅` 순서이며, 단계 전환 시 `handoff.md` 규칙을 따릅니다.
 
-| 단계 | 에이전트 | 역할 |
-| --- | --- | --- |
-| 영업 | `handojeon-sales-lead` | 영업 총괄, RFP 수주 판단, 제안 전략 |
-| 영업 | `kim-sales-support` | 영업 지원, 견적·일정·자료 정리 |
-| 기획 | `jung-wooseon-po` | 제품 책임자(PO), 백로그·우선순위 |
-| 기획 | `na-planner` | 서비스 기획, IA·플로우·화면 정의 |
-| 디자인 | `cha-ui-designer` | UI/UX 디자인, 디자인 시스템 |
-| 디자인 | `oh-brand-designer` | 브랜드·비주얼·그래픽 |
-| 퍼블리싱 | `pyo-publisher` | 마크업/스타일 퍼블리싱 |
-| 퍼블리싱 | `lee-interaction-publisher` | 인터랙션/애니메이션 퍼블리싱 |
-| 개발 | `baek-backend` | 데이터 계층·API·상태관리 |
-| 개발 | `gu-frontend` | 프론트엔드 구현(React) |
-| 분석 | `go-data-analyst` | 데이터 분석·지표 정의 |
-| 마케팅 | `hong-marketer` | 마케팅·릴리즈 커뮤니케이션 |
+| 단계 | 에이전트 | 이름 | 역할 |
+| --- | --- | --- | --- |
+| 영업 | `handojeon-sales-lead` | 한도전 | 영업·평가 팀장, RFP 수주 판단, 제안 전략 |
+| 영업 | `kim-sales-support` | 김영업 | 영업 지원, 고객/시장/경쟁 조사 |
+| 기획 | `jung-wooseon-po` | 정우선 | 제품 책임자(PO), MVP·우선순위 |
+| 기획 | `na-service-planner` | 나기획 | 서비스기획, IA·플로우·화면 정의 |
+| 디자인 | `cha-ui-designer` | 차도안 | 제품 UI·디자인 시스템 |
+| 디자인 | `oh-brand-designer` | 오색감 | BX·브랜드·그래픽 |
+| 퍼블리싱 | `pyo-publisher` | 표준수 | 기본 퍼블리싱(마크업/스타일) |
+| 퍼블리싱 | `lee-interaction-publisher` | 이풍뎅 | 인터랙션·접근성 심화 |
+| 개발 | `baek-backend-developer` | 백연동 | 백엔드(API/DB/인증/보안) |
+| 개발 | `gu-frontend-developer` | 구동민 | 프론트엔드 구현(React) |
+| 분석 | `go-data-analyst` | 고지표 | 데이터 분석·KPI 정의 |
+| 마케팅 | `hong-marketer` | 홍보라 | 마케팅·고객 커뮤니케이션 |
 
 ## 7. 핵심 컨벤션 요약
 
