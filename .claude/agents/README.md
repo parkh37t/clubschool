@@ -83,16 +83,18 @@ na-service-planner가 IA와 화면 범위를 도출해줘.
 나기획의 화면설계서와 오색감의 브랜드 가이드를 기준으로 컴포넌트 명세와 상태별 UI를 정리해줘.
 ```
 
-## 다음 단계로 만들면 좋은 Skill (.claude/skills)
-> 이미 존재하는 스킬: `rfp-analysis`, `proposal-writing`, `product-strategy`,
-> `service-planning`, `ui-review`, `api-design`, `frontend-implementation`, `quality-gate`
+## 스킬 (.claude/skills) — 에이전트별 매핑
+**공통/워크플로우 스킬**: `rfp-analysis`, `proposal-writing`, `product-strategy`,
+`service-planning`, `ui-review`, `api-design`, `frontend-implementation`, `quality-gate`
 
-추가하면 좋은 스킬:
-- `competitor-benchmark` — 경쟁사 비교 매트릭스 표준화 (김영업)
-- `ia-flow-design` — IA/User Flow 산출 템플릿 (나기획)
-- `design-system-build` — 토큰·컴포넌트 시스템 구축 (차도안)
-- `brand-guideline` — BX 가이드 산출 (오색감)
-- `accessibility-audit` — WCAG 점검 체크리스트 (이풍뎅)
-- `db-modeling` — ERD/스키마 설계 (백연동)
-- `kpi-event-tracking` — KPI·이벤트 로그 설계 (고지표)
-- `landing-copywriting` — 랜딩/캠페인 카피 (홍보라)
+**역할 특화 스킬** (이번에 추가):
+| 스킬 | 용도 | 주 사용 에이전트 |
+| --- | --- | --- |
+| `competitor-benchmark` | 경쟁사 비교 매트릭스·시사점 | 김영업 |
+| `ia-flow-design` | IA/User Flow → 화면 목록 | 나기획 |
+| `design-system-build` | 토큰·컴포넌트 시스템 구축 | 차도안 |
+| `brand-guideline` | BX 가이드(로고/컬러/톤) 산출 | 오색감 |
+| `accessibility-audit` | WCAG 접근성 점검 | 이풍뎅 |
+| `db-modeling` | ERD/스키마/정합성 설계 | 백연동 |
+| `kpi-event-tracking` | KPI·이벤트 로그 설계 | 고지표 |
+| `landing-copywriting` | 랜딩/캠페인 카피 | 홍보라 |
