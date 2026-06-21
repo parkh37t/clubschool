@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>IBK 디지털뱅킹 리빌딩 1단계 — i-ONE Bank Global 제안</title>
+<meta name="hz:slide-selector" content=".slide" />
+<meta name="hz:canvas-width" content="1920" />
+<meta name="hz:canvas-height" content="1080" />
+<link rel="stylesheet" href="https://use.typekit.net/hki1xuh.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dfe4ec;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px;
+  font-family:"acumin-pro","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1A1F2B}
+.slide{position:relative;width:1920px;height:1080px;background:#FFFFFF;overflow:hidden}
+/* 공통 타이포 */
+.display{font-weight:700;font-size:104px;line-height:1.05;letter-spacing:-1px}
+.h1{font-weight:700;font-size:60px;line-height:1.1}
+.h2{font-weight:600;font-size:40px;line-height:1.2}
+.body{font-weight:400;font-size:30px;line-height:1.5;color:#5A6473}
+.label{font-weight:600;font-size:24px;letter-spacing:2px;text-transform:uppercase}
+.kicker{font-weight:600;font-size:26px;letter-spacing:3px;text-transform:uppercase;color:#1E9BE6}
+.t-blue{color:#0A4DA2}.t-white{color:#FFFFFF}.t-muted{color:#5A6473}
+/* 슬라이드 공통 패딩/헤더 */
+.pad{position:absolute;inset:0;padding:96px 120px}
+.bar{position:absolute;left:0;top:0;width:14px;height:100%;background:#0A4DA2}
+.stitle{display:flex;align-items:center;gap:20px;margin-bottom:48px}
+.stitle .no{font-weight:700;font-size:28px;color:#FFFFFF;background:#0A4DA2;border-radius:999px;
+  width:56px;height:56px;display:flex;align-items:center;justify-content:center}
+.foot{position:absolute;left:120px;bottom:48px;font-size:20px;color:#9AA4B2;letter-spacing:1px}
+.pageno{position:absolute;right:120px;bottom:48px;font-size:20px;color:#9AA4B2}
+/* 카드/그리드 */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:32px}
+.card{background:#F4F6FA;border:1px solid #E2E7EF;border-radius:18px;padding:40px}
+.card .ct{font-weight:600;font-size:32px;margin-bottom:16px}
+.card .cb{font-weight:400;font-size:26px;line-height:1.5;color:#5A6473}
+.chip{display:inline-block;font-weight:600;font-size:22px;border-radius:999px;padding:8px 20px}
+.chip.blue{background:rgba(10,77,162,.1);color:#0A4DA2}
+.chip.green{background:rgba(31,164,99,.12);color:#1FA463}
+.chip.warn{background:rgba(224,147,11,.14);color:#E0930B}
+.li{display:flex;gap:18px;align-items:flex-start;margin-bottom:22px;font-size:28px;line-height:1.45}
+.li .dot{flex:none;width:14px;height:14px;border-radius:50%;background:#1E9BE6;margin-top:12px}
+.step{flex:1;background:#F4F6FA;border:1px solid #E2E7EF;border-radius:18px;padding:36px;position:relative}
+.step .n{font-weight:700;font-size:30px;color:#FFFFFF;background:#0A4DA2;border-radius:999px;width:52px;height:52px;
+  display:flex;align-items:center;justify-content:center;margin-bottom:20px}
+.arrow{align-self:center;font-size:44px;color:#9AA4B2;font-weight:700}
+.tbl{width:100%;border-collapse:collapse;font-size:25px}
+.tbl th{background:#0A4DA2;color:#fff;text-align:left;padding:18px 22px;font-weight:600;font-size:24px}
+.tbl td{padding:18px 22px;border-bottom:1px solid #E2E7EF;color:#1A1F2B;vertical-align:top}
+.tbl tr:nth-child(even) td{background:#F7F9FC}
+.flow{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.node{background:#FFFFFF;border:2px solid #0A4DA2;border-radius:14px;padding:20px 26px;font-weight:600;font-size:26px;color:#0A4DA2}
+.node.mut{border-color:#E2E7EF;color:#5A6473}
+</style>
+</head>
+<body>
+
+<!-- 1. 표지 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080" style="background:linear-gradient(135deg,#073A7A,#0A4DA2 55%,#1E9BE6)">
+  <div class="pad" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="kicker" style="color:#BBD5F2">IBK 디지털뱅킹 리빌딩 1단계 추진 · 제안</div>
+    <div class="display t-white" style="margin:28px 0 24px">i-ONE Bank Global<br>외국인 디지털 채널 구축</div>
+    <div class="h2 t-white" style="font-weight:400;opacity:.92;max-width:1200px">전자지갑(전자증명서)·외국인 고객센터를 이미 만들어 본 팀의 제안</div>
+    <div style="position:absolute;left:120px;bottom:80px" class="label t-white">컨버전스1팀 · 2026.06</div>
+  </div>
+</div>
+
+<!-- 2. Executive Summary -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">01</div><div class="h1">Executive Summary</div></div>
+    <div class="h2 t-blue" style="margin-bottom:28px">"외국인 고객 경험을 이미 만들어 본 팀."</div>
+    <p class="body" style="font-size:34px;max-width:1500px;margin-bottom:48px">
+      SFR-062(외국인 고객센터)·SFR-063(외국인 전자지갑/전자증명서)을 <b>동작 프로토타입으로 선구현</b>해,
+      1단계 디지털 플랫폼의 외국인 채널 경쟁력을 가장 빠르고 확실하게 입증합니다.</p>
+    <div class="grid3">
+      <div class="card"><div class="ct t-blue">실증된 UX</div><div class="cb">발급→신청→완료→보관/제출, 언어별 고객센터까지 동작</div></div>
+      <div class="card"><div class="ct t-blue">리스크 선제 관리</div><div class="cb">정부24/유통 연동을 어댑터로 추상화, mock→실연동 전환</div></div>
+      <div class="card"><div class="ct t-blue">확장 구조</div><div class="cb">증명서·언어를 데이터/리소스 구동으로 설계</div></div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">02</div>
+</div>
+
+<!-- 3. 프로젝트 이해 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">02</div><div class="h1">프로젝트 이해</div></div>
+    <div class="grid2" style="gap:48px">
+      <div class="card">
+        <span class="chip blue">외부 환경</span>
+        <div class="li" style="margin-top:24px"><span class="dot"></span><span>고객 중심 디지털 전환 가속, 빅테크·핀테크 진입</span></div>
+        <div class="li"><span class="dot"></span><span>MZ·외국인 등 신규 고객층의 간편·맞춤 금융경험 요구</span></div>
+      </div>
+      <div class="card">
+        <span class="chip warn">내부 환경</span>
+        <div class="li" style="margin-top:24px"><span class="dot"></span><span>'09년 구축 인터넷뱅킹 구조 노후화</span></div>
+        <div class="li"><span class="dot"></span><span>채널별 중복개발 → 개발생산성·확장성·유연성 저하</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:40px;background:#0A4DA2">
+      <div class="ct t-white" style="margin-bottom:10px">목표</div>
+      <div class="cb t-white" style="opacity:.95;font-size:30px">단절 없는(Seamless) 유니버설 뱅킹 기반 + 디지털 플랫폼으로 출시 속도·운영효율·확장성 확보,
+        <b>i-ONE Bank Global 재구축으로 외국인 고객 경쟁력 강화</b></div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">03</div>
+</div>
+
+<!-- 4. 접근 전략 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">03</div><div class="h1">접근 전략 — 승부수</div></div>
+    <div class="grid2">
+      <div class="card"><div class="ct t-blue">① 외국인 UX 실증</div><div class="cb">발급→신청→완료→보관/제출 + 언어별 고객센터 직통연결 (동작 프로토타입)</div></div>
+      <div class="card"><div class="ct t-blue">② 예외 우선 설계</div><div class="cb">인증 미보유·실패, 기관 점검, 운영시간 외까지 상태화</div></div>
+      <div class="card"><div class="ct t-blue">③ 연동 리스크 관리</div><div class="cb">규격 미확정 구간을 mock→실연동 어댑터로 전환</div></div>
+      <div class="card"><div class="ct t-blue">④ 접근성 내재화</div><div class="cb">WCAG AA 핵심 항목을 프로토타입 단계부터 충족</div></div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">04</div>
+</div>
+
+<!-- 5. 제안 범위 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">04</div><div class="h1">제안 범위</div></div>
+    <div class="grid2" style="gap:48px">
+      <div class="card" style="border-color:#1FA463">
+        <span class="chip green">포함 (In)</span>
+        <div class="li" style="margin-top:24px"><span class="dot"></span><span>전자지갑: 발급 / 신청 / 보관 / 제출</span></div>
+        <div class="li"><span class="dot"></span><span>언어별 고객센터 직통연결</span></div>
+        <div class="li"><span class="dot"></span><span>다국어 프레임(리소스 토큰화)</span></div>
+        <div class="li"><span class="dot"></span><span>공동/IBK 인증 연동 설계, 정부24/유통 IF 설계</span></div>
+      </div>
+      <div class="card">
+        <span class="chip warn">제외 / 차기</span>
+        <div class="li" style="margin-top:24px"><span class="dot"></span><span>플랫폼 전체(MSA·K8s·CI/CD) 구축 견적 — 예산·배점 확정 후</span></div>
+        <div class="li"><span class="dot"></span><span>정보변경/폐기·공유·내역</span></div>
+        <div class="li"><span class="dot"></span><span>풀 다국어 번역</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">05</div>
+</div>
+
+<!-- 6. 솔루션 ① 전자지갑 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">05</div><div class="h1">솔루션 ① 외국인 전자지갑</div></div>
+    <p class="body" style="margin-bottom:40px">RFP 거래 예시 3스텝을 그대로 구현 — 발급 가능 증명서 4종(거소신고·외국인등록·출입국·여권정보)</p>
+    <div class="flow" style="gap:0;justify-content:space-between">
+      <div class="step"><div class="n">1</div><div class="ct" style="font-size:30px">신청가능목록</div><div class="cb" style="font-size:24px">증명서 4종 조회·선택</div></div>
+      <div class="arrow">›</div>
+      <div class="step"><div class="n">2</div><div class="ct" style="font-size:30px">신청·인증</div><div class="cb" style="font-size:24px">공동/IBK 인증, 약관 동의</div></div>
+      <div class="arrow">›</div>
+      <div class="step"><div class="n">3</div><div class="ct" style="font-size:30px">신청 완료</div><div class="cb" style="font-size:24px">접수번호·보관함 저장</div></div>
+    </div>
+    <div class="card" style="margin-top:44px"><div class="cb" style="font-size:27px">
+      <b class="t-blue">보관함</b> 발급 증명서 열람·다운로드·제출 &nbsp;·&nbsp; <b class="t-blue">인증</b> 공동/IBK인증서만(금융인증서 불가)</div></div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">06</div>
+</div>
+
+<!-- 7. 솔루션 ② 고객센터 + 예외 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">06</div><div class="h1">솔루션 ② 고객센터 · 예외 우선 설계</div></div>
+    <div class="grid2" style="gap:48px">
+      <div class="card">
+        <div class="ct t-blue">외국인 고객센터 (SFR-062)</div>
+        <div class="li" style="margin-top:20px"><span class="dot"></span><span>메인 작은 아이콘 → 언어별 고객센터</span></div>
+        <div class="li"><span class="dot"></span><span>언어(국가)별 연락처 + 직통연결(tel:)</span></div>
+        <div class="li"><span class="dot"></span><span>운영시간 외 이메일 대안</span></div>
+      </div>
+      <div class="card">
+        <div class="ct t-blue">예외/빈/오류 상태</div>
+        <div class="li" style="margin-top:20px"><span class="dot"></span><span>인증서 미보유 → 발급 안내</span></div>
+        <div class="li"><span class="dot"></span><span>인증 실패·타임아웃 → 재시도</span></div>
+        <div class="li"><span class="dot"></span><span>발급기관 점검 → 오류·재시도</span></div>
+        <div class="li"><span class="dot"></span><span>증명서 만료 → 제출 차단·재발급</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">07</div>
+</div>
+
+<!-- 8. 연동 아키텍처 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">07</div><div class="h1">연동 아키텍처 — 리스크 핵심</div></div>
+    <div class="flow" style="margin-bottom:36px"><div class="node">i-ONE Bank Global · 외국인 모듈</div></div>
+    <div class="flow" style="margin-bottom:36px"><div class="node" style="background:#0A4DA2;color:#fff">Integration Adapter Layer (인터페이스 추상화)</div></div>
+    <div class="grid3">
+      <div class="node mut">Auth Adapter → 공동 / IBK 인증</div>
+      <div class="node mut">Cert Adapter → 정부24 / 유통시스템 <span class="chip warn" style="font-size:18px">mock</span></div>
+      <div class="node mut">Notify · Log → 이벤트/감사</div>
+    </div>
+    <div class="card" style="margin-top:44px;background:#F4F6FA">
+      <div class="cb" style="font-size:28px">규격 미확정 구간은 <b>mock 스텁</b>으로 선개발 → 규격 확정 시 <b class="t-blue">어댑터만 교체</b>(앱/화면 영향 0).
+        개인정보(거소·등록·출입국·여권)는 인터페이스 계약 레벨에서 보안 처리 강제.</div>
+    </div>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">08</div>
+</div>
+
+<!-- 9. 일정 + 조직 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="stitle"><div class="no">08</div><div class="h1">추진 일정 · 조직</div></div>
+    <table class="tbl" style="margin-bottom:40px">
+      <tr><th>단계</th><th>기간</th><th>핵심 산출물</th><th>의존성</th></tr>
+      <tr><td>분석/설계</td><td>M1~M2</td><td>요건정의·IA·화면설계·연동 IF</td><td>정부24/유통 규격</td></tr>
+      <tr><td>디자인/퍼블</td><td>M2~M4</td><td>디자인시스템·UI·마크업</td><td>설계 확정</td></tr>
+      <tr><td>개발/연동</td><td>M4~M9</td><td>FE/BE·실연동</td><td>인증·기관 API</td></tr>
+      <tr><td>통합/QA/오픈</td><td>M9~M12</td><td>통합·접근성·오픈</td><td>전 단계</td></tr>
+    </table>
+    <p class="body" style="font-size:27px"><b class="t-blue">조직(R&amp;R)</b> &nbsp; PM/기획 정우선·나기획 · 디자인 차도안·오색감 · 퍼블 표준수·이풍뎅 · 개발 백연동·구동민 · 분석 고지표 &nbsp;(의사결정 허브: PO)</p>
+    <p class="label t-muted" style="margin-top:16px">* 일정은 예시(추측), 전체 사업기간 12개월 기준</p>
+  </div>
+  <div class="foot">IBK i-ONE Bank Global 제안</div><div class="pageno">09</div>
+</div>
+
+<!-- 10. 리스크 + 클로징 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080" style="background:linear-gradient(135deg,#0A4DA2,#073A7A)">
+  <div class="pad">
+    <div class="stitle"><div class="no" style="background:#fff;color:#0A4DA2">09</div><div class="h1 t-white">리스크 관리 · 다음 단계</div></div>
+    <div class="grid2" style="gap:48px">
+      <div class="card" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25)">
+        <div class="ct t-white">주요 리스크 → 대응</div>
+        <div class="li t-white" style="margin-top:18px;color:#fff"><span class="dot"></span><span>API 규격 미확정 → 어댑터 추상화·mock 선개발</span></div>
+        <div class="li" style="color:#fff"><span class="dot"></span><span>다국어 범위 미정 → 리소스 키, 1차 영어+확장</span></div>
+        <div class="li" style="color:#fff"><span class="dot"></span><span>인증 보유율 → 미보유 예외 플로우 기본 제공</span></div>
+      </div>
+      <div class="card" style="background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.25)">
+        <div class="ct t-white">확인 필요(고객)</div>
+        <div class="li" style="color:#fff;margin-top:18px"><span class="dot"></span><span>지원 언어 · 증명서 확장 범위</span></div>
+        <div class="li" style="color:#fff"><span class="dot"></span><span>API/인증 규격 · 정책 수치</span></div>
+        <div class="li" style="color:#fff"><span class="dot"></span><span>평가 배점 · 예산</span></div>
+      </div>
+    </div>
+    <div class="display t-white" style="font-size:64px;margin-top:60px">함께, 외국인 금융경험의 단절을 없앱니다.</div>
+  </div>
+  <div class="pageno" style="color:rgba(255,255,255,.7)">10</div>
+</div>
+
+</body>
+</html>
