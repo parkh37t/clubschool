@@ -90,19 +90,15 @@ def md_to_docx(md_paths, out_path, doc_title):
     doc.save(out_path); return out_path
 
 if __name__ == "__main__":
-    R = os.path.join(BASE, "..", "IBK_i-ONE_Global")
-    jobs = [
-        ([os.path.join(PROOT,"PROJECT/01-planning/화면설계서.md")],
-         os.path.join(R,"02_기획/화면설계서_v1.docx"), "IBK i-ONE Bank Global — 화면설계서 (v1)"),
-        ([os.path.join(PROOT,"PROJECT/01-planning/예외플로우-인증서.md")],
-         os.path.join(R,"02_기획/예외플로우-인증서_v1.docx"), "IBK i-ONE Bank Global — 인증서 예외 플로우 (v1)"),
-        ([os.path.join(PROOT,"PROJECT/04-dev-prep/연동-인터페이스-계약.md")],
-         os.path.join(R,"05_개발준비/연동-인터페이스-계약_v1.docx"), "IBK i-ONE Bank Global — 연동 인터페이스 계약 (v1)"),
-        ([os.path.join(PROOT,"PROJECT/회의록/회의록-01.md"),
-          os.path.join(PROOT,"PROJECT/회의록/회의록-02-산출물정리체계.md")],
-         os.path.join(R,"00_회의록/회의록_v1.docx"), "컨버전스1팀 — 회의록 모음 (v1)"),
-    ]
-    for srcs, out, title in jobs:
-        os.makedirs(os.path.dirname(out), exist_ok=True)
-        md_to_docx(srcs, out, title)
-        print("OK", os.path.getsize(out), out)
+    # 과제 무관 CLI 엔진: 특정 프로젝트에 고정하지 않는다.
+    # 사용법: gen_docs_from_md.py <out.docx> "<title>" <md1> [md2 ...]
+    # 프로젝트별 일괄 생성은 _generators/projects/<slug>.sh 가 이 엔진을 호출한다.
+    import sys
+    args = sys.argv[1:]
+    if len(args) < 3:
+        print('usage: gen_docs_from_md.py <out.docx> "<title>" <md1> [md2 ...]')
+        sys.exit(1)
+    out, title, mds = args[0], args[1], args[2:]
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    md_to_docx(mds, out, title)
+    print("OK", os.path.getsize(out), out)

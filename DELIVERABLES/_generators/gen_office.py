@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Claude-native 오피스 산출물 생성기 (Adobe 불필요).
-SSOT(PROJECT/*.md) 내용을 python-pptx/docx/openpyxl로 실제 .pptx/.docx/.xlsx로 출력.
-정책: Claude Design First — 편집형 오피스 파일은 이 스크립트가 1순위 경로.
+Claude-native 오피스 산출물 생성기 — **IBK 과제(#1) 예시**.
+엔진(python-pptx/docx/openpyxl)은 과제 무관 재사용. 슬라이드/문서의 '내용'만 과제별로 다르므로
+신규 과제는 이 파일을 복제해 내용을 교체하거나, 표 데이터를 외부 설정으로 분리한다.
+정책: Claude Design First — 편집형 오피스 파일은 네이티브 생성이 1순위.
+공통 md→DOCX 변환은 과제 무관 엔진 `gen_docs_from_md.py`를 사용(프로젝트 러너가 호출).
 """
 import os
 from pptx import Presentation
