@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>엠배서더호텔 재구축 — 핵심 화면 3종 시안 (와일리 UIUX)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap');
+:root{--navy:#11203A;--navy2:#1B2E4D;--gold:#B89150;--goldd:#9c7a2e;--cream:#F6F1E7;--ink:#20242C;--mut:#6B7280;--line:#E6E0D4;--soft:#F4F2EC;--ok:#2E7D5B;--white:#fff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#DCE0E8;font-family:Pretendard,"Noto Sans KR",system-ui,sans-serif;color:var(--ink);padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:30px}
+.serif{font-family:"Playfair Display",serif}
+.lab{width:1120px;max-width:100%;font-size:13px;color:#42506b;font-weight:600}
+.frame{width:1120px;max-width:100%;background:var(--white);border-radius:14px;overflow:hidden;box-shadow:0 14px 40px rgba(16,24,40,.18);border:1px solid #cfd6e0}
+.chrome{height:38px;background:#eef1f5;display:flex;align-items:center;gap:7px;padding:0 14px;border-bottom:1px solid #e1e6ec}
+.chrome i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.chrome .u{margin-left:14px;font-size:12px;color:#7a8596;background:#fff;border-radius:6px;padding:4px 12px;flex:1;max-width:380px}
+.muted{color:var(--mut)}
+.btn{border:0;border-radius:9px;padding:11px 18px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
+.btn.gold{background:var(--gold);color:#1c1405}.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--navy)}
+
+/* nav */
+.nav{display:flex;align-items:center;gap:22px;padding:16px 28px;border-bottom:1px solid var(--line)}
+.nav .logo{font-family:"Playfair Display",serif;font-weight:700;font-size:20px;color:var(--navy);letter-spacing:1px}
+.nav .menu{display:flex;gap:20px;font-size:14px;color:#2c3340;font-weight:500}
+.nav .right{margin-left:auto;display:flex;gap:12px;align-items:center;font-size:13px}
+.pill{border:1px solid var(--line);border-radius:999px;padding:6px 12px}
+
+/* B1 hero */
+.hero{position:relative;height:340px;background:linear-gradient(rgba(17,32,58,.30),rgba(17,32,58,.62)),linear-gradient(120deg,#33496c,#6a7d9c 55%,#b7a98c);color:#fff;display:flex;flex-direction:column;justify-content:center;padding:0 56px}
+.hero h1{font-family:"Playfair Display",serif;font-size:46px;font-weight:700;line-height:1.1;max-width:640px}
+.hero p{margin-top:10px;font-size:16px;opacity:.92}
+.hero .badge{display:inline-block;background:var(--gold);color:#1c1405;font-weight:700;border-radius:999px;padding:6px 14px;font-size:13px;width:max-content;margin-bottom:14px}
+.book{margin:-36px 56px 0;position:relative;background:#fff;border-radius:12px;box-shadow:0 12px 30px rgba(16,24,40,.16);display:flex;align-items:end;padding:16px 14px}
+.book .f{flex:1;padding:6px 18px;border-right:1px solid var(--line)}
+.book .f:last-of-type{border-right:0}
+.book .f label{display:block;font-size:11px;color:var(--mut);margin-bottom:5px;letter-spacing:.3px}
+.book .f .v{font-size:15px;font-weight:700;color:var(--navy)}
+.sec{padding:30px 56px}
+.sec h2{font-size:20px;font-weight:700;color:var(--navy);margin-bottom:4px}
+.sec .sub{font-size:13px;color:var(--mut);margin-bottom:18px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.rc{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.rc .im{height:140px;background:linear-gradient(120deg,#54637e,#9faec4)}
+.rc .im.b{background:linear-gradient(120deg,#6b7f5e,#aebf95)}
+.rc .im.c{background:linear-gradient(120deg,#6d5e7f,#b3a0c0)}
+.rc .b{padding:14px 16px}
+.rc .nm{font-weight:700;color:var(--navy)}
+.rc .meta{font-size:12.5px;color:var(--mut);margin:4px 0 8px}
+.rc .pr{display:flex;align-items:baseline;gap:8px}
+.rc .pr .o{color:#b0b6c0;text-decoration:line-through;font-size:13px}
+.rc .pr .n{color:var(--goldd);font-weight:800;font-size:17px}
+.rc .pr .tag{margin-left:auto;background:rgba(184,145,80,.14);color:var(--goldd);font-size:11px;font-weight:700;border-radius:6px;padding:3px 8px}
+
+/* B2 dashboard */
+.dash{background:var(--soft);padding:26px 32px}
+.dhead{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+.dhead h2{font-size:20px;color:var(--navy)}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.kpi .l{font-size:12.5px;color:var(--mut)}
+.kpi .n{font-family:"Playfair Display",serif;font-size:28px;font-weight:700;color:var(--navy);margin-top:4px}
+.kpi .d{font-size:12px;font-weight:700;margin-top:2px}.up{color:var(--ok)}.dn{color:#C0492F}
+.drow{display:grid;grid-template-columns:1.1fr 1.4fr 1fr;gap:16px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:18px}
+.panel h3{font-size:14px;color:var(--navy);margin-bottom:14px}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:10px;flex-wrap:wrap}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:5px;vertical-align:middle}
+.bar{display:flex;align-items:center;gap:10px;margin-bottom:11px;font-size:12.5px}
+.bar .t{width:60px;color:#3a4250}
+.bar .track{flex:1;height:12px;background:#eef0f3;border-radius:6px;overflow:hidden}
+.bar .fill{height:100%;border-radius:6px}
+.bar .v{width:38px;text-align:right;color:var(--navy);font-weight:700}
+.mcard{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;border-radius:12px;padding:18px}
+.mcard .tier{display:inline-block;background:var(--gold);color:#1c1405;font-weight:800;border-radius:999px;padding:4px 12px;font-size:12px}
+.mcard .pt{font-family:"Playfair Display",serif;font-size:30px;font-weight:700;color:var(--gold);margin-top:10px}
+.tl{margin-top:12px;font-size:12px;opacity:.85}
+.tl .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.14)}
+
+/* B3 search */
+.sbar{display:flex;gap:10px;align-items:center;padding:16px 28px;border-bottom:1px solid var(--line);background:#fff}
+.sbar .inp{flex:1;border:1px solid var(--line);border-radius:9px;padding:11px 14px;color:#3a4250;font-size:14px}
+.slayout{display:grid;grid-template-columns:230px 1fr 300px;gap:0}
+.filters{padding:22px;border-right:1px solid var(--line)}
+.filters h4{font-size:13px;color:var(--navy);margin:14px 0 8px}.filters h4:first-child{margin-top:0}
+.chk{display:flex;align-items:center;gap:8px;font-size:13px;color:#3a4250;margin-bottom:7px}
+.chk input{accent-color:var(--gold)}
+.results{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+.res{display:flex;gap:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.res .im{width:150px;background:linear-gradient(120deg,#54637e,#9faec4)}
+.res .b{padding:14px 16px;flex:1}
+.res .nm{font-weight:700;color:var(--navy)}
+.res .meta{font-size:12.5px;color:var(--mut);margin:4px 0}
+.res .stars{color:var(--gold);font-size:13px}
+.res .pr{margin-top:8px}.res .pr .n{color:var(--goldd);font-weight:800;font-size:18px}
+.map{border-left:1px solid var(--line);background:
+  repeating-linear-gradient(0deg,#e9edf2,#e9edf2 1px,transparent 1px,transparent 26px),
+  repeating-linear-gradient(90deg,#e9edf2,#e9edf2 1px,transparent 1px,transparent 26px),
+  linear-gradient(120deg,#dfe6ee,#eef2f6);position:relative}
+.map .pin{position:absolute;background:var(--gold);color:#1c1405;font-weight:800;font-size:12px;border-radius:999px;padding:5px 9px;transform:translate(-50%,-50%);box-shadow:0 4px 10px rgba(0,0,0,.2)}
+@media (max-width:1000px){.cards,.kpis{grid-template-columns:repeat(2,1fr)}.drow,.slayout{grid-template-columns:1fr}.map{height:220px}}
+</style>
+</head>
+<body>
+
+<!-- B-1 -->
+<div class="lab">시안 B-1 · 홈 / 예약 — FNR-02·03·04·09 (직예약 전환 중심, 반응형 mobile-first)</div>
+<div class="frame">
+  <div class="chrome"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="u">https://www.ambatel.com</span></div>
+  <div class="nav"><span class="logo">AMBASSADOR</span>
+    <span class="menu"><span>객실</span><span>다이닝</span><span>멤버십</span><span>프로모션</span><span>E-Shop</span></span>
+    <span class="right"><span class="pill">KR · EN ▾</span><span>로그인</span><button class="btn gold" style="padding:8px 14px">멤버 가입</button></span>
+  </div>
+  <div class="hero">
+    <span class="badge">회원 전용 최저가 · 직예약 혜택</span>
+    <h1>도심 속, 품격 있는 머무름</h1>
+    <p>엠배서더호텔 그룹 공식 예약 — 최저가 보장과 멤버 혜택을 한 번에.</p>
+  </div>
+  <div class="book">
+    <div class="f"><label>호텔/지점</label><div class="v">Grand Ambassador Seoul ▾</div></div>
+    <div class="f"><label>체크인</label><div class="v">6월 25일 (목)</div></div>
+    <div class="f"><label>체크아웃</label><div class="v">6월 27일 (토)</div></div>
+    <div class="f"><label>객실·인원</label><div class="v">객실 1 · 성인 2</div></div>
+    <div class="f" style="flex:0 0 auto;border:0"><button class="btn gold" style="padding:14px 28px">객실 검색</button></div>
+  </div>
+  <div class="sec">
+    <h2>추천 패키지</h2><div class="sub">인기 · 신규 · 큐레이션 (최대 10개) · 한정수량 카운트다운</div>
+    <div class="cards">
+      <div class="rc"><div class="im"></div><div class="b"><div class="nm">디럭스 시티뷰</div><div class="meta">조식 2인 · 레이트 체크아웃</div><div class="pr"><span class="o">₩260,000</span><span class="n">₩220,000</span><span class="tag">GOLD -15%</span></div></div></div>
+      <div class="rc"><div class="im b"></div><div class="b"><div class="nm">클럽 스위트</div><div class="meta">클럽 라운지 · 해피아워</div><div class="pr"><span class="o">₩480,000</span><span class="n">₩420,000</span><span class="tag">얼리버드</span></div></div></div>
+      <div class="rc"><div class="im c"></div><div class="b"><div class="nm">다이닝 패키지</div><div class="meta">디너 뷔페 2인 포함</div><div class="pr"><span class="n">₩310,000</span><span class="tag">한정 ⏱ 04:12</span></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- B-2 -->
+<div class="lab">시안 B-2 · 멤버십 / CRM 대시보드 — FNR-08·05 (등급가·바우처·세그먼트·전환율 시각화)</div>
+<div class="frame">
+  <div class="chrome"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="u">https://www.ambatel.com/crm/dashboard</span></div>
+  <div class="dash">
+    <div class="dhead"><span class="logo serif" style="font-size:18px;color:var(--navy)">AMBASSADOR</span><h2>멤버십 · CRM 대시보드</h2><span class="muted" style="margin-left:auto;font-size:13px">2026.06 · 직영/제휴 통합</span></div>
+    <div class="kpis">
+      <div class="kpi"><div class="l">회원 예약 비중</div><div class="n">68%</div><div class="d up">▲ 6.2%p</div></div>
+      <div class="kpi"><div class="l">비회원→회원 전환율</div><div class="n">23.4%</div><div class="d up">▲ 3.1%p</div></div>
+      <div class="kpi"><div class="l">바우처 사용률</div><div class="n">71%</div><div class="d up">▲ 4.0%p</div></div>
+      <div class="kpi"><div class="l">포인트 소멸 임박(30일)</div><div class="n">1.2M</div><div class="d dn">관리 필요</div></div>
+    </div>
+    <div class="drow">
+      <div class="panel"><h3>회원 / 비회원 비율</h3>
+        <svg viewBox="0 0 120 120" width="150" height="150" style="display:block;margin:0 auto">
+          <circle cx="60" cy="60" r="48" fill="none" stroke="#eef0f3" stroke-width="20"/>
+          <circle cx="60" cy="60" r="48" fill="none" stroke="#11203A" stroke-width="20" stroke-dasharray="205 96" transform="rotate(-90 60 60)" stroke-linecap="butt"/>
+          <text x="60" y="58" text-anchor="middle" font-size="20" font-weight="700" fill="#11203A">68%</text>
+          <text x="60" y="74" text-anchor="middle" font-size="9" fill="#6B7280">회원</text>
+        </svg>
+        <div class="legend"><span><i style="background:#11203A"></i>회원 68%</span><span><i style="background:#eef0f3"></i>비회원 32%</span></div>
+      </div>
+      <div class="panel"><h3>등급별 예약 분포</h3>
+        <div class="bar"><span class="t">플래티넘</span><span class="track"><span class="fill" style="width:18%;background:var(--navy)"></span></span><span class="v">18%</span></div>
+        <div class="bar"><span class="t">골드</span><span class="track"><span class="fill" style="width:34%;background:var(--gold)"></span></span><span class="v">34%</span></div>
+        <div class="bar"><span class="t">실버</span><span class="track"><span class="fill" style="width:28%;background:#9faec4"></span></span><span class="v">28%</span></div>
+        <div class="bar"><span class="t">일반</span><span class="track"><span class="fill" style="width:20%;background:#c7cdd6"></span></span><span class="v">20%</span></div>
+        <h3 style="margin-top:16px">바우처·쿠폰 발행 대비 사용률</h3>
+        <div class="bar"><span class="t">6월</span><span class="track"><span class="fill" style="width:71%;background:var(--ok)"></span></span><span class="v">71%</span></div>
+        <div class="bar"><span class="t">5월</span><span class="track"><span class="fill" style="width:64%;background:var(--ok)"></span></span><span class="v">64%</span></div>
+      </div>
+      <div class="mcard">
+        <span class="tier">GOLD</span>
+        <div class="pt">12,400 P</div>
+        <div style="font-size:12px;opacity:.8">다음 등급(플래티넘)까지 3박</div>
+        <div class="tl">
+          <div class="row"><span>회원 전용가</span><span>최대 15%</span></div>
+          <div class="row"><span>무료숙박권</span><span>1매 · 캘린더</span></div>
+          <div class="row"><span>소멸 예정 P</span><span>320P · D-12</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- B-3 -->
+<div class="lab">시안 B-3 · 검색 / 상세 — FNR-03·04 (다중 필터·지도뷰·정렬, Sticky CTA)</div>
+<div class="frame">
+  <div class="chrome"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i><span class="u">https://www.ambatel.com/search</span></div>
+  <div class="sbar">
+    <div class="inp">서울 · 강남</div><div class="inp" style="flex:0 0 200px">6/25 — 6/27 · 2박</div>
+    <div class="inp" style="flex:0 0 140px">성인 2</div><button class="btn gold">검색</button>
+  </div>
+  <div class="slayout">
+    <div class="filters">
+      <h4>정렬</h4><div class="chk"><input type="radio" checked> 추천순</div><div class="chk"><input type="radio"> 가격순</div><div class="chk"><input type="radio"> 평점순</div>
+      <h4>가격대</h4><div class="chk"><input type="checkbox" checked> 20만 이하</div><div class="chk"><input type="checkbox"> 20–40만</div><div class="chk"><input type="checkbox"> 40만+</div>
+      <h4>편의시설</h4><div class="chk"><input type="checkbox" checked> 수영장</div><div class="chk"><input type="checkbox"> 피트니스</div><div class="chk"><input type="checkbox"> 라운지</div>
+      <h4>유형</h4><div class="chk"><input type="checkbox"> 시티</div><div class="chk"><input type="checkbox"> 리조트</div>
+    </div>
+    <div class="results">
+      <div class="res"><div class="im"></div><div class="b"><div class="nm">Grand Ambassador Seoul</div><div class="stars">★★★★★ 4.8 · 강남</div><div class="meta">수영장 · 라운지 · 조식</div><div class="pr"><span class="muted" style="text-decoration:line-through">₩260,000</span> <span class="n">₩220,000</span> <span class="muted">/박 · 회원가</span></div></div></div>
+      <div class="res"><div class="im" style="background:linear-gradient(120deg,#6b7f5e,#aebf95)"></div><div class="b"><div class="nm">Novotel Ambassador</div><div class="stars">★★★★☆ 4.6 · 동대문</div><div class="meta">피트니스 · 다이닝</div><div class="pr"><span class="n">₩185,000</span> <span class="muted">/박 · 회원가</span></div></div></div>
+      <div class="res"><div class="im" style="background:linear-gradient(120deg,#6d5e7f,#b3a0c0)"></div><div class="b"><div class="nm">Sofitel Ambassador</div><div class="stars">★★★★★ 4.9 · 잠실</div><div class="meta">한강뷰 · 클럽</div><div class="pr"><span class="n">₩430,000</span> <span class="muted">/박 · 회원가</span></div></div></div>
+    </div>
+    <div class="map">
+      <span class="pin" style="left:42%;top:38%">₩22만</span>
+      <span class="pin" style="left:64%;top:56%">₩18.5만</span>
+      <span class="pin" style="left:30%;top:66%">₩43만</span>
+    </div>
+  </div>
+</div>
+
+<div class="lab" style="color:#6b778c">© 와일리 UIUX · 시안 방향(확정 아님) · 폰트 Pretendard · 색/이미지/카피 미확정 · 대외비</div>
+</body>
+</html>

@@ -6,11 +6,17 @@
 ## 생성분
 | 업무 | 산출물 | 포맷 | 위치 | 상태 |
 | --- | --- | --- | --- | --- |
-| 00 영업 | 기회분석·수주전략 | MD | `PROJECT/Ambassador_Hotel/00-sales/기회분석-수주전략.md` | ✅ |
-| 00 영업 | 경쟁 벤치마킹 | MD | `.../00-sales/경쟁벤치마킹.md` | ✅ |
-| 00 영업 | 컨소시엄 협의·제안 조직·일정 | MD | `.../00-sales/컨소시엄협의-제안조직일정.md` | ✅ |
-| 02 디자인 | 화면 콘셉트 방향 | MD | `PROJECT/Ambassador_Hotel/02-design/화면콘셉트-방향.md` | ✅ |
-| 02 디자인 | **UIUX 콘셉트 보드** | **HTML(Claude Design)** | `02_디자인/화면콘셉트_v1.html` | ✅ |
+| 00 영업 | 기회분석·수주전략 / 경쟁벤치마킹 / 컨소시엄협의·조직·일정 | MD | `PROJECT/Ambassador_Hotel/00-sales/` | ✅ |
+| 00 영업 | **RFP 분석** (대외비) | MD | `.../00-sales/RFP-분석.md` | ✅ |
+| 00 영업 | **발주 질의서 초안 (D)** | MD | `.../00-sales/발주질의서.md` | ✅ |
+| 01 기획 | **요구사항 매트릭스 + RTM (A)** | MD | `PROJECT/Ambassador_Hotel/01-planning/요구사항매트릭스-RTM.md` | ✅ |
+| 02 디자인 | 화면 콘셉트 방향 / 콘셉트 보드 | MD / HTML | `02_디자인/화면콘셉트_v1.html` | ✅ |
+| 02 디자인 | **핵심 화면 3종 시안 (B)** | HTML(Claude Design) | `02_디자인/시안3종_v1.html` | ✅ |
+| 01 제안 | **제안 발표 골격 (C)** | PPTX(네이티브, 10장) | `01_제안/제안발표_v1.pptx` | ✅ |
+| 01 제안 | **제안서 본문 골격 (C)** | DOCX(네이티브) | `01_제안/제안서_v1.docx` | ✅ |
+
+> 재생성: `python3 DELIVERABLES/_generators/projects/Ambassador_Hotel.py`
+> ⚠ 대외비(RFP 기반) — 외부 배포 시 보안 주의(사용자 승인 하 저장).
 
 ## 비고
 - 콘셉트 보드는 제안용 **방향 시안**(색/이미지/카피 미확정). 브라우저로 열람.
