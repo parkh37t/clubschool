@@ -42,3 +42,26 @@
 ## 다음 액션
 - P0 2종의 tool 스펙을 `api-design` 스킬로 상세화 → PoC(파이썬 MCP SDK) 착수 검토.
 - 본 제안서·마스터 인덱스는 주기 회의(loop)에서 갱신.
+
+## 부록 — P0 MCP tool 상세 스펙 (회의 #2, PoC 착수용)
+### `deliverable-pipeline-mcp` (기존 `_generators/*.py` 래핑)
+| tool | 입력 | 출력 |
+| --- | --- | --- |
+| `build_office` | `{kind:"pptx\|docx\|xlsx", spec, out_path}` | `{path, bytes, ok, error?}` |
+| `md_to_docx` | `{md_paths:[str], out_path, title}` | `{path, ok}` |
+| `render_pdf` | `{html_path, out_path, engine:"libreoffice"}` | `{path, ok}` (브라우저 무손실은 사용자측) |
+| `list_deliverables` | `{project}` | `{items:[{업무,파일,포맷,버전}]}` |
+| `update_index` | `{project}` | `{index_path, ok}` (_index.md 재작성) |
+- 구현: 각 tool은 해당 `gen_*.py` 함수 호출(subprocess/직접 import). 네이밍·폴더 규칙 내장.
+- 오류 정책: 파일 생성 실패 시 `ok:false`+`error`, 부분 성공 없음(원자적).
+
+### `i18n-a11y-lint-mcp` (정적 분석, 브라우저 불필요)
+| tool | 입력 | 출력 |
+| --- | --- | --- |
+| `check_translation_coverage` | `{html_path, locales:{ko:{...},en:{...}}}` | `{missing:[{key,locale}], coverage:%}` |
+| `validate_lang_bcp47` | `{target: html_path\|str}` | `{invalid:[{value,where}]}` |
+| `detect_rtl_risks` | `{html_path, css_path}` | `{risks:[{selector,prop}]}` (margin-left 등 물리속성) |
+| `audit_reduced_motion` | `{css_path}` | `{keyframes_without_guard:[name]}` |
+- 게이트 활용: 4개 tool 결과를 합쳐 `다국어-접근성-명세.md` P1 항목 통과/실패로 매핑.
+- 의존: htmlparser2/postcss/bcp-47(Node) 또는 파이썬(lxml/tinycss2)로도 구현 가능.
+
