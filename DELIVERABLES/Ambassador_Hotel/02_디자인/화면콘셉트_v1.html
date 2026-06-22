@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>앰배서더 호텔 — UIUX 콘셉트 보드 (와일리, 제안 방향 시안)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700&family=Inter:wght@400;500;600;700&display=swap');
+:root{--navy:#11203A;--navy2:#1B2E4D;--gold:#B89150;--cream:#F6F1E7;--ink:#2A2E37;--mut:#6B7280;--line:#E6E0D4;--white:#fff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#DDE2EA;font-family:Inter,system-ui,"Malgun Gothic",sans-serif;color:var(--ink);padding:32px 16px;display:flex;flex-direction:column;align-items:center;gap:28px}
+.serif{font-family:"Playfair Display",serif}
+.board{width:1100px;max-width:100%;background:var(--white);border-radius:18px;overflow:hidden;box-shadow:0 14px 44px rgba(16,24,40,.18)}
+.cap{width:1100px;max-width:100%;color:#42506b;font-size:13px}
+.tag{display:inline-block;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:600}
+
+/* 0. 브랜드 무드 헤더 */
+.mood{background:linear-gradient(135deg,var(--navy),var(--navy2));color:var(--white);padding:48px 56px}
+.mood h1{font-size:46px;font-weight:700;line-height:1.1;margin:10px 0 8px}
+.mood p{opacity:.85;font-size:16px;max-width:620px}
+.tokens{display:flex;gap:14px;margin-top:28px;flex-wrap:wrap}
+.sw{display:flex;align-items:center;gap:8px;font-size:12px;color:#dfe6f0}
+.dot{width:26px;height:26px;border-radius:7px;border:1px solid rgba(255,255,255,.3)}
+
+/* 섹션 라벨 */
+.lab{padding:22px 56px 0;display:flex;align-items:baseline;gap:12px}
+.lab .n{font-family:"Playfair Display",serif;font-size:22px;color:var(--navy);font-weight:700}
+.lab .d{font-size:13px;color:var(--mut)}
+
+/* 1. 홈 히어로 + 예약 위젯 */
+.hero{margin:14px 56px 8px;border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.hero .pic{height:300px;background:
+  linear-gradient(rgba(17,32,58,.32),rgba(17,32,58,.55)),
+  linear-gradient(120deg,#3a4f72,#6d7f9c 60%,#b7a98c);
+  position:relative;display:flex;flex-direction:column;justify-content:center;padding:0 48px;color:#fff}
+.hero .topbar{position:absolute;top:0;left:0;right:0;height:54px;display:flex;align-items:center;gap:24px;padding:0 28px;background:rgba(17,32,58,.35)}
+.hero .topbar .logo{font-family:"Playfair Display",serif;font-weight:700;font-size:18px}
+.hero .topbar .nav{display:flex;gap:18px;font-size:13px;opacity:.9;margin-left:8px}
+.hero .topbar .right{margin-left:auto;display:flex;gap:14px;font-size:12px;opacity:.9;align-items:center}
+.hero .pill{border:1px solid rgba(255,255,255,.6);border-radius:999px;padding:5px 12px}
+.hero h2{font-family:"Playfair Display",serif;font-size:40px;font-weight:700;line-height:1.12;max-width:560px}
+.hero .sub{margin-top:8px;font-size:15px;opacity:.92}
+.book{margin:-34px 28px 0;position:relative;background:#fff;border-radius:12px;box-shadow:0 10px 28px rgba(16,24,40,.16);display:flex;align-items:end;gap:0;padding:16px 18px}
+.book .f{flex:1;padding:6px 16px;border-right:1px solid var(--line)}
+.book .f:last-of-type{border-right:0}
+.book .f label{display:block;font-size:11px;color:var(--mut);letter-spacing:.5px;margin-bottom:4px}
+.book .f .v{font-size:15px;font-weight:600;color:var(--navy)}
+.book .go{background:var(--gold);color:#1c1405;border:0;border-radius:9px;padding:14px 26px;font-weight:700;font-size:15px;cursor:pointer;white-space:nowrap}
+.note{padding:10px 56px 18px;color:var(--mut);font-size:12.5px}
+
+/* 2. 멤버십 / CRM 여정 */
+.grid{display:grid;grid-template-columns:1.15fr 1fr;gap:18px;margin:14px 56px 8px}
+.card{border:1px solid var(--line);border-radius:14px;padding:24px;background:var(--cream)}
+.card.dark{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;border:0}
+.tier{display:flex;align-items:center;gap:12px}
+.badge{background:var(--gold);color:#1c1405;font-weight:700;border-radius:999px;padding:4px 12px;font-size:12px}
+.kpi{display:flex;gap:26px;margin-top:18px}
+.kpi .b .num{font-family:"Playfair Display",serif;font-size:30px;font-weight:700;color:var(--gold)}
+.kpi .b .l{font-size:12px;opacity:.8}
+.rows{margin-top:10px}
+.row{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row .t{font-weight:600;color:var(--navy)}
+.row .c{color:var(--gold);font-size:13px;font-weight:600}
+.qa{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.qa span{border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:8px 14px;font-size:13px}
+
+/* 3. 디스커버리 그리드 */
+.disc{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 56px 10px}
+.tile{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tile .im{height:120px;background:linear-gradient(120deg,#54637e,#9faec4)}
+.tile .im.a{background:linear-gradient(120deg,#5b6e8f,#b9a98a)}
+.tile .b{padding:12px 14px}
+.tile .b .t{font-weight:600;color:var(--navy);font-size:15px}
+.tile .b .p{color:var(--mut);font-size:12.5px;margin-top:2px}
+
+/* 4. 원칙 */
+.princ{display:flex;gap:14px;flex-wrap:wrap;padding:8px 56px 40px}
+.princ .p{flex:1;min-width:200px;border-left:3px solid var(--gold);padding:6px 14px}
+.princ .p b{color:var(--navy)}
+.princ .p span{display:block;color:var(--mut);font-size:13px;margin-top:4px}
+@media (max-width:900px){.grid,.disc{grid-template-columns:1fr}.mood,.lab,.hero,.note,.princ{padding-left:24px;padding-right:24px}.hero{margin-left:24px;margin-right:24px}.grid,.disc{margin-left:24px;margin-right:24px}}
+</style>
+</head>
+<body>
+<div class="cap">앰배서더 호텔 차세대 — UIUX 콘셉트 보드 · 와일리 · 제안 방향 시안(확정 아님)</div>
+<div class="board">
+
+  <!-- 0 무드 -->
+  <div class="mood">
+    <span class="tag">Ambassador Hotel · Next Homepage &amp; CRM</span>
+    <h1 class="serif">절제된 환대, 더 빠른 직예약</h1>
+    <p>풀블리드 비주얼과 절제된 세리프 타이포로 럭셔리 호스피탈리티를 표현하고,
+       예약·멤버십·CRM을 끊김 없는 한 흐름으로 연결합니다.</p>
+    <div class="tokens">
+      <span class="sw"><span class="dot" style="background:#11203A"></span>Navy #11203A</span>
+      <span class="sw"><span class="dot" style="background:#B89150"></span>Gold #B89150</span>
+      <span class="sw"><span class="dot" style="background:#F6F1E7"></span>Cream #F6F1E7</span>
+      <span class="sw">Aa · Playfair Display / Inter</span>
+    </div>
+  </div>
+
+  <!-- 1 홈 히어로 + 예약 -->
+  <div class="lab"><span class="n serif">01</span><span class="d">홈 히어로 + 예약 위젯 — 직예약 전환 중심</span></div>
+  <div class="hero">
+    <div class="pic">
+      <div class="topbar">
+        <span class="logo">AMBASSADOR</span>
+        <span class="nav">객실 · 다이닝 · 멤버십 · 프로모션</span>
+        <span class="right"><span class="pill">EN ▾</span><span>로그인</span><span class="pill" style="background:var(--gold);color:#1c1405;border:0;font-weight:700">멤버 가입</span></span>
+      </div>
+      <h2>서울 한복판의 품격 있는 휴식</h2>
+      <div class="sub">회원 전용 최저가 · 직예약 혜택</div>
+    </div>
+    <div class="book">
+      <div class="f"><label>지점</label><div class="v">Grand Ambassador Seoul ▾</div></div>
+      <div class="f"><label>체크인</label><div class="v">6월 25일 (목)</div></div>
+      <div class="f"><label>체크아웃</label><div class="v">6월 27일 (토)</div></div>
+      <div class="f"><label>인원</label><div class="v">성인 2 · 객실 1</div></div>
+      <button class="go">객실 검색</button>
+    </div>
+  </div>
+  <div class="note">상단 고정 예약바 → 최소 단계 직예약. 회원가·게스트 체크아웃·요금 캘린더로 전환 극대화.</div>
+
+  <!-- 2 멤버십 / CRM -->
+  <div class="lab"><span class="n serif">02</span><span class="d">멤버십 · CRM 여정 — 홈↔마이페이지↔CRM 데이터 연결(차세대 핵심)</span></div>
+  <div class="grid">
+    <div class="card">
+      <span class="tag" style="color:#9c7a2e">My Membership</span>
+      <div class="tier" style="margin-top:8px"><span class="badge">GOLD</span><strong style="color:var(--navy);font-size:18px">김앰배 님</strong></div>
+      <div class="rows">
+        <div class="row"><span class="t">회원 전용가</span><span class="c">최대 15% 할인</span></div>
+        <div class="row"><span class="t">레이트 체크아웃</span><span class="c">14:00</span></div>
+        <div class="row"><span class="t">다이닝 바우처</span><span class="c">2매 보유</span></div>
+      </div>
+    </div>
+    <div class="card dark">
+      <span class="tag">Loyalty</span>
+      <div class="kpi">
+        <div class="b"><div class="num">12,400</div><div class="l">포인트</div></div>
+        <div class="b"><div class="num">3</div><div class="l">다음 등급까지 박</div></div>
+      </div>
+      <div class="qa">
+        <span>예약 내역</span><span>포인트 적립/사용</span><span>맞춤 제안</span><span>쿠폰함</span>
+      </div>
+      <div style="margin-top:14px;font-size:12.5px;opacity:.8">개인화 추천(향후 AI) · 마케팅 동의 기반 CRM 캠페인 연계</div>
+    </div>
+  </div>
+
+  <!-- 3 디스커버리 -->
+  <div class="lab"><span class="n serif">03</span><span class="d">객실 · 다이닝 디스커버리 — 비주얼 카드 그리드</span></div>
+  <div class="disc">
+    <div class="tile"><div class="im"></div><div class="b"><div class="t">디럭스 시티뷰</div><div class="p">₩ 220,000~ · 회원가</div></div></div>
+    <div class="tile"><div class="im a"></div><div class="b"><div class="t">클럽 스위트</div><div class="p">₩ 420,000~ · 라운지</div></div></div>
+    <div class="tile"><div class="im"></div><div class="b"><div class="t">올데이 다이닝</div><div class="p">조식 패키지</div></div></div>
+  </div>
+
+  <!-- 4 원칙 -->
+  <div class="princ">
+    <div class="p"><b>직예약 전환</b><span>최소 단계·명확한 CTA(Gold)</span></div>
+    <div class="p"><b>멤버십 우선</b><span>홈에서 회원 혜택 즉시 노출</span></div>
+    <div class="p"><b>글로벌·접근성</b><span>다국어·WCAG AA(외국인 대응)</span></div>
+    <div class="p"><b>모바일 퍼스트</b><span>모바일 예약·멤버십 최적화</span></div>
+  </div>
+
+</div>
+<div class="cap">© 와일리 UIUX · 콘셉트 방향 시안 — 색/이미지/카피는 확정 아님(제안용)</div>
+</body>
+</html>
