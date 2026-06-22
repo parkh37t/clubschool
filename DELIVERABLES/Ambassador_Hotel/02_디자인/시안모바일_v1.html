@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>엠배서더호텔 — 모바일 시안 (와일리 UIUX, mobile-first)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&display=swap');
+:root{--navy:#11203A;--navy2:#1B2E4D;--gold:#B89150;--goldd:#9c7a2e;--cream:#F6F1E7;--ink:#20242C;--mut:#6B7280;--line:#E6E0D4;--soft:#F4F2EC;--ok:#2E7D5B}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#DCE0E8;font-family:Pretendard,"Noto Sans KR",system-ui,sans-serif;color:var(--ink);padding:32px 16px}
+.serif{font-family:"Playfair Display",serif}
+.row{display:flex;gap:34px;flex-wrap:wrap;justify-content:center;align-items:flex-start}
+.col{display:flex;flex-direction:column;align-items:center;gap:10px}
+.cap{font-size:12.5px;color:#42506b;font-weight:600;max-width:330px;text-align:center}
+.phone{width:330px;height:680px;background:#fff;border-radius:34px;box-shadow:0 16px 40px rgba(16,24,40,.22);border:1px solid #cdd4de;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.sb{height:30px;background:var(--navy);display:flex;align-items:center;justify-content:space-between;padding:0 16px;color:#fff;font-size:11px}
+.scr{flex:1;overflow:hidden}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.topbar .logo{font-family:"Playfair Display",serif;font-weight:700;font-size:16px;color:var(--navy);letter-spacing:.5px}
+.ic{width:22px;height:22px;color:var(--navy)}
+.muted{color:var(--mut)}
+.btn{border:0;border-radius:10px;padding:13px;font-weight:700;font-size:14px;width:100%;cursor:pointer;font-family:inherit}
+.btn.gold{background:var(--gold);color:#1c1405}
+
+/* M1 */
+.hero{height:200px;background:linear-gradient(rgba(17,32,58,.30),rgba(17,32,58,.6)),linear-gradient(120deg,#33496c,#6a7d9c,#b7a98c);color:#fff;padding:18px 16px;display:flex;flex-direction:column;justify-content:flex-end}
+.hero .bd{background:var(--gold);color:#1c1405;font-weight:800;font-size:11px;border-radius:999px;padding:4px 10px;width:max-content;margin-bottom:8px}
+.hero h1{font-family:"Playfair Display",serif;font-size:25px;line-height:1.15}
+.book{margin:-26px 14px 0;position:relative;background:#fff;border-radius:14px;box-shadow:0 10px 24px rgba(16,24,40,.16);padding:12px 14px}
+.book .f{display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.book .f:last-of-type{border-bottom:0}
+.book .f .l{color:var(--mut)}.book .f .v{font-weight:700;color:var(--navy)}
+.book .btn{margin-top:10px}
+.p{padding:14px 16px}
+.p h2{font-size:15px;color:var(--navy);margin-bottom:10px}
+.rc{display:flex;gap:11px;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:10px}
+.rc .im{width:96px;background:linear-gradient(120deg,#54637e,#9faec4)}
+.rc .im.b{background:linear-gradient(120deg,#6b7f5e,#aebf95)}
+.rc .b{padding:10px 12px 10px 0;flex:1}
+.rc .nm{font-weight:700;font-size:13.5px;color:var(--navy)}
+.rc .mt{font-size:11.5px;color:var(--mut);margin:3px 0 6px}
+.rc .pr .n{color:var(--goldd);font-weight:800;font-size:15px}
+.rc .pr .o{color:#b0b6c0;text-decoration:line-through;font-size:11px;margin-right:5px}
+.rc .pr .tag{float:right;background:rgba(184,145,80,.14);color:var(--goldd);font-size:10px;font-weight:700;border-radius:5px;padding:2px 7px}
+.tabbar{display:flex;border-top:1px solid var(--line);background:#fff}
+.tabbar div{flex:1;text-align:center;padding:9px 0;font-size:10.5px;color:var(--mut)}
+.tabbar div.on{color:var(--navy);font-weight:700}
+.tabbar .d{font-size:16px}
+
+/* M2 membership */
+.mhead{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:18px 16px}
+.mhead .tier{display:inline-block;background:var(--gold);color:#1c1405;font-weight:800;border-radius:999px;padding:4px 12px;font-size:12px}
+.mhead .nm{font-size:18px;font-weight:700;margin:10px 0 2px}
+.mhead .pt{font-family:"Playfair Display",serif;font-size:30px;font-weight:700;color:var(--gold)}
+.prog{height:7px;background:rgba(255,255,255,.2);border-radius:999px;margin:10px 0 4px;overflow:hidden}
+.prog i{display:block;height:100%;width:62%;background:var(--gold)}
+.mlist .it{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--line);font-size:13.5px}
+.mlist .it .t{color:var(--navy);font-weight:600}
+.mlist .it .c{color:var(--goldd);font-weight:700;font-size:13px}
+.warn{margin:12px 16px;background:rgba(184,145,80,.12);border:1px solid rgba(184,145,80,.3);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--goldd)}
+
+/* M3 search */
+.sbar{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sbar .inp{border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:13px;color:#3a4250}
+.chips{display:flex;gap:7px;padding:10px 16px;overflow:hidden;flex-wrap:wrap}
+.chip{border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12px;color:#3a4250}
+.chip.on{background:rgba(184,145,80,.14);border-color:var(--gold);color:var(--goldd);font-weight:700}
+.sres .nm{font-weight:700;font-size:14px;color:var(--navy)}
+.sres .st{color:var(--gold);font-size:12px}
+@media print{body{background:#fff}}
+</style>
+</head>
+<body>
+<div class="cap" style="max-width:1100px;margin:0 auto 22px">엠배서더호텔 — 모바일 시안 (mobile-first 반응형) · 와일리 UIUX · Pretendard · ⚠ 대외비 · 방향 시안</div>
+<div class="row">
+
+  <!-- M1 홈/예약 -->
+  <div class="col">
+  <div class="phone">
+    <div class="sb"><span>9:41</span><span>● ● ●</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="logo">AMBASSADOR</span><span class="muted">☰</span></div>
+      <div class="hero"><span class="bd">회원 전용 최저가</span><h1>도심 속<br>품격 있는 머무름</h1></div>
+      <div class="book">
+        <div class="f"><span class="l">지점</span><span class="v">Grand Ambassador ▾</span></div>
+        <div class="f"><span class="l">일정</span><span class="v">6/25 — 6/27 · 2박</span></div>
+        <div class="f"><span class="l">인원</span><span class="v">객실1 · 성인2</span></div>
+        <button class="btn gold">객실 검색</button>
+      </div>
+      <div class="p"><h2>추천 패키지</h2>
+        <div class="rc"><div class="im"></div><div class="b"><span class="pr"><span class="tag">GOLD -15%</span></span><div class="nm">디럭스 시티뷰</div><div class="mt">조식 2인 · 레이트 체크아웃</div><div class="pr"><span class="o">₩260,000</span><span class="n">₩220,000</span></div></div></div>
+        <div class="rc"><div class="im b"></div><div class="b"><span class="pr"><span class="tag">얼리버드</span></span><div class="nm">클럽 스위트</div><div class="mt">클럽 라운지 · 해피아워</div><div class="pr"><span class="n">₩420,000</span></div></div></div>
+      </div>
+    </div>
+    <div class="tabbar"><div class="on"><div class="d">⌂</div>홈</div><div><div class="d">⌕</div>검색</div><div><div class="d">♡</div>찜</div><div><div class="d">◎</div>멤버십</div><div><div class="d">◌</div>MY</div></div>
+  </div>
+  <div class="cap">M1 · 홈 / 예약 — Sticky 예약, 회원가 강조 (FNR-02·04·09)</div>
+  </div>
+
+  <!-- M2 멤버십 -->
+  <div class="col">
+  <div class="phone">
+    <div class="sb"><span>9:41</span><span>● ● ●</span></div>
+    <div class="scr">
+      <div class="mhead">
+        <span class="tier">GOLD</span>
+        <div class="nm">김앰배 님</div>
+        <div class="pt">12,400 P</div>
+        <div class="prog"><i></i></div>
+        <div style="font-size:11.5px;opacity:.85">다음 등급(플래티넘)까지 3박</div>
+      </div>
+      <div class="mlist">
+        <div class="it"><span class="t">회원 전용가</span><span class="c">최대 15%</span></div>
+        <div class="it"><span class="t">무료숙박권</span><span class="c">1매 · 캘린더</span></div>
+        <div class="it"><span class="t">다이닝 바우처</span><span class="c">2매</span></div>
+        <div class="it"><span class="t">예약 내역</span><span class="c">›</span></div>
+        <div class="it"><span class="t">쿠폰함</span><span class="c">3장</span></div>
+      </div>
+      <div class="warn">⏱ 320P가 12일 후 소멸 예정입니다. 지금 사용해 보세요.</div>
+    </div>
+    <div class="tabbar"><div><div class="d">⌂</div>홈</div><div><div class="d">⌕</div>검색</div><div><div class="d">♡</div>찜</div><div class="on"><div class="d">◎</div>멤버십</div><div><div class="d">◌</div>MY</div></div>
+  </div>
+  <div class="cap">M2 · 멤버십 — 등급·포인트·바우처·소멸 알림 (FNR-08·05)</div>
+  </div>
+
+  <!-- M3 검색 -->
+  <div class="col">
+  <div class="phone">
+    <div class="sb"><span>9:41</span><span>● ● ●</span></div>
+    <div class="scr">
+      <div class="topbar"><span class="logo" style="font-size:14px">검색 결과</span><span class="muted">지도 ◎</span></div>
+      <div class="sbar"><div class="inp">서울 · 강남 · 6/25–6/27 · 성인 2</div></div>
+      <div class="chips"><span class="chip on">추천순</span><span class="chip">20만↓</span><span class="chip on">수영장</span><span class="chip">라운지</span><span class="chip">시티</span></div>
+      <div class="p" style="padding-top:4px">
+        <div class="rc"><div class="im"></div><div class="b sres"><div class="nm">Grand Ambassador Seoul</div><div class="st">★★★★★ 4.8 · 강남</div><div class="mt">수영장 · 라운지 · 조식</div><div class="pr"><span class="o">₩260,000</span><span class="n">₩220,000</span></div></div></div>
+        <div class="rc"><div class="im b"></div><div class="b sres"><div class="nm">Novotel Ambassador</div><div class="st">★★★★☆ 4.6 · 동대문</div><div class="mt">피트니스 · 다이닝</div><div class="pr"><span class="n">₩185,000</span></div></div></div>
+        <div class="rc"><div class="im"></div><div class="b sres"><div class="nm">Sofitel Ambassador</div><div class="st">★★★★★ 4.9 · 잠실</div><div class="mt">한강뷰 · 클럽</div><div class="pr"><span class="n">₩430,000</span></div></div></div>
+      </div>
+    </div>
+    <div class="tabbar"><div><div class="d">⌂</div>홈</div><div class="on"><div class="d">⌕</div>검색</div><div><div class="d">♡</div>찜</div><div><div class="d">◎</div>멤버십</div><div><div class="d">◌</div>MY</div></div>
+  </div>
+  <div class="cap">M3 · 검색 결과 — 필터 칩·지도 전환·회원가 (FNR-03·04)</div>
+  </div>
+
+</div>
+</body>
+</html>

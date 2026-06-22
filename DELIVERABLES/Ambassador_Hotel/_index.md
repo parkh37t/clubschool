@@ -12,8 +12,12 @@
 | 01 기획 | **요구사항 매트릭스 + RTM (A)** | MD | `PROJECT/Ambassador_Hotel/01-planning/요구사항매트릭스-RTM.md` | ✅ |
 | 02 디자인 | 화면 콘셉트 방향 / 콘셉트 보드 | MD / HTML | `02_디자인/화면콘셉트_v1.html` | ✅ |
 | 02 디자인 | **핵심 화면 3종 시안 (B)** | HTML(Claude Design) | `02_디자인/시안3종_v1.html` | ✅ |
+| 02 디자인 | **모바일 시안 (mobile-first)** | HTML(Claude Design) | `02_디자인/시안모바일_v1.html` | ✅ |
+| 01 기획 | 화면설계서(P2, 미커버 영역) | DOCX(네이티브) | `02_기획/화면설계서_v1.docx` | ✅ |
+| 01 기획 | IA·사이트맵·핵심 플로우 | DOCX(네이티브) | `02_기획/IA-사이트맵-핵심플로우_v1.docx` | ✅ |
 | 01 제안 | **제안 발표 골격 (C)** | PPTX(네이티브, 10장) | `01_제안/제안발표_v1.pptx` | ✅ |
 | 01 제안 | **제안서 본문 골격 (C)** | DOCX(네이티브) | `01_제안/제안서_v1.docx` | ✅ |
+| 01 제안 | **제안 요약 1-pager** | HTML(인쇄용 A4) | `01_제안/제안요약_1pager_v1.html` | ✅ |
 
 > 재생성: `python3 DELIVERABLES/_generators/projects/Ambassador_Hotel.py`
 > ⚠ 대외비(RFP 기반) — 외부 배포 시 보안 주의(사용자 승인 하 저장).
