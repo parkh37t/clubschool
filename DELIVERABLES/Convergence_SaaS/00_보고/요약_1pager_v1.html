@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Converge — 컨버전스 SaaS 종합안 요약 (1-pager)</title>
+<style>
+  :root{
+    --indigo:#4F46E5; --indigo-d:#3730A3; --navy:#0F172A; --cyan:#06B6D4;
+    --fg:#1E293B; --mut:#64748B; --line:#E2E8F0; --bg:#F8FAFC; --card:#FFFFFF;
+    --red:#DC2626; --soft:#EEF2FF;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+  body{
+    font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif;
+    color:var(--fg); background:var(--bg); line-height:1.45; font-size:10.2px;
+    padding:16px; display:flex; justify-content:center;
+  }
+  .page{
+    width:210mm; min-height:297mm; background:var(--card);
+    box-shadow:0 4px 24px rgba(15,23,42,.10); border-radius:8px; overflow:hidden;
+  }
+  /* 헤더 */
+  .hero{
+    background:linear-gradient(135deg,var(--navy) 0%,#1E1B4B 55%,var(--indigo-d) 100%);
+    color:#fff; padding:18px 22px 16px; position:relative;
+  }
+  .hero::after{content:""; position:absolute; left:0; bottom:0; width:100%; height:4px;
+    background:linear-gradient(90deg,var(--cyan),var(--indigo));}
+  .kicker{font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:#A5B4FC; font-weight:700;}
+  .wordmark{font-size:30px; font-weight:800; letter-spacing:-.01em; margin:2px 0 4px;}
+  .wordmark span{color:var(--cyan);}
+  .tagline{font-size:12.5px; font-weight:600; color:#E0E7FF; max-width:75%;}
+  .meta{font-size:8.6px; color:#94A3B8; margin-top:6px;}
+  /* 본문 그리드 */
+  .body{padding:16px 22px 20px;}
+  .lead{
+    background:var(--soft); border-left:4px solid var(--indigo); border-radius:0 6px 6px 0;
+    padding:10px 14px; font-size:12px; font-weight:700; color:var(--indigo-d); margin-bottom:14px;
+  }
+  .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px 16px;}
+  .full{grid-column:1 / -1;}
+  h2{font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--indigo);
+     font-weight:800; margin-bottom:6px; display:flex; align-items:center; gap:6px;}
+  h2::before{content:""; width:14px; height:2px; background:var(--cyan); border-radius:2px;}
+  ul{list-style:none;}
+  li{position:relative; padding-left:12px; margin-bottom:3px;}
+  li::before{content:""; position:absolute; left:0; top:6px; width:4px; height:4px;
+    border-radius:50%; background:var(--indigo);}
+  b{color:var(--navy);}
+  .muted{color:var(--mut);}
+  /* 문제 카드 */
+  .loss{display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:2px;}
+  .loss div{background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:8px;}
+  .loss b{display:block; font-size:9.6px; margin-bottom:2px;}
+  .loss p{font-size:9px; color:var(--mut);}
+  .aha{margin-top:8px; padding:8px 12px; border-radius:6px; background:#ECFEFF;
+    border:1px solid #A5F3FC; color:#0E7490; font-weight:700; font-size:10.4px;}
+  /* MVP 스텝 */
+  .steps{display:flex; flex-wrap:wrap; gap:5px;}
+  .chip{border:1px solid var(--line); border-radius:20px; padding:3px 9px; font-size:9px;
+    background:#fff; white-space:nowrap;}
+  .chip b{color:var(--indigo);}
+  .chip.blk{background:#FEF2F2; border-color:#FCA5A5; color:var(--red); font-weight:700;}
+  .chip.blk b{color:var(--red);}
+  /* 가격 */
+  .price{display:grid; grid-template-columns:repeat(4,1fr); gap:6px;}
+  .price div{border:1px solid var(--line); border-radius:6px; padding:7px 8px; background:#fff; text-align:center;}
+  .price .t{font-size:8.6px; color:var(--mut); font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+  .price .v{font-size:11px; font-weight:800; color:var(--navy); margin-top:2px;}
+  .price .pro{border-color:var(--indigo); box-shadow:0 0 0 1px var(--indigo) inset;}
+  .addon{margin-top:6px; font-size:9px; color:var(--mut);}
+  .addon b{color:var(--cyan);}
+  /* 로드맵 */
+  .road{display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .road div{border-top:3px solid var(--indigo); background:var(--bg); border-radius:0 0 6px 6px; padding:8px;}
+  .road .ph{font-size:10px; font-weight:800; color:var(--navy);}
+  .road .dt{font-size:8.4px; color:var(--mut); margin-bottom:4px;}
+  .road p{font-size:8.8px;}
+  .road div:nth-child(2){border-top-color:var(--cyan);}
+  .road div:nth-child(3){border-top-color:#94A3B8;}
+  /* 결정/액션 */
+  .decide{background:#FFFBEB; border:1px solid #FDE68A; border-radius:6px; padding:9px 12px;}
+  .decide li::before{background:#D97706;}
+  .actions{counter-reset:a;}
+  .actions li{padding-left:20px;}
+  .actions li::before{counter-increment:a; content:counter(a); top:1px; left:0; width:14px; height:14px;
+    border-radius:50%; background:var(--indigo); color:#fff; font-size:8px; font-weight:800;
+    display:flex; align-items:center; justify-content:center;}
+  .foot{margin-top:14px; padding-top:10px; border-top:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:center; font-size:8.8px; color:var(--mut);}
+  .foot b{color:var(--indigo);}
+  @page{size:A4; margin:0;}
+  @media print{
+    body{padding:0; background:#fff; font-size:10px;}
+    .page{box-shadow:none; border-radius:0; width:210mm;}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hero">
+    <div class="kicker">컨버전스1팀 · 제품 기획 종합안 요약</div>
+    <div class="wordmark">Con<span>verge</span></div>
+    <div class="tagline">인력 가동률·유휴비용을 5분 만에 <b style="color:#fff">금액</b>으로 보는 한국형 Lite PSA SaaS</div>
+    <div class="meta">과제 #3 · 컨버전스 실적관리 → 멀티테넌트 SaaS+AI · 기준일 2026-07-07 · 대상: 경영/실무 공용 요약</div>
+  </div>
+
+  <div class="body">
+    <div class="lead">"엑셀로 흩어진 가동률·맨먼스·유휴비용을, 여러 회사가 각자의 데이터로 5분 만에 보고 AI가 다음 투입 결정까지 돕는다."
+      이미 실조직(56명)에서 검증된 계산 엔진을 멀티테넌트로 전환 → 2개 분기 내 파일럿 5~10개 확보.</div>
+
+    <div class="grid">
+      <!-- 문제 -->
+      <section class="full">
+        <h2>해결 문제 — 3대 손실</h2>
+        <div class="loss">
+          <div><b>유휴/과투입 비가시성</b><p>월말에야 파악 → 유휴 인건비가 마진 잠식</p></div>
+          <div><b>느린 투입 의사결정</b><p>가동률·여력·단가가 흩어져 '되는 사람'으로 배정</p></div>
+          <div><b>재무와 단절된 가동률</b><p>%가 유휴비용·매출로 환산 안 돼 경영 보고 불가</p></div>
+        </div>
+        <div class="aha">핵심 Aha — "우리 팀이 지금 낭비하는 유휴비용이 월 ○○○만원"을 처음 <u>금액</u>으로 봤을 때</div>
+      </section>
+
+      <!-- 타깃 -->
+      <section>
+        <h2>타깃 ICP — 빈 시장</h2>
+        <ul>
+          <li>업종: 디지털 에이전시 · SI/SM · 컨설팅 · 사내 PMO</li>
+          <li>규모: <b>20~200명(스윗스팟 30~120)</b> — 엑셀은 한계, 해외 PSA는 과함</li>
+          <li>바이어: 본부장·COO·대표 / 챔피언: PM·PMO·사업관리팀장</li>
+          <li class="muted">Anti-ICP: 프리랜서·5명 이하·Kantata급 보유 대기업</li>
+        </ul>
+      </section>
+
+      <!-- 제품 3기둥 -->
+      <section>
+        <h2>제품 — 3기둥</h2>
+        <ul>
+          <li><b>① 멀티테넌트 코어</b> 기존 도메인·계산·UI 재사용 + tenantId·인증·서버만 신설</li>
+          <li><b>② 기준데이터 온보딩</b> 하드코딩을 테넌트 CRUD 마스터로, 4단계 위저드</li>
+          <li><b>③ AI 레이어</b> 재무는 앱이 계산, Claude는 서사·추천만(환각 차단)</li>
+        </ul>
+        <p class="muted" style="margin-top:4px">차별화: 한국형 맨먼스 · 유휴비용(금액) 환산 · 5분 셋업</p>
+      </section>
+
+      <!-- MVP -->
+      <section class="full">
+        <h2>MVP 범위 — M0~M6</h2>
+        <div class="steps">
+          <span class="chip blk"><b>M0</b> 정합성 버그 선수정 ★협상불가</span>
+          <span class="chip"><b>M1</b> 멀티테넌시(tenantId·RLS)</span>
+          <span class="chip"><b>M2</b> 인증+최소 RBAC</span>
+          <span class="chip"><b>M3</b> 온보딩 위저드</span>
+          <span class="chip"><b>M4</b> 대시보드·유휴비용</span>
+          <span class="chip"><b>M5</b> CRUD+승인 WF</span>
+          <span class="chip"><b>M6</b> AI 배정추천</span>
+        </div>
+      </section>
+
+      <!-- 아키텍처 -->
+      <section>
+        <h2>아키텍처 요지</h2>
+        <ul>
+          <li>Vercel + <b>Supabase(Seoul)</b> 공유 Postgres</li>
+          <li>row-level <b>tenant_id + RLS</b> + 앱계층 2중 방어</li>
+          <li>useDataStore 시그니처 유지 → DataSource 추상화, 파생계산 서버 이전</li>
+          <li class="muted">보안 P0: 평문저장 제거·import 검증·TLS·감사로그·PIPA</li>
+        </ul>
+      </section>
+
+      <!-- AI -->
+      <section>
+        <h2>AI 로드맵</h2>
+        <ul>
+          <li><b>MVP</b> F5 자동 브리핑(리텐션 훅) · F4 자연어 질의(차별화)</li>
+          <li><b>차기1</b> 비용 시뮬(what-if) · 인력 배치 추천</li>
+          <li class="muted"><b>차기2~3</b> 리스크/수요 예측 — 스냅샷 6~12개월 후</li>
+        </ul>
+      </section>
+
+      <!-- 가격 -->
+      <section class="full">
+        <h2>GTM · 가격 (좌석당 × 티어, 연납)</h2>
+        <div class="price">
+          <div><div class="t">Free</div><div class="v">10명</div></div>
+          <div class="pro"><div class="t">Pro</div><div class="v">₩9,900</div></div>
+          <div><div class="t">Business</div><div class="v">₩19,000</div></div>
+          <div><div class="t">Enterprise</div><div class="v">견적</div></div>
+        </div>
+        <p class="addon">Converge <b>AI 애드온 +₩4,000</b>/명·월 · 뷰어 무료(바이럴) · 14일 무카드 트라이얼 ·
+          랜딩: "우리 팀이 지금 얼마나 놀고 있는지, 5분 만에 금액으로 봅니다"</p>
+      </section>
+
+      <!-- 로드맵 -->
+      <section class="full">
+        <h2>단계 로드맵</h2>
+        <div class="road">
+          <div><div class="ph">MVP</div><div class="dt">2026 Q3~Q4 · 파일럿 5~10</div>
+            <p>M0→테넌시·RLS→Supabase→인증 / 온보딩→대시보드→CRUD→AI+브리핑</p></div>
+          <div><div class="ph">v1</div><div class="dt">2027 Q1~Q2 · 유료 30</div>
+            <p>결제/구독·좌석과금 · 서버 사전집계 · F4 자연어 질의 · 기간(period) 모델</p></div>
+          <div><div class="ph">v2</div><div class="dt">2027 Q3~Q4 · 스케일</div>
+            <p>다본부 계층 · 화이트라벨 · SSO/SAML · 전용 DB · AI 3종 · 오픈 API</p></div>
+        </div>
+      </section>
+
+      <!-- 경영 결정 -->
+      <section>
+        <h2>경영 결정 필요 (팀 권고, 확정은 경영)</h2>
+        <div class="decide"><ul>
+          <li>격리 방식(단일 DB+RLS 권고) · 요금 모델(좌석/정액/구간)</li>
+          <li>조직 계층 깊이(2~3단계 권고) · 기존 데이터 이관 범위</li>
+          <li>컴플라이언스 목표(ISMS-P/SOC2) · 교차테넌트 벤치마킹 상품화</li>
+        </ul></div>
+      </section>
+
+      <!-- 액션 -->
+      <section>
+        <h2>즉시 다음 액션</h2>
+        <ul class="actions">
+          <li><b style="color:var(--red)">M0 정합성 버그 수정</b> (블로커·선행조건)</li>
+          <li>타입 계약 확정 — Tenant/User/Role · 전 엔티티 tenantId</li>
+          <li>DataSource 추상화(useDataStore 시그니처 유지)</li>
+          <li>인프라 셋업 + 파일럿 3~5개사 사전 접촉</li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="foot">
+      <span>근거: <b>PROJECT/Convergence_SaaS/00-strategy/00_종합안.md</b> + 세부 7종 · 상세: 경영보고 PPTX / 실무보고 DOCX</span>
+      <span>먼저 M0를 고치면, 나머지는 <b>검증된 엔진 위에 얹는 일</b>입니다.</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>
