@@ -10,6 +10,7 @@ export const VIEW_NAMES = {
   PROJECT_REVIEW: 'project-review',
   MEMBER_PROFILE: 'member-profile',
   MONTHLY_DETAILS: 'monthly-details',
+  VIRTUAL_OFFICE: 'virtual-office',
 } as const;
 
 export type ViewName = typeof VIEW_NAMES[keyof typeof VIEW_NAMES];
