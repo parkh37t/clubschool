@@ -128,7 +128,8 @@ export function ViewRenderer({
         />
       );
     case VIEW_NAMES.VIRTUAL_OFFICE:
-      return <VirtualOfficeView />;
+      // 오케스트레이터 연동: /office-state.json이 있으면 실제 상태를 반영, 없으면(404) 자체 데모.
+      return <VirtualOfficeView stateUrl="/office-state.json" />;
     case VIEW_NAMES.DASHBOARD:
     default:
       return (
