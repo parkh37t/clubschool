@@ -7,6 +7,11 @@ interface VirtualOfficeViewProps {
   teamLabel?: string;
   autoApprove?: boolean;
   initialSpeed?: number;
+  /** 지정 시 이 URL의 상태 JSON을 2초 폴링해 실제 에이전트 상태를 반영(내부 데모 정지).
+   *  스키마: OfficeState. 미지정 시 자체 시뮬레이션으로 동작. */
+  stateUrl?: string;
+  /** 외부 상태 폴링 주기(ms). 기본 2000. */
+  pollMs?: number;
 }
 
 const FONT = "'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif";
@@ -32,6 +37,8 @@ export function VirtualOfficeView({
   teamLabel = '컨버전스1팀 · 파일럿',
   autoApprove = false,
   initialSpeed = 1,
+  stateUrl,
+  pollMs = 2000,
 }: VirtualOfficeViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const simRef = useRef<OfficeSimulator | null>(null);
@@ -48,6 +55,25 @@ export function VirtualOfficeView({
     // 프로퍼티는 초기 설정값(디자인의 constructor props와 동일 의미) — 1회만 구성.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 실전 연동: stateUrl 지정 시 상태 JSON을 폴링해 applyOfficeState로 주입.
+  useEffect(() => {
+    if (!stateUrl) return;
+    let alive = true;
+    const poll = async () => {
+      try {
+        const res = await fetch(stateUrl, { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (alive) simRef.current?.applyOfficeState(data);
+      } catch {
+        // 폴링 실패는 무시하고 다음 주기에 재시도(네트워크 일시 오류 내성).
+      }
+    };
+    poll();
+    const iv = setInterval(poll, pollMs);
+    return () => { alive = false; clearInterval(iv); };
+  }, [stateUrl, pollMs]);
 
   const sim = simRef.current;
   const rv: RenderVals = sim ? sim.getRenderVals() : fallbackVals(teamLabel, initialSpeed, autoApprove);

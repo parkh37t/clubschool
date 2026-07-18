@@ -31,6 +31,17 @@ export interface OfficeSimulatorOptions {
   onRender: () => void;
 }
 
+/** 실전 연동용 외부 상태 스키마 (오케스트레이터가 쓰는 office-state.json 형태).
+ *  applyOfficeState(state)로 주입하면 내부 자동 시나리오는 멈추고 이 상태가 화면을 구동한다. */
+export interface OfficeAgentState { state: AgentState; task?: string; }
+export interface OfficeState {
+  stage: number;
+  phase: Phase;
+  progress?: number;
+  agents?: Record<string, OfficeAgentState>;
+  artifact?: { file: string; score: number };
+}
+
 interface DeptDef { label: string; c: string; }
 interface AgentDef {
   id: string; name: string; role: string; dept: string;
@@ -78,6 +89,8 @@ export class OfficeSimulator {
   private meetArr = 0;
   private wanderClk = 0;
   private wanderNext = 6;
+  private externalMode = false;   // applyOfficeState 주입 시 true → 내부 자동 시나리오 정지
+  private lastExtStage = 0;
 
   private feed: FeedItem[] = [];
   private artifacts: ArtifactItem[] = [];
@@ -747,17 +760,20 @@ export class OfficeSimulator {
     if (!st.playing) return;
     st.clockMin += dt * st.speed * 4;
     if (st.clockMin >= 1140) { st.day++; st.clockMin = 540; }
-    if (st.phase === 'working') {
-      st.progress += (dt * 1000 * st.speed) / this.SCENARIO[st.stage].dur;
-      if (st.progress >= 1) { this.toAwaiting(); return; }
-    } else if (st.phase === 'meeting') {
-      if (this.meetNeed > 0 && this.meetArr === this.meetNeed) {
-        st.meetWait += dt * st.speed;
-        if (st.meetWait > 3.2) { this.endMeeting(); return; }
+    if (!this.externalMode) {
+      // 내부 자동 시나리오 진행(외부 상태 주입 시엔 externalMode가 이를 대체)
+      if (st.phase === 'working') {
+        st.progress += (dt * 1000 * st.speed) / this.SCENARIO[st.stage].dur;
+        if (st.progress >= 1) { this.toAwaiting(); return; }
+      } else if (st.phase === 'meeting') {
+        if (this.meetNeed > 0 && this.meetArr === this.meetNeed) {
+          st.meetWait += dt * st.speed;
+          if (st.meetWait > 3.2) { this.endMeeting(); return; }
+        }
+      } else if (st.phase === 'awaiting' && st.auto) {
+        st.autoWait += dt * st.speed;
+        if (st.autoWait > 1.8) { this.approve(true); return; }
       }
-    } else if (st.phase === 'awaiting' && st.auto) {
-      st.autoWait += dt * st.speed;
-      if (st.autoWait > 1.8) { this.approve(true); return; }
     }
     this.maybeWander(dt);
     this.opts.onRender();
@@ -776,6 +792,79 @@ export class OfficeSimulator {
   }
   approveManual(): void {
     if (this.st.phase === 'awaiting') this.approve(false);
+  }
+
+  /* ── 실전 연동: 외부(오케스트레이터) 상태를 화면에 반영 ──
+   * 최초 호출 시 externalMode 진입 → 내부 자동 시나리오 정지, 이후 이 상태가 SSOT.
+   * 단계/페이즈 전이 시에만 이동 안무를 구동하고, agents 맵으로 자리 상태를 덮어쓴다. */
+  applyOfficeState(ext: OfficeState): void {
+    this.externalMode = true;
+    const st = this.st;
+    const stageClamped = Math.max(0, Math.min(ext.stage | 0, this.SCENARIO.length - 1));
+    const phaseChanged = ext.phase !== st.phase;
+    const stageChanged = stageClamped !== st.stage;
+    // 단계 상승 = 이전 게이트 결재 완료 → 산출물 적재
+    if (ext.stage > this.lastExtStage && ext.artifact) {
+      this.artifacts = [{ g: 'G' + ext.stage, f: ext.artifact.file, s: ext.artifact.score + '점' }, ...this.artifacts];
+      this.feedAdd('사장', `G${ext.stage} 결재 완료`, 'sys');
+    }
+    this.lastExtStage = ext.stage;
+    st.stage = stageClamped;
+    if (typeof ext.progress === 'number') st.progress = Math.max(0, Math.min(1, ext.progress));
+    if (phaseChanged || stageChanged) {
+      st.phase = ext.phase;
+      if (ext.phase !== 'awaiting') this.setBossDoc(false);
+      this.driveExternalPhase(ext.phase, this.SCENARIO[st.stage]?.workers ?? []);
+    }
+    if (ext.agents) {
+      for (const id in ext.agents) {
+        if (this.M[id]) this.setAgent(id, ext.agents[id].state, ext.agents[id].task);
+      }
+    }
+    this.opts.onRender();
+  }
+
+  private driveExternalPhase(phase: Phase, workers: Worker[]): void {
+    if (phase === 'meeting') {
+      this.AGENTS.forEach(a => this.setAgent(a.id, 'idle', ''));
+      workers.forEach(w => { if (this.M[w.id].mode !== 'seated') this.seatInstant(w.id); });
+      this.walkToMeeting(workers);
+    } else if (phase === 'returning') {
+      workers.forEach(w => this.walk(w.id, this.returnPts(w.id), () => this.seatInstant(w.id)));
+    } else if (phase === 'working') {
+      this.beginWork();
+    } else if (phase === 'awaiting') {
+      this.toAwaiting();
+    } else if (phase === 'done-all') {
+      this.driveDoneAll();
+    }
+  }
+
+  private walkToMeeting(workers: Worker[]): void {
+    this.meetNeed = workers.length; this.meetArr = 0;
+    workers.forEach((w, i) => {
+      const a = this.AGENTS.find(x => x.id === w.id)!;
+      const spot = this.MEET_SPOTS[i % this.MEET_SPOTS.length];
+      const pts = this.pathToMeeting(a, spot);
+      this.M[w.id].awayPath = pts;
+      this.walk(w.id, pts, () => {
+        this.M[w.id].node.classList.add('talking');
+        this.meetArr++;
+        if (this.meetArr === this.meetNeed) this.feedAdd('회의실', `킥오프 진행 중 — 역할·산출물 정렬 (${this.meetNeed}명)`, 'gate');
+      });
+    });
+  }
+
+  private driveDoneAll(): void {
+    this.feedAdd('오케스트레이터', '전 게이트 통과 — 브리핑 룸 총회 소집', 'sys');
+    this.toast('전 게이트 통과 — 파이프라인 완료');
+    this.AGENTS.forEach((a, i) => {
+      if (this.M[a.id].mode !== 'seated') this.seatInstant(a.id);
+      const spot = this.BRIEF_SPOTS[i];
+      const pts = this.pathToBriefing(a, spot);
+      this.M[a.id].awayPath = pts;
+      this.walk(a.id, pts, () => this.M[a.id].node.classList.add('talking'));
+    });
   }
 
   getRenderVals(): RenderVals {

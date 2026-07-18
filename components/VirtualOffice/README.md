@@ -1,0 +1,51 @@
+# VirtualOffice — APEX 가상 사무실 대시보드
+
+12 AI 에이전트가 **G1~G6 게이트 파이프라인**(영업/평가→기획→디자인→구현→검증/배포→그로스)을
+진행하는 실시간 픽셀 오피스. 디자인 핸드오프(`design_handoff_apex_virtual_office`)를
+우리 코드베이스(React18+TS+Vite)로 hi-fi 재구현한 결과.
+
+## 파일
+| 파일 | 역할 |
+| --- | --- |
+| `VirtualOfficeView.tsx` | React 함수형 래퍼(뷰). JSX 크롬 + 시뮬레이터 수명주기 관리 |
+| `officeSimulator.ts` | 순수 TS 클래스 — 명령형 SVG 씬 빌더·이동 엔진·게이트 시뮬레이터. 프레임워크 비의존 |
+| `virtualOffice.css` | 전역 애니메이션/스프라이트 클래스(`apex-` 접두 키프레임). 엔진이 classList로 토글 |
+
+> 클래스 컴포넌트 금지(`frontend.md`) 준수를 위해 명령형 로직을 순수 TS 클래스로 분리하고
+> React는 함수형 래퍼로 감쌌다. 좌표·색상은 디자인 소스 그대로 보존(hi-fi).
+
+## 두 가지 동작 모드
+
+### 1. 자체 시뮬레이션 (기본)
+prop 없이 `<VirtualOfficeView />` → 내장 시나리오가 킥오프 회의→작업→결재를 자동 반복.
+현재 `ViewRenderer`의 `가상 사무실` 뷰가 이 모드다.
+
+### 2. 실전 연동 (오케스트레이터 상태 주입)
+오케스트레이터가 쓰는 상태 JSON을 폴링해 실제 에이전트 상태를 반영한다.
+```tsx
+<VirtualOfficeView stateUrl="/_state/office-state.json" pollMs={2000} />
+```
+- `stateUrl` 지정 시 해당 URL을 `pollMs`(기본 2000ms)마다 폴링 → `applyOfficeState(state)` 주입.
+- 첫 주입 순간 **내부 자동 시나리오는 정지**하고 외부 상태가 화면의 단일 진실이 된다.
+- 폴링 실패(네트워크/404)는 무시하고 다음 주기 재시도 → 자체 데모로 자연 폴백.
+
+#### 상태 스키마 (`OfficeState`)
+```ts
+{
+  stage: number,            // 0~5 (G1~G6)
+  phase: 'meeting' | 'returning' | 'working' | 'awaiting' | 'done-all',
+  progress?: number,        // 0~1 (현재 게이트 진행률)
+  agents?: {                // 자리 상태 덮어쓰기
+    [id: string]: { state: 'idle' | 'working' | 'waiting', task?: string }
+  },
+  artifact?: { file: string, score: number }   // 단계 상승 시 산출물로 적재
+}
+```
+에이전트 id: `han kim jeong na cha oh pyo lee baek gu go hong`.
+
+- 단계/페이즈 전이 시에만 이동 안무(회의실 이동·자리 복귀·브리핑 총회)를 구동한다.
+- `stage`가 이전보다 커지면(=이전 게이트 결재 완료) `artifact`를 산출물 목록에 적재한다.
+
+## 검증
+빌드 통과, 신규 파일 lint 0, 헤드리스 렌더 확인(책상 12·자동문 11·게이트 6·에이전트 12·콘솔 에러 0).
+실전 연동 경로도 상태 JSON 폴링→게이트/자리/피드 반영을 실측 검증.
