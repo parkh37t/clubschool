@@ -1,5 +1,3 @@
-{ "stage": 1, "phase": "working", "progress": 0.45,
-  "agents": {
-    "jeong": {"state":"working","task":"메시지 위계"},
-    "na":    {"state":"working","task":"IA·섹션 구조"}
-  } }
+{ "stage": 5, "phase": "done-all", "progress": 1,
+  "agents": {},
+  "artifact": { "file": "Converge_landing_1pager_EN_v1.html", "score": 90 } }
