@@ -1,0 +1,14 @@
+{
+  "name": "apex-office-server",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "APEX 가상 사무실 오케스트레이터 — 지시 콘솔의 지시를 받아 12 에이전트를 게이트 파이프라인으로 실행하고 office-state.json·산출물을 생성",
+  "scripts": {
+    "office": "node office-server.mjs",
+    "start": "node office-server.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.0"
+  }
+}
