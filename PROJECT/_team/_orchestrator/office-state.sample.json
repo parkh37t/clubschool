@@ -1,0 +1,10 @@
+{
+  "stage": 2,
+  "phase": "working",
+  "progress": 0.6,
+  "agents": {
+    "cha": { "state": "working", "task": "메인 UI 시안" },
+    "oh":  { "state": "working", "task": "브랜드 무드보드" }
+  },
+  "artifact": { "file": "UI시안_v1.fig", "score": 90 }
+}

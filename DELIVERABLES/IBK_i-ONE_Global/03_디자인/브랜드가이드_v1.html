@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>i-ONE Bank Global — 브랜드 가이드</title>
+<meta name="hz:slide-selector" content=".slide" />
+<meta name="hz:canvas-width" content="1920" />
+<meta name="hz:canvas-height" content="1080" />
+<link rel="stylesheet" href="https://use.typekit.net/hki1xuh.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#dfe4ec;display:flex;flex-direction:column;align-items:center;gap:24px;padding:24px;
+  font-family:"acumin-pro","Malgun Gothic","Apple SD Gothic Neo",sans-serif;color:#1A1F2B}
+.slide{position:relative;width:1920px;height:1080px;background:#FFFFFF;overflow:hidden}
+.pad{position:absolute;inset:0;padding:96px 120px}
+.kicker{font-weight:600;font-size:26px;letter-spacing:3px;text-transform:uppercase;color:#1E9BE6}
+.h1{font-weight:700;font-size:64px;line-height:1.1}
+.h2{font-weight:600;font-size:36px}
+.body{font-weight:400;font-size:28px;line-height:1.5;color:#5A6473}
+.label{font-weight:600;font-size:22px;letter-spacing:1px;color:#5A6473}
+.t-white{color:#fff}.t-blue{color:#0A4DA2}
+.row{display:flex;gap:28px;flex-wrap:wrap;margin-top:32px}
+.sw{width:300px;border:1px solid #E2E7EF;border-radius:16px;overflow:hidden}
+.sw .c{height:150px}.sw .m{padding:18px 22px;font-size:22px}
+.sw .m b{display:block;font-size:24px;color:#1A1F2B}
+.type{margin-top:28px;padding-bottom:22px;border-bottom:1px solid #E2E7EF}
+.bar{position:absolute;left:0;top:0;width:14px;height:100%;background:#0A4DA2}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:36px}
+.card{background:#F4F6FA;border:1px solid #E2E7EF;border-radius:18px;padding:36px}
+.do{color:#1FA463;font-weight:600}.dont{color:#D64545;font-weight:600}
+.logo{display:inline-flex;align-items:center;gap:14px;font-weight:700;font-size:44px;color:#0A4DA2}
+.logo .mark{width:56px;height:56px;border-radius:12px;background:#0A4DA2;color:#fff;display:flex;align-items:center;justify-content:center;font-size:30px}
+/* 인쇄(브라우저 → PDF 저장): 슬라이드당 1페이지, 무손실 — Claude Design First */
+@page{size:1920px 1080px;margin:0}
+@media print{
+  body{background:#fff;padding:0;gap:0;display:block}
+  .slide{box-shadow:none;break-after:page;page-break-after:always}
+  .slide:last-child{break-after:auto;page-break-after:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- 1. 커버 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080" style="background:linear-gradient(135deg,#073A7A,#0A4DA2 60%,#1E9BE6)">
+  <div class="pad" style="display:flex;flex-direction:column;justify-content:center">
+    <div class="kicker" style="color:#BBD5F2">Brand Experience Guide</div>
+    <div class="h1 t-white" style="font-size:96px;margin:24px 0">i-ONE Bank Global</div>
+    <div class="h2 t-white" style="font-weight:400;opacity:.9">Trustworthy · Clear · Global · Effortless</div>
+    <div class="label t-white" style="position:absolute;left:120px;bottom:80px;opacity:.85">오색감(BX) · v1 · 2026.06 · ⚠ 컬러는 IBK BI 가이드 확정 전 근사치</div>
+  </div>
+</div>
+
+<!-- 2. 컬러 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="kicker">01 Color System</div>
+    <div class="h1" style="margin:14px 0 6px">컬러 시스템</div>
+    <p class="body">의미 토큰 기반 — 다크 모드·접근성(WCAG AA) 자동 대응. (HEX는 근사치, BI 확정 시 교체)</p>
+    <div class="row">
+      <div class="sw"><div class="c" style="background:#0A4DA2"></div><div class="m"><b>IBK Blue</b>#0A4DA2 · primary</div></div>
+      <div class="sw"><div class="c" style="background:#073A7A"></div><div class="m"><b>Blue Dark</b>#073A7A · hover</div></div>
+      <div class="sw"><div class="c" style="background:#1E9BE6"></div><div class="m"><b>Sky</b>#1E9BE6 · accent</div></div>
+      <div class="sw"><div class="c" style="background:#1FA463"></div><div class="m"><b>Success</b>#1FA463</div></div>
+      <div class="sw"><div class="c" style="background:#E0930B"></div><div class="m"><b>Warning</b>#E0930B</div></div>
+      <div class="sw"><div class="c" style="background:#D64545"></div><div class="m"><b>Danger</b>#D64545</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- 3. 타이포 & 로고 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="kicker">02 Typography &amp; Logo</div>
+    <div class="h1" style="margin:14px 0 6px">타이포그래피 · 로고</div>
+    <div class="grid2">
+      <div>
+        <div class="type"><span class="label">Display / 700</span><div style="font-size:60px;font-weight:700">Aa 신뢰</div></div>
+        <div class="type"><span class="label">Heading / 600</span><div style="font-size:40px;font-weight:600">Aa 명료</div></div>
+        <div class="type"><span class="label">Body / 400</span><div style="font-size:28px;font-weight:400">Aa 포용 · Effortless banking</div></div>
+        <p class="label" style="margin-top:18px">Latin: Acumin Pro · 국문 fallback: 본고딕/맑은고딕</p>
+      </div>
+      <div class="card">
+        <div class="logo"><span class="mark">i</span>i-ONE Bank <span style="color:#1E9BE6">Global</span></div>
+        <p class="body" style="margin-top:24px;font-size:24px">최소 여백 = 심볼 높이 0.5x · 단색/역상 허용</p>
+        <p style="margin-top:18px"><span class="do">DO</span> 단색 배경 위 충분한 대비</p>
+        <p style="margin-top:8px"><span class="dont">DON'T</span> 저대비·복잡 배경 위 배치</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 4. 톤앤매너 -->
+<div class="slide" data-canvas-width="1920" data-canvas-height="1080">
+  <div class="bar"></div>
+  <div class="pad">
+    <div class="kicker">03 Tone &amp; Manner</div>
+    <div class="h1" style="margin:14px 0 6px">보이스 · 톤앤매너</div>
+    <div class="grid2">
+      <div class="card">
+        <div class="h2 do">DO</div>
+        <p class="body" style="margin-top:16px">짧고 명확한 지시 — "Issue your wallet"</p>
+        <p class="body">환대적·안내적, 외국인 친화 영어 1차</p>
+      </div>
+      <div class="card">
+        <div class="h2 dont">DON'T</div>
+        <p class="body" style="margin-top:16px">금융 전문용어 남발</p>
+        <p class="body">한국어 전용 표현의 직역</p>
+      </div>
+    </div>
+    <p class="label" style="margin-top:40px">제품 토큰(차도안)·마케팅 비주얼(홍보라)과 1:1 정렬 · 다국어 가변 텍스트 대응</p>
+  </div>
+</div>
+
+</body>
+</html>

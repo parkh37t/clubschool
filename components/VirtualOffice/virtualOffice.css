@@ -1,0 +1,73 @@
+/* APEX 가상 사무실 — 픽셀 오피스 애니메이션/스프라이트 클래스.
+   명령형 SVG 엔진(officeSimulator.ts)이 classList로 토글하므로 전역 CSS가 필수.
+   키프레임은 전역 충돌을 피하려 apex- 접두사 사용(엔진의 anim 문자열과 일치). */
+
+@keyframes apex-pulse{0%,100%{box-shadow:0 0 0 0 rgba(232,163,61,.35);}50%{box-shadow:0 0 0 6px rgba(232,163,61,0);}}
+@keyframes apex-bob{0%,100%{transform:translateY(0);}50%{transform:translateY(-1px);}}
+@keyframes apex-type{0%,49%{opacity:1;}50%,100%{opacity:.15;}}
+@keyframes apex-flick{0%,100%{opacity:.9;}50%{opacity:.6;}}
+@keyframes apex-breathe{0%,100%{transform:translateY(0);}50%{transform:translateY(.7px);}}
+@keyframes apex-docblink{0%,49%{opacity:1;}50%,100%{opacity:.25;}}
+@keyframes apex-led{0%,40%{opacity:1;}41%,100%{opacity:.2;}}
+@keyframes apex-steam{0%{opacity:.5;transform:translateY(0);}80%{opacity:0;transform:translateY(-6px);}100%{opacity:0;}}
+@keyframes apex-slidein{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
+@keyframes apex-onair{0%,60%{opacity:1;}61%,100%{opacity:.25;}}
+@keyframes apex-stepA{0%,49%{transform:translateY(0);}50%,100%{transform:translateY(-1.6px);}}
+@keyframes apex-stepB{0%,49%{transform:translateY(-1.6px);}50%,100%{transform:translateY(0);}}
+@keyframes apex-tdot{0%,30%{opacity:.2;}31%,60%{opacity:1;}61%,100%{opacity:.2;}}
+
+.apex-door .door-l,.apex-door .door-r,.apex-door .door-u,.apex-door .door-d{transition:transform .35s ease;}
+.apex-door.open .door-l{transform:translateX(-24px);}
+.apex-door.open .door-r{transform:translateX(24px);}
+.apex-door.open .door-u{transform:translateY(-24px);}
+.apex-door.open .door-d{transform:translateY(24px);}
+
+#office text{font-family:inherit;}
+#office .zlabel{font-size:11px;font-weight:800;letter-spacing:.05em;}
+#office .nname{font-size:11.5px;font-weight:800;fill:#F4EEE0;paint-order:stroke;stroke:rgba(20,24,36,.55);stroke-width:2.5px;}
+#office .nrole{font-size:10px;font-weight:600;fill:#C9C2B0;paint-order:stroke;stroke:rgba(20,24,36,.45);stroke-width:2px;}
+#office .btask{font-size:10.5px;font-weight:700;fill:#24291F;}
+#office .roomlabel{font-size:11px;font-weight:800;fill:#E8E2D0;letter-spacing:.06em;}
+
+.desk-sprite .screen{fill:#181D2A;transition:fill .3s ease;}
+.desk-sprite .hand{opacity:0;}
+.desk-sprite .bubble{opacity:0;transition:opacity .25s ease;}
+.desk-sprite .statusdot{fill:#6B7288;}
+.desk-sprite .avatar{opacity:.6;transition:opacity .3s ease;}
+.desk-sprite.working .screen{fill:#7FE3A6;}
+.desk-sprite.working .avatar{opacity:1;}
+.desk-sprite.working .statusdot{fill:#2D8C4E;}
+.desk-sprite.working .bubble{opacity:1;}
+.desk-sprite.waiting .avatar{opacity:.9;}
+.desk-sprite.waiting .statusdot{fill:#E8A33D;}
+.minitalk{opacity:0;transition:opacity .2s ease;}
+.talking .minitalk{opacity:1;}
+.bossdoc{cursor:pointer;}
+
+@media (prefers-reduced-motion: no-preference){
+  .desk-sprite.working .headgrp{animation:apex-bob .7s steps(2) infinite;}
+  .desk-sprite.working .hand{animation:apex-type .35s steps(1) infinite;}
+  .desk-sprite.working .hand.h2{animation-delay:.17s;}
+  .desk-sprite.working .screen{animation:apex-flick 2.2s ease-in-out infinite;}
+  .idlebreathe{animation:apex-breathe 4.5s ease-in-out infinite;}
+  .bossdoc.blink{animation:apex-docblink .9s steps(1) infinite;}
+  .led{animation:apex-led 1.6s steps(1) infinite;}
+  .steam{animation:apex-steam 2.6s ease-in-out infinite;}
+  .onair{animation:apex-onair 1.8s steps(1) infinite;}
+  .walker .legA{animation:apex-stepA .5s steps(1) infinite;}
+  .walker .legB{animation:apex-stepB .5s steps(1) infinite;}
+  .td0{animation:apex-tdot 1s steps(1) infinite;}
+  .td1{animation:apex-tdot 1s steps(1) infinite;animation-delay:.2s;}
+  .td2{animation:apex-tdot 1s steps(1) infinite;animation-delay:.4s;}
+}
+
+/* 컨트롤 버튼 — hover/active는 CSS로(React 인라인 :hover 불가) */
+.apex-btn{cursor:pointer;font-weight:700;font-size:13.5px;padding:7px 14px;border-radius:8px;font-family:inherit;line-height:1;}
+.apex-btn:active{transform:translateY(1px);}
+.apex-btn--primary{border:1px solid #1F6B3A;background:#2D8C4E;color:#fff;}
+.apex-btn--primary:hover{background:#1F6B3A;}
+.apex-btn--ghost{border:1px solid #DDD6C8;background:#FFFFFF;color:#24291F;}
+.apex-btn--ghost:hover{background:#F7F4EC;}
+.apex-btn--mini{cursor:pointer;margin-top:6px;padding:4px 10px;font-size:12px;border-radius:7px;background:#E8A33D;border:1px solid #A96F15;color:#fff;font-weight:700;font-family:inherit;}
+.apex-btn--approve{cursor:pointer;width:100%;border:1px solid #1F6B3A;background:#2D8C4E;color:#fff;padding:7px 14px;border-radius:8px;font-weight:700;font-size:13.5px;font-family:inherit;}
+.apex-btn--approve:hover{background:#1F6B3A;}

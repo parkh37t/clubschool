@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { Button } from "./ui/button";
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { useIsMobile } from './ui/use-mobile';
-import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target } from 'lucide-react';
+import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, Building2 } from 'lucide-react';
 
 interface NavigationProps {
   currentView: string;
@@ -16,6 +16,7 @@ const navItems = [
   { id: 'analytics', label: '데이터 분석', icon: TrendingUp },
   { id: 'members', label: '인력 관리', icon: Users },
   { id: 'projects', label: '프로젝트 관리', icon: FolderOpen },
+  { id: 'virtual-office', label: '가상 사무실', icon: Building2, badge: 'AI 팀' },
 ];
 
 export const Navigation = React.memo(function Navigation({ currentView, onViewChange }: NavigationProps) {

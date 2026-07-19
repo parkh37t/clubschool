@@ -53,6 +53,10 @@ export default [
       }],
       '@typescript-eslint/no-explicit-any': 'warn',
       'no-console': 'off',
+      // TypeScript 프로젝트에서 core no-undef는 타입 참조·브라우저 전역(SVGGElement,
+      // localStorage, Blob 등)에 오탐을 냄. TS가 이미 미정의 식별자를 검사하므로 끈다
+      // (typescript-eslint 공식 권장). 참고: typescript-eslint.io/troubleshooting
+      'no-undef': 'off',
     },
     settings: {
       react: {

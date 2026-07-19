@@ -10,7 +10,7 @@ import { ProjectEdit } from './ProjectEdit';
 import { ProjectReview } from './ProjectReview';
 import { ProjectManagement } from './ProjectManagement';
 import { MonthlyDetailsView } from './MonthlyDetailsView';
-import { useIsMobile } from './ui/use-mobile';
+import { VirtualOfficeView } from './VirtualOffice/VirtualOfficeView';
 import { Project, ProjectDraft } from '../types';
 import { VIEW_NAMES } from '../constants/views';
 import { useDataStore } from '../hooks/useDataStore';
@@ -48,8 +48,6 @@ export function ViewRenderer({
   onMonthlyDetailsView,
   onProjectEdit,
 }: ViewRendererProps) {
-  const isMobile = useIsMobile();
-
   // 특별한 뷰들 먼저 처리
   if (selectedProject && currentView === VIEW_NAMES.PROJECT_DETAIL) {
     return (
@@ -117,7 +115,7 @@ export function ViewRenderer({
         <ProjectCreation
           onBack={() => onViewChange(VIEW_NAMES.PROJECTS)}
           onSubmit={(projectData) => {
-            const newProject = dataStore.addProject(projectData);
+            dataStore.addProject(projectData);
             onProjectSubmit(projectData);
           }}
         />
@@ -129,6 +127,9 @@ export function ViewRenderer({
           onBack={() => onViewChange(VIEW_NAMES.DASHBOARD)}
         />
       );
+    case VIEW_NAMES.VIRTUAL_OFFICE:
+      // 오케스트레이터 연동: /office-state.json이 있으면 실제 상태를 반영, 없으면(404) 자체 데모.
+      return <VirtualOfficeView stateUrl="/office-state.json" />;
     case VIEW_NAMES.DASHBOARD:
     default:
       return (

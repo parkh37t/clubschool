@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>i-ONE Bank Global · Digital Wallet & Customer Center  — Prototype (self-contained)</title>
+  <style>
+/* i-ONE Bank Global 프로토타입 — 표준수(마크업/스타일)
+   디자인시스템.md 토큰을 그대로 구현. 색/간격/반경은 변수만 사용(하드코딩 금지). */
+:root{
+  --ibk-blue:#0A4DA2; --ibk-blue-dark:#073A7A; --ibk-sky:#1E9BE6;
+  --success:#1FA463; --warning:#E0930B; --danger:#D64545;
+  --fg:#1A1F2B; --fg-muted:#5A6473; --bg:#F4F6FA; --surface:#FFFFFF; --border:#E2E7EF;
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-pill:999px;
+  --shadow-card:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.10);
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:Inter,Pretendard,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color:var(--fg); background:#E7EBF2; line-height:1.5;
+  display:flex; flex-direction:column; align-items:center; min-height:100vh; padding:24px 12px;
+}
+.page-title{font-size:14px;color:var(--fg-muted);margin:0 0 12px}
+
+/* 모바일 프레임 */
+.phone{
+  width:375px; max-width:100%; height:812px; background:var(--surface);
+  border-radius:32px; box-shadow:0 12px 40px rgba(16,24,40,.25);
+  overflow:hidden; position:relative; display:flex; flex-direction:column;
+  border:1px solid var(--border);
+}
+.statusbar{height:28px;background:var(--ibk-blue);}
+
+/* AppBar */
+.appbar{display:flex;align-items:center;gap:var(--space-2);
+  padding:var(--space-3) var(--space-4);background:var(--ibk-blue);color:#fff;min-height:52px}
+.appbar .title{font-size:16px;font-weight:600;flex:1}
+.appbar.home .brand{font-size:16px;font-weight:700;flex:1}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;
+  min-width:44px;min-height:44px;background:transparent;border:0;color:inherit;
+  border-radius:var(--r-pill);cursor:pointer}
+.iconbtn:focus-visible{outline:3px solid #fff;outline-offset:1px}
+.lang{background:rgba(255,255,255,.18);color:#fff;border:0;border-radius:var(--r-pill);
+  padding:6px 10px;font-size:13px;cursor:pointer;min-height:36px}
+
+/* 본문 */
+.screen{display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.screen.active{display:block}
+.body{padding:var(--space-4)}
+.section-title{font-size:16px;font-weight:600;margin:0 0 var(--space-3)}
+.muted{color:var(--fg-muted)}
+.caption{font-size:12px;color:var(--fg-muted)}
+.title-lg{font-size:20px;font-weight:700;margin:0 0 var(--space-2)}
+
+/* 카드 */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+  box-shadow:var(--shadow-card);padding:var(--space-4);margin-bottom:var(--space-3)}
+.balance{background:linear-gradient(135deg,var(--ibk-blue),var(--ibk-sky));color:#fff;border:0}
+.balance .amt{font-size:24px;font-weight:700}
+
+/* 리스트 항목 */
+.list{list-style:none;margin:0;padding:0}
+.listitem{display:flex;align-items:center;gap:var(--space-3);width:100%;text-align:left;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);
+  padding:var(--space-4);margin-bottom:var(--space-2);cursor:pointer;min-height:56px;font:inherit;color:inherit}
+.listitem:hover{border-color:var(--ibk-sky)}
+.listitem:focus-visible{outline:3px solid var(--ibk-sky);outline-offset:2px}
+.listitem .grow{flex:1}
+.listitem .chev{color:var(--fg-muted)}
+.listitem[disabled]{opacity:.5;cursor:not-allowed}
+
+/* 증명서 카드 */
+.cert{display:flex;align-items:center;gap:var(--space-3)}
+.cert .ico{width:40px;height:40px;border-radius:var(--r-sm);background:rgba(10,77,162,.1);
+  color:var(--ibk-blue);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.cert .name{font-weight:600}
+.badge{display:inline-block;font-size:11px;font-weight:600;border-radius:var(--r-pill);padding:2px 8px}
+.badge.ok{background:rgba(31,164,99,.12);color:var(--success)}
+.badge.warn{background:rgba(224,147,11,.14);color:var(--warning)}
+
+/* 단계 표시 */
+.steps{display:flex;gap:var(--space-2);margin-bottom:var(--space-4)}
+.steps li{flex:1;text-align:center;font-size:12px;color:var(--fg-muted);
+  padding-top:var(--space-5);position:relative}
+.steps li::before{content:attr(data-n);position:absolute;top:0;left:50%;transform:translateX(-50%);
+  width:24px;height:24px;border-radius:var(--r-pill);background:var(--border);color:var(--fg-muted);
+  display:flex;align-items:center;justify-content:center;font-weight:700}
+.steps li.active::before{background:var(--ibk-blue);color:#fff}
+.steps li.done::before{content:"✓";background:var(--success);color:#fff}
+
+/* 폼 행 */
+.formrow{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) 0;
+  border-bottom:1px solid var(--border)}
+.formrow:last-child{border-bottom:0}
+.formrow input{width:20px;height:20px;accent-color:var(--ibk-blue)}
+.seg{display:flex;gap:var(--space-2);margin:var(--space-2) 0}
+.seg button{flex:1;padding:10px;border:1px solid var(--border);background:var(--surface);
+  border-radius:var(--r-sm);cursor:pointer;font:inherit;min-height:44px}
+.seg button[aria-pressed="true"]{border-color:var(--ibk-blue);background:rgba(10,77,162,.06);
+  color:var(--ibk-blue);font-weight:600}
+
+/* 버튼 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  min-height:48px;border:0;border-radius:var(--r-md);font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--ibk-blue);color:#fff}
+.btn.primary:hover{background:var(--ibk-blue-dark)}
+.btn.secondary{background:rgba(10,77,162,.08);color:var(--ibk-blue)}
+.btn.ghost{background:transparent;color:var(--ibk-blue)}
+.btn:disabled{background:var(--border);color:var(--fg-muted);cursor:not-allowed}
+.btn:focus-visible{outline:3px solid var(--ibk-sky);outline-offset:2px}
+.bottomcta{position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);
+  padding:var(--space-3) var(--space-4);display:flex;gap:var(--space-2)}
+
+/* 상태 뷰(빈/로딩/오류/완료) */
+.status{text-align:center;padding:var(--space-6) var(--space-4)}
+.status .glyph{width:64px;height:64px;border-radius:var(--r-pill);margin:0 auto var(--space-3);
+  display:flex;align-items:center;justify-content:center;font-size:30px;
+  background:rgba(10,77,162,.08);color:var(--ibk-blue)}
+.status.success .glyph{background:rgba(31,164,99,.12);color:var(--success)}
+.status.error .glyph{background:rgba(214,69,69,.12);color:var(--danger)}
+.status h3{margin:0 0 var(--space-2)}
+.skeleton{height:64px;border-radius:var(--r-md);margin-bottom:var(--space-2);
+  background:linear-gradient(90deg,#eef1f6,#f7f9fc,#eef1f6);background-size:200% 100%;
+  animation:sk 1.2s ease-in-out infinite}
+@keyframes sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
+.inline-error{color:var(--danger);font-size:13px;margin-top:var(--space-2)}
+.banner{border-radius:var(--r-sm);padding:var(--space-3);margin-bottom:var(--space-3);font-size:13px}
+.banner.warn{background:rgba(224,147,11,.12);color:var(--warning)}
+
+/* 탭 */
+.tabs{display:flex;border-bottom:1px solid var(--border);margin:-4px 0 var(--space-4)}
+.tabs button{flex:1;padding:var(--space-3) 0;background:transparent;border:0;border-bottom:2px solid transparent;
+  color:var(--fg-muted);cursor:pointer;font:inherit;min-height:44px}
+.tabs button[aria-selected="true"]{color:var(--ibk-blue);border-bottom-color:var(--ibk-blue);font-weight:600}
+.tabs button[disabled]{opacity:.4;cursor:not-allowed}
+
+/* 고객센터 */
+.contact{display:flex;align-items:center;gap:var(--space-3)}
+.contact .flag{font-size:24px}
+.contact .num{color:var(--ibk-blue);font-weight:600;text-decoration:none}
+.callbtn{margin-left:auto;background:var(--success);color:#fff;border:0;border-radius:var(--r-pill);
+  min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.callbtn:focus-visible{outline:3px solid var(--ibk-blue);outline-offset:2px}
+
+/* 토스트 */
+.toast{position:absolute;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);
+  background:var(--fg);color:#fff;padding:10px 16px;border-radius:var(--r-pill);font-size:13px;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;max-width:90%}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* 데모 컨트롤(프로토타입 전용, 실제 화면 아님) */
+.demobar{margin-top:16px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:375px}
+.demobar button{font-size:12px;padding:6px 10px;border:1px solid #c7cfdc;background:#fff;border-radius:8px;cursor:pointer}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+
+@media (prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+}
+
+</style>
+</head>
+<body>
+  <p class="page-title">i-ONE Bank Global — 외국인 전자지갑 &amp; 고객센터 프로토타입 (SFR-062 / SFR-063)</p>
+
+  <div class="phone" role="application" aria-label="i-ONE Bank Global prototype">
+    <div class="statusbar" aria-hidden="true"></div>
+
+    <!-- ===== S0 Home ===== -->
+    <header class="appbar home" data-appbar="home">
+      <span class="brand">i-ONE Bank <small>Global</small></span>
+      <button class="lang" data-action="lang" aria-haspopup="listbox">EN ▾</button>
+      <button class="iconbtn" data-go="s8" aria-label="Customer center">
+        <span aria-hidden="true">🎧</span>
+      </button>
+    </header>
+
+    <main>
+      <!-- S0 -->
+      <section class="screen active" id="s0" data-screen aria-label="Home">
+        <div class="body">
+          <div class="card balance">
+            <div class="caption" style="color:#dbe9fb">Total balance · mock</div>
+            <div class="amt">₩ 1,250,000</div>
+          </div>
+          <h2 class="section-title">Services</h2>
+          <ul class="list">
+            <li><button class="listitem" data-go="wallet-entry">
+              <span class="cert"><span class="ico" aria-hidden="true">🪪</span></span>
+              <span class="grow"><strong>Digital Wallet</strong><br /><span class="caption">Issue &amp; manage e-certificates</span></span>
+              <span class="chev" aria-hidden="true">›</span>
+            </button></li>
+            <li><button class="listitem" data-go="s8">
+              <span class="cert"><span class="ico" aria-hidden="true">🎧</span></span>
+              <span class="grow"><strong>Customer Center</strong><br /><span class="caption">Talk to support in your language</span></span>
+              <span class="chev" aria-hidden="true">›</span>
+            </button></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== S1 Issue Wallet ===== -->
+      <section class="screen" id="s1" data-screen data-title="Issue Wallet" aria-label="Issue wallet">
+        <div class="body" id="s1-default">
+          <div class="status"><div class="glyph" aria-hidden="true">🪪</div>
+            <h3 class="title-lg">Issue your digital wallet</h3>
+            <p class="muted">Create a wallet to request and store official certificates as a foreign resident.</p>
+          </div>
+          <div class="card">
+            <div class="formrow">
+              <input type="checkbox" id="s1-terms" />
+              <label for="s1-terms" class="grow">I agree to the wallet terms (required)</label>
+            </div>
+            <p class="caption">Authentication: Joint Certificate or IBK Certificate only. Financial Certificate is <strong>not</strong> supported.</p>
+          </div>
+          <p><button class="btn ghost" data-action="no-cert">I don't have a certificate</button></p>
+        </div>
+        <div class="bottomcta">
+          <button class="btn primary" id="s1-cta" data-action="issue" disabled>Issue &amp; Authenticate</button>
+        </div>
+      </section>
+
+      <!-- ===== S2 Wallet Home ===== -->
+      <section class="screen" id="s2" data-screen data-title="My Digital Wallet" aria-label="Wallet home">
+        <div class="body">
+          <div class="card">
+            <strong>My Digital Wallet</strong>
+            <p class="caption" id="s2-count">You have 0 certificate(s).</p>
+          </div>
+          <ul class="list">
+            <li><button class="listitem" data-go="s3">
+              <span class="grow"><strong>Request certificate</strong><br /><span class="caption">From government &amp; public agencies</span></span>
+              <span class="chev" aria-hidden="true">›</span></button></li>
+            <li><button class="listitem" data-go="s6">
+              <span class="grow"><strong>My certificates</strong><br /><span class="caption">View · download · submit</span></span>
+              <span class="chev" aria-hidden="true">›</span></button></li>
+            <li><button class="listitem" data-action="stub">
+              <span class="grow"><strong>Manage wallet</strong><br /><span class="caption">Change info · discard · share</span></span>
+              <span class="chev" aria-hidden="true">›</span></button></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== S3 Available list ===== -->
+      <section class="screen" id="s3" data-screen data-title="Request Certificate" aria-label="Available certificates">
+        <div class="body">
+          <ol class="steps"><li class="active" data-n="1">List</li><li data-n="2">Request</li><li data-n="3">Done</li></ol>
+          <h2 class="section-title">Available certificates</h2>
+          <ul class="list" id="s3-list">
+            <li><button class="listitem" data-cert="Certificate of Domestic Residence Report"><span class="cert"><span class="ico" aria-hidden="true">📄</span><span class="name">Certificate of Domestic Residence Report</span></span><span class="chev" aria-hidden="true">›</span></button></li>
+            <li><button class="listitem" data-cert="Certificate of Alien Registration"><span class="cert"><span class="ico" aria-hidden="true">📄</span><span class="name">Certificate of Alien Registration</span></span><span class="chev" aria-hidden="true">›</span></button></li>
+            <li><button class="listitem" data-cert="Certificate of Entry & Exit"><span class="cert"><span class="ico" aria-hidden="true">📄</span><span class="name">Certificate of Entry &amp; Exit</span></span><span class="chev" aria-hidden="true">›</span></button></li>
+            <li><button class="listitem" data-cert="Passport Information Certificate"><span class="cert"><span class="ico" aria-hidden="true">📄</span><span class="name">Passport Information Certificate</span></span><span class="chev" aria-hidden="true">›</span></button></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- ===== S4 Request & Auth ===== -->
+      <section class="screen" id="s4" data-screen data-title="Request &amp; Authenticate" aria-label="Request and authenticate">
+        <div class="body">
+          <ol class="steps"><li class="done" data-n="1">List</li><li class="active" data-n="2">Request</li><li data-n="3">Done</li></ol>
+          <div class="card"><strong id="s4-name">Certificate</strong><p class="caption">Receive in: Digital wallet</p></div>
+          <div class="card">
+            <div class="formrow"><span class="grow">Authentication method</span></div>
+            <div class="seg" role="group" aria-label="Authentication method">
+              <button data-auth="joint" aria-pressed="true">Joint Cert.</button>
+              <button data-auth="ibk" aria-pressed="false">IBK Cert.</button>
+            </div>
+            <div class="formrow"><input type="checkbox" id="s4-terms" /><label for="s4-terms" class="grow">I agree to provide my info to the issuing agency (required)</label></div>
+            <p class="inline-error" id="s4-error" hidden role="alert">Authentication failed. Please try again.</p>
+          </div>
+        </div>
+        <div class="bottomcta">
+          <button class="btn primary" id="s4-cta" data-action="request" disabled>Request &amp; Authenticate</button>
+        </div>
+      </section>
+
+      <!-- ===== S5 Complete ===== -->
+      <section class="screen" id="s5" data-screen data-title="Completed" aria-label="Request completed">
+        <div class="body">
+          <ol class="steps"><li class="done" data-n="1">List</li><li class="done" data-n="2">Request</li><li class="active" data-n="3">Done</li></ol>
+          <div class="status success"><div class="glyph" aria-hidden="true">✓</div>
+            <h3 class="title-lg">Request completed</h3>
+            <p class="muted">Your certificate has been issued to your wallet.</p>
+          </div>
+          <div class="card">
+            <p><span class="caption">Receipt no. (mock)</span><br /><strong id="s5-receipt">—</strong></p>
+            <p><span class="caption">Certificate</span><br /><strong id="s5-name">—</strong></p>
+            <p><span class="caption">Requested at</span><br /><strong id="s5-date">—</strong></p>
+          </div>
+        </div>
+        <div class="bottomcta">
+          <button class="btn secondary" data-go="s6">View in storage</button>
+          <button class="btn primary" data-go="s0">Home</button>
+        </div>
+      </section>
+
+      <!-- ===== S6 Storage ===== -->
+      <section class="screen" id="s6" data-screen data-title="My Certificates" aria-label="My certificates">
+        <div class="body">
+          <div class="tabs" role="tablist" aria-label="Certificate folders">
+            <button role="tab" aria-selected="true">Stored</button>
+            <button role="tab" aria-selected="false" disabled>Sent</button>
+            <button role="tab" aria-selected="false" disabled>Received</button>
+            <button role="tab" aria-selected="false" disabled>History</button>
+          </div>
+          <ul class="list" id="s6-list"></ul>
+          <div class="status" id="s6-empty" hidden><div class="glyph" aria-hidden="true">🗂️</div>
+            <h3>No certificates yet</h3><p class="muted">Request your first certificate to store it here.</p>
+            <button class="btn primary" data-go="s3" style="max-width:240px;margin:8px auto 0">Request a certificate</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== S7 Detail ===== -->
+      <section class="screen" id="s7" data-screen data-title="Certificate" aria-label="Certificate detail">
+        <div class="body">
+          <div class="banner warn" id="s7-expired" hidden>This certificate is expired. Please reissue before submitting.</div>
+          <div class="card"><strong id="s7-name">Certificate</strong>
+            <p class="caption">Issued: <span id="s7-date">—</span> · Valid 90 days (mock)</p>
+            <div style="height:200px;border:1px dashed var(--border);border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:var(--fg-muted)">Certificate preview (mock)</div>
+          </div>
+        </div>
+        <div class="bottomcta">
+          <button class="btn secondary" data-action="download">Download</button>
+          <button class="btn primary" id="s7-submit" data-action="submit">Submit</button>
+        </div>
+      </section>
+
+      <!-- ===== S8 Customer Center (SFR-062) ===== -->
+      <section class="screen" id="s8" data-screen data-title="Customer Center" aria-label="Customer center">
+        <div class="body">
+          <p class="muted">Choose your language to connect directly with a foreign-customer agent.</p>
+          <ul class="list">
+            <li class="listitem"><span class="contact"><span class="flag" aria-hidden="true">🇺🇸</span>
+              <span class="grow"><strong>English</strong><br /><a class="num" href="tel:+82215889999">+82-2-1588-9999</a></span></span>
+              <a class="callbtn" href="tel:+82215889999" aria-label="Call English support"><span aria-hidden="true">📞</span></a></li>
+            <li class="listitem"><span class="contact"><span class="flag" aria-hidden="true">🇨🇳</span>
+              <span class="grow"><strong>中文</strong><br /><a class="num" href="tel:+82215889998">+82-2-1588-9998</a></span></span>
+              <a class="callbtn" href="tel:+82215889998" aria-label="Call Chinese support"><span aria-hidden="true">📞</span></a></li>
+            <li class="listitem"><span class="contact"><span class="flag" aria-hidden="true">🇻🇳</span>
+              <span class="grow"><strong>Tiếng Việt</strong><br /><a class="num" href="tel:+82215889997">+82-2-1588-9997</a>
+              <span class="caption" style="color:var(--warning)">· Outside business hours</span></span></span>
+              <button class="callbtn" style="background:var(--warning)" data-action="email" aria-label="Email Vietnamese support"><span aria-hidden="true">✉️</span></button></li>
+          </ul>
+          <p class="caption">Numbers are mock data. Tip: long-press a number to copy if your device can't call.</p>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <!-- 데모 컨트롤(프로토타입 검증용 — 실제 앱 화면 아님) -->
+  <div class="demobar" aria-label="Prototype demo controls">
+    <button data-action="reset">↺ Reset</button>
+    <button data-demo="s3-loading">S3: loading</button>
+    <button data-demo="s3-error">S3: agency error</button>
+    <button data-demo="s4-fail">S4: auth fail</button>
+    <button data-demo="s6-empty">S6: empty</button>
+    <button data-demo="s7-expired">S7: expired</button>
+  </div>
+
+  <script>
+/* i-ONE Bank Global 프로토타입 — 이풍뎅(인터랙션/접근성)
+   화면 라우팅 + 거래 플로우 + 상태(빈/로딩/오류/예외) + 키보드/스크린리더 대응.
+   외부연동(정부24/유통시스템)은 mock. */
+(function () {
+  "use strict";
+  var appbar = document.querySelector("[data-appbar]");
+  var screens = Array.prototype.slice.call(document.querySelectorAll("[data-screen]"));
+  var toastEl = document.getElementById("toast");
+  var history = ["s0"];
+  var state = { issued: false, certs: [], pendingCert: null, demo: {} };
+
+  // 원본 보존(데모/리셋 복원용)
+  var s1Body = document.querySelector("#s1 .body").innerHTML;
+  var s3Body = document.querySelector("#s3 .body").innerHTML;
+
+  function byId(id) { return document.getElementById(id); }
+
+  /* ---------- 라우팅 ---------- */
+  function renderAppbar(id) {
+    if (id === "s0") {
+      appbar.className = "appbar home";
+      appbar.innerHTML =
+        '<span class="brand">i-ONE Bank <small>Global</small></span>' +
+        '<button class="lang" data-action="lang" aria-haspopup="listbox">EN ▾</button>' +
+        '<button class="iconbtn" data-go="s8" aria-label="Customer center"><span aria-hidden="true">🎧</span></button>';
+    } else {
+      var title = (byId(id).getAttribute("data-title")) || "";
+      appbar.className = "appbar";
+      appbar.innerHTML =
+        '<button class="iconbtn" data-action="back" aria-label="Go back"><span aria-hidden="true">‹</span></button>' +
+        '<span class="title">' + title + "</span>";
+    }
+  }
+
+  function show(id, opts) {
+    opts = opts || {};
+    screens.forEach(function (s) {
+      var on = s.id === id;
+      s.classList.toggle("active", on);
+    });
+    renderAppbar(id);
+    if (!opts.noPush && history[history.length - 1] !== id) history.push(id);
+    if (id === "s2") refreshWalletCount();
+    if (id === "s6") renderStorage();
+    // 포커스 이동(스크린리더가 새 화면을 인지)
+    var target = byId(id);
+    target.setAttribute("tabindex", "-1");
+    target.focus({ preventScroll: true });
+    target.scrollTop = 0;
+  }
+
+  function back() {
+    if (history.length > 1) { history.pop(); show(history[history.length - 1], { noPush: true }); }
+    else show("s0", { noPush: true });
+  }
+
+  /* ---------- 토스트 ---------- */
+  var toastTimer;
+  function toast(msg) {
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.classList.remove("show"); }, 1800);
+  }
+
+  /* ---------- 화면별 동작 ---------- */
+  function refreshWalletCount() {
+    byId("s2-count").textContent = "You have " + state.certs.length + " certificate(s).";
+  }
+
+  function renderStorage() {
+    var list = byId("s6-list"), empty = byId("s6-empty");
+    list.innerHTML = "";
+    if (state.demo.s6empty || state.certs.length === 0) {
+      list.hidden = true; empty.hidden = false; return;
+    }
+    list.hidden = false; empty.hidden = true;
+    state.certs.forEach(function (c, i) {
+      var li = document.createElement("li");
+      li.innerHTML =
+        '<button class="listitem" data-open="' + i + '">' +
+          '<span class="cert"><span class="ico" aria-hidden="true">📄</span>' +
+          '<span><span class="name">' + c.name + "</span><br>" +
+          '<span class="caption">Issued ' + c.date + "</span></span></span>" +
+          '<span class="badge ' + (c.expired ? "warn" : "ok") + '">' + (c.expired ? "Expired" : "Valid") + "</span>" +
+        "</button>";
+      list.appendChild(li);
+    });
+  }
+
+  function openDetail(idx) {
+    var c = state.certs[idx]; if (!c) return;
+    byId("s7-name").textContent = c.name;
+    byId("s7-date").textContent = c.date;
+    byId("s7-expired").hidden = !c.expired;
+    byId("s7-submit").disabled = !!c.expired;
+    show("s7");
+  }
+
+  function s3Loading() {
+    var box = document.querySelector("#s3 .body");
+    box.innerHTML =
+      '<ol class="steps"><li class="active" data-n="1">List</li><li data-n="2">Request</li><li data-n="3">Done</li></ol>' +
+      '<h2 class="section-title">Available certificates</h2>' +
+      '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+    show("s3");
+    setTimeout(function () { document.querySelector("#s3 .body").innerHTML = s3Body; }, 1400);
+  }
+
+  function s3Error() {
+    var box = document.querySelector("#s3 .body");
+    box.innerHTML =
+      '<ol class="steps"><li class="active" data-n="1">List</li><li data-n="2">Request</li><li data-n="3">Done</li></ol>' +
+      '<div class="status error"><div class="glyph" aria-hidden="true">!</div>' +
+      "<h3>Issuing agency under maintenance</h3>" +
+      '<p class="muted">The government service is temporarily unavailable.</p>' +
+      '<button class="btn primary" style="max-width:200px;margin:8px auto 0" data-action="s3-retry">Retry</button></div>';
+    show("s3");
+  }
+
+  /* ---------- 이벤트 위임 ---------- */
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-go],[data-action],[data-cert],[data-open],[data-auth],[data-demo]");
+    if (!t) return;
+
+    if (t.hasAttribute("data-go")) {
+      var dest = t.getAttribute("data-go");
+      if (dest === "wallet-entry") return show(state.issued ? "s2" : "s1");
+      return show(dest);
+    }
+    if (t.hasAttribute("data-open")) return openDetail(parseInt(t.getAttribute("data-open"), 10));
+    if (t.hasAttribute("data-cert")) {
+      state.pendingCert = t.getAttribute("data-cert");
+      byId("s4-name").textContent = state.pendingCert;
+      byId("s4-error").hidden = true;
+      byId("s4-terms").checked = false; byId("s4-cta").disabled = true;
+      return show("s4");
+    }
+    if (t.hasAttribute("data-auth")) {
+      document.querySelectorAll("[data-auth]").forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
+      t.setAttribute("aria-pressed", "true");
+      return;
+    }
+    if (t.hasAttribute("data-demo")) {
+      var d = t.getAttribute("data-demo");
+      if (d === "s3-loading") { state.demo = {}; return s3Loading(); }
+      if (d === "s3-error") { return s3Error(); }
+      if (d === "s4-fail") { state.demo.s4fail = true; state.pendingCert = state.pendingCert || "Certificate of Alien Registration";
+        byId("s4-name").textContent = state.pendingCert; return show("s4"); }
+      if (d === "s6-empty") { state.demo.s6empty = true; return show("s6"); }
+      if (d === "s7-expired") { state.certs.push({ name: "Certificate of Entry & Exit", date: today(), expired: true });
+        return openDetail(state.certs.length - 1); }
+      return;
+    }
+
+    var action = t.getAttribute("data-action");
+    switch (action) {
+      case "back": return back();
+      case "lang": return toast("Language: EN / 中文 / Tiếng Việt (demo)");
+      case "stub": return toast("Coming soon");
+      case "email": return toast("Opening email app (mock)");
+      case "download": return toast("Downloaded to device (mock)");
+      case "submit":
+        return toast("Certificate submitted (mock)");
+      case "no-cert":
+        document.querySelector("#s1 .body").innerHTML =
+          '<div class="status"><div class="glyph" aria-hidden="true">🔐</div>' +
+          "<h3>No certificate found</h3>" +
+          '<p class="muted">A Joint or IBK certificate is required. Financial Certificate is not supported.</p>' +
+          '<button class="btn primary" style="max-width:240px;margin:8px auto 0" data-action="how-cert">How to get a certificate</button></div>';
+        return;
+      case "how-cert": return toast("External guide (mock)");
+      case "issue":
+        t.disabled = true; t.textContent = "Authenticating…";
+        return setTimeout(function () {
+          state.issued = true; t.textContent = "Issue & Authenticate";
+          toast("Wallet issued"); show("s2");
+        }, 900);
+      case "request":
+        if (state.demo.s4fail) {
+          byId("s4-error").hidden = false; state.demo.s4fail = false;
+          return;
+        }
+        t.disabled = true; t.textContent = "Authenticating…";
+        return setTimeout(function () {
+          t.textContent = "Request & Authenticate"; t.disabled = false;
+          var cert = { name: state.pendingCert, date: today(), expired: false };
+          state.certs.push(cert);
+          byId("s5-receipt").textContent = "GLB-" + Math.floor(100000 + Math.random() * 899999);
+          byId("s5-name").textContent = cert.name;
+          byId("s5-date").textContent = cert.date;
+          show("s5");
+        }, 900);
+      case "s3-retry":
+        document.querySelector("#s3 .body").innerHTML = s3Body; return toast("Reloaded");
+      case "reset":
+        state = { issued: false, certs: [], pendingCert: null, demo: {} };
+        document.querySelector("#s1 .body").innerHTML = s1Body;
+        document.querySelector("#s3 .body").innerHTML = s3Body;
+        history = ["s0"]; return show("s0", { noPush: true });
+    }
+  });
+
+  /* 약관 체크 → CTA 활성화 */
+  document.addEventListener("change", function (e) {
+    if (e.target.id === "s1-terms") byId("s1-cta").disabled = !e.target.checked;
+    if (e.target.id === "s4-terms") byId("s4-cta").disabled = !e.target.checked;
+  });
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  // 초기 화면
+  show("s0", { noPush: true });
+})();
+
+</script>
+</body>
+</html>
