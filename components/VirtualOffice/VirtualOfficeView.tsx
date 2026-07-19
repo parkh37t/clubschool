@@ -12,7 +12,11 @@ interface VirtualOfficeViewProps {
   stateUrl?: string;
   /** 외부 상태 폴링 주기(ms). 기본 2000. */
   pollMs?: number;
+  /** 지시 콘솔 제출 대상(백엔드 API). 지정 시 지시를 POST(경로 B). 미지정 시 복사/다운로드(경로 A). */
+  instructUrl?: string;
 }
+
+const GATE_NAMES = ['영업/평가', '기획', '디자인', '구현', '검증/배포', '그로스'];
 
 const FONT = "'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif";
 const MONO = "ui-monospace,'SF Mono',Consolas,monospace";
@@ -39,10 +43,18 @@ export function VirtualOfficeView({
   initialSpeed = 1,
   stateUrl,
   pollMs = 2000,
+  instructUrl,
 }: VirtualOfficeViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const simRef = useRef<OfficeSimulator | null>(null);
   const [, setVersion] = useState(0);
+
+  // 지시 콘솔 폼 상태
+  const [instrTitle, setInstrTitle] = useState('');
+  const [instrGoal, setInstrGoal] = useState('');
+  const [instrGates, setInstrGates] = useState<boolean[]>([true, true, true, true, true, true]);
+  const [instrStatus, setInstrStatus] = useState('');
+  const [instrBusy, setInstrBusy] = useState(false);
 
   useEffect(() => {
     if (!svgRef.current) return;
@@ -74,6 +86,39 @@ export function VirtualOfficeView({
     const iv = setInterval(poll, pollMs);
     return () => { alive = false; clearInterval(iv); };
   }, [stateUrl, pollMs]);
+
+  const toggleGate = (i: number) => setInstrGates(g => g.map((v, j) => (j === i ? !v : v)));
+
+  const submitInstruction = async () => {
+    const title = instrTitle.trim();
+    if (!title) { setInstrStatus('과제명을 입력하세요.'); return; }
+    const gates = instrGates.map((on, i) => (on ? 'G' + (i + 1) : null)).filter(Boolean);
+    const instruction = { title, goal: instrGoal.trim(), gates, ts: new Date().toISOString() };
+    const json = JSON.stringify(instruction, null, 2);
+    setInstrBusy(true); setInstrStatus('');
+    try {
+      if (instructUrl) {
+        const res = await fetch(instructUrl, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json,
+        });
+        setInstrStatus(res.ok ? '지시를 오케스트레이터에 전송했습니다.' : `전송 실패 (${res.status})`);
+      } else {
+        let copied = false;
+        try { await navigator.clipboard.writeText(json); copied = true; } catch { /* clipboard 권한/https 아님 → 다운로드로 대체 */ }
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'instruction.json'; a.click();
+        URL.revokeObjectURL(url);
+        setInstrStatus((copied ? '지시를 복사·다운로드했습니다' : '지시를 다운로드했습니다') + ' — 오케스트레이터 세션에 전달하세요.');
+      }
+      simRef.current?.noteInstruction(title);
+    } catch {
+      setInstrStatus('오류: 지시 전송에 실패했습니다.');
+    } finally {
+      setInstrBusy(false);
+    }
+  };
 
   const sim = simRef.current;
   const rv: RenderVals = sim ? sim.getRenderVals() : fallbackVals(teamLabel, initialSpeed, autoApprove);
@@ -131,6 +176,52 @@ export function VirtualOfficeView({
 
         {/* 우측 패널 */}
         <aside style={{ width: 330, minWidth: 290, flex: '1 1 290px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* 지시 콘솔 — 여기서 직접 업무 지시 */}
+          <section style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '13px 16px 15px' }}>
+            <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#4F46E5', margin: '0 0 9px' }}>지시 콘솔</h2>
+            <input
+              value={instrTitle}
+              onChange={(e) => setInstrTitle(e.target.value)}
+              placeholder="과제명 (예: IBK 랜딩 개편)"
+              style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 13.5, padding: '8px 10px', border: '1px solid #DDD6C8', borderRadius: 8, outline: 'none' }}
+            />
+            <textarea
+              value={instrGoal}
+              onChange={(e) => setInstrGoal(e.target.value)}
+              placeholder="목표·요구 (한두 줄)"
+              rows={2}
+              style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 13, padding: '8px 10px', border: '1px solid #DDD6C8', borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical' }}
+            />
+            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '9px 0' }}>
+              {GATE_NAMES.map((n, i) => (
+                <button
+                  key={i}
+                  onClick={() => toggleGate(i)}
+                  title={n}
+                  style={{
+                    font: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                    padding: '3px 8px', borderRadius: 999,
+                    background: instrGates[i] ? '#DFF2E6' : '#F2EFE7',
+                    color: instrGates[i] ? '#1F6B3A' : '#9A968A',
+                    border: '1px solid ' + (instrGates[i] ? '#2D8C4E' : '#DDD6C8'),
+                  }}
+                >{'G' + (i + 1)}</button>
+              ))}
+            </div>
+            <button
+              className="apex-btn--approve"
+              onClick={submitInstruction}
+              disabled={instrBusy}
+              style={{ opacity: instrBusy ? 0.6 : 1 }}
+            >{instrBusy ? '전송 중…' : '지시 보내기'}</button>
+            {instrStatus && <p style={{ fontSize: 12, color: '#1F6B3A', fontWeight: 600, margin: '9px 0 0' }}>{instrStatus}</p>}
+            <p style={{ fontSize: 11, color: '#8B877B', margin: '7px 0 0', lineHeight: 1.5 }}>
+              {instructUrl
+                ? '백엔드 연결됨 — 지시가 자동 실행됩니다.'
+                : '백엔드 미연결 — 지시(instruction.json)를 오케스트레이터 세션이 실행합니다.'}
+            </p>
+          </section>
+
           {rv.showApprovalCard && (
             <section style={{ background: '#FBEED6', border: '1px solid #E8A33D', borderRadius: 14 }}>
               <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#A96F15', padding: '13px 16px 0', margin: 0 }}>결재 요청</h2>

@@ -794,6 +794,11 @@ export class OfficeSimulator {
     if (this.st.phase === 'awaiting') this.approve(false);
   }
 
+  /** 지시 콘솔에서 지시가 접수됐음을 라이브 피드에 남긴다(오케스트레이터 실행 대기 표시). */
+  noteInstruction(title: string): void {
+    this.feedAdd('지시', `접수: ${title} — 오케스트레이터 실행 대기`, 'sys');
+  }
+
   /* ── 실전 연동: 외부(오케스트레이터) 상태를 화면에 반영 ──
    * 최초 호출 시 externalMode 진입 → 내부 자동 시나리오 정지, 이후 이 상태가 SSOT.
    * 단계/페이즈 전이 시에만 이동 안무를 구동하고, agents 맵으로 자리 상태를 덮어쓴다. */
