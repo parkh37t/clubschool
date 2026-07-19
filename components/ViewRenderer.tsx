@@ -128,8 +128,10 @@ export function ViewRenderer({
         />
       );
     case VIEW_NAMES.VIRTUAL_OFFICE:
-      // 오케스트레이터 연동: /office-state.json이 있으면 실제 상태를 반영, 없으면(404) 자체 데모.
-      return <VirtualOfficeView stateUrl="/office-state.json" />;
+      // 오케스트레이터 연동(server/): /office-state.json 폴링으로 실제 상태 반영(없으면 404→자체 데모),
+      // 지시 콘솔은 /api/instruct 로 POST → 백엔드가 12 에이전트를 게이트 파이프라인으로 실행.
+      // dev에선 vite.config.ts 프록시가 두 경로를 server(8787)로 넘긴다(같은 오리진).
+      return <VirtualOfficeView stateUrl="/office-state.json" instructUrl="/api/instruct" />;
     case VIEW_NAMES.DASHBOARD:
     default:
       return (

@@ -46,6 +46,13 @@ export default defineConfig({
     port: 3000,
     open: true,
     host: true,
+    // 가상 사무실 ↔ 오케스트레이터 서버(server/, 기본 8787) 연결.
+    // 오피스의 상대경로 /office-state.json·/api/* 를 백엔드로 프록시 → 같은 오리진처럼 동작(CORS 불필요).
+    // 백엔드 미기동 시 프록시가 실패해도 오피스는 자체 데모로 폴백한다.
+    proxy: {
+      '/office-state.json': 'http://localhost:8787',
+      '/api': 'http://localhost:8787',
+    },
   },
   
   preview: {

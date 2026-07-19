@@ -53,9 +53,11 @@ prop 없이 `<VirtualOfficeView />` → 내장 시나리오가 킥오프 회의�
 - 어느 경우든 라이브 피드에 "접수" 기록(`noteInstruction`).
 
 ```tsx
-// 백엔드(경로 B) 연결 시
+// 백엔드(경로 B) 연결 시 — 현재 ViewRenderer가 이 형태로 렌더한다.
 <VirtualOfficeView stateUrl="/office-state.json" instructUrl="/api/instruct" />
 ```
+> 백엔드 뼈대는 `server/` 에 구현돼 있다(의존성 0의 mock 모드로 키 없이 즉시 검증 → `OFFICE_MODE=live`로 실제 산출물).
+> 실행법은 `server/README.md`, 설계는 `PROJECT/_team/오케스트레이터-연동-설계.md` 참조.
 > 브라우저는 에이전트를 직접 실행할 수 없다(정직성). 콘솔은 지시를 **생성·전달**하고, 실제 실행/산출물은
 > 오케스트레이터(세션 또는 백엔드)가 담당한다. 진행 상태는 `stateUrl` 폴링으로 오피스에 반영된다.
 
