@@ -36,3 +36,4 @@ yarn-error.log*
 *.tmp
 .cache/
 .vite/
+dist-standalone/
