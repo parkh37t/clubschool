@@ -52,6 +52,7 @@ export function VirtualOfficeView({
   // 지시 콘솔 폼 상태
   const [instrTitle, setInstrTitle] = useState('');
   const [instrGoal, setInstrGoal] = useState('');
+  const [instrBrief, setInstrBrief] = useState(''); // RFP·자료 전문(선택) — 있으면 에이전트가 근거로 사용
   const [instrGates, setInstrGates] = useState<boolean[]>([true, true, true, true, true, true]);
   const [instrStatus, setInstrStatus] = useState('');
   const [instrBusy, setInstrBusy] = useState(false);
@@ -93,7 +94,7 @@ export function VirtualOfficeView({
     const title = instrTitle.trim();
     if (!title) { setInstrStatus('과제명을 입력하세요.'); return; }
     const gates = instrGates.map((on, i) => (on ? 'G' + (i + 1) : null)).filter(Boolean);
-    const instruction = { title, goal: instrGoal.trim(), gates, ts: new Date().toISOString() };
+    const instruction = { title, goal: instrGoal.trim(), brief: instrBrief.trim(), gates, ts: new Date().toISOString() };
     const json = JSON.stringify(instruction, null, 2);
     setInstrBusy(true); setInstrStatus('');
     try {
@@ -192,6 +193,18 @@ export function VirtualOfficeView({
               rows={2}
               style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 13, padding: '8px 10px', border: '1px solid #DDD6C8', borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical' }}
             />
+            <textarea
+              value={instrBrief}
+              onChange={(e) => setInstrBrief(e.target.value)}
+              placeholder="RFP·자료 붙여넣기 (선택) — 발주 문서 전문을 그대로 붙여넣으면, 에이전트가 지어내지 않고 이 내용을 근거로 일합니다."
+              rows={5}
+              style={{ width: '100%', boxSizing: 'border-box', font: 'inherit', fontSize: 12.5, padding: '8px 10px', border: '1px solid #DDD6C8', borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical', lineHeight: 1.5 }}
+            />
+            {instrBrief.trim() && (
+              <p style={{ fontSize: 11, color: '#1F6B3A', fontWeight: 600, margin: '5px 0 0' }}>
+                자료 {instrBrief.trim().length.toLocaleString()}자 첨부됨 — 에이전트가 이 자료를 근거로 작성합니다.
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '9px 0' }}>
               {GATE_NAMES.map((n, i) => (
                 <button
