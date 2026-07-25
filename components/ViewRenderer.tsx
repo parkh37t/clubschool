@@ -11,6 +11,7 @@ import { ProjectReview } from './ProjectReview';
 import { ProjectManagement } from './ProjectManagement';
 import { MonthlyDetailsView } from './MonthlyDetailsView';
 import { VirtualOfficeView } from './VirtualOffice/VirtualOfficeView';
+import { resolveOfficeBackend } from './VirtualOffice/officeBackend';
 import { Project, ProjectDraft } from '../types';
 import { VIEW_NAMES } from '../constants/views';
 import { useDataStore } from '../hooks/useDataStore';
@@ -127,11 +128,14 @@ export function ViewRenderer({
           onBack={() => onViewChange(VIEW_NAMES.DASHBOARD)}
         />
       );
-    case VIEW_NAMES.VIRTUAL_OFFICE:
-      // 오케스트레이터 연동(server/): /office-state.json 폴링으로 실제 상태 반영(없으면 404→자체 데모),
-      // 지시 콘솔은 /api/instruct 로 POST → 백엔드가 12 에이전트를 게이트 파이프라인으로 실행.
-      // dev에선 vite.config.ts 프록시가 두 경로를 server(8787)로 넘긴다(같은 오리진).
-      return <VirtualOfficeView stateUrl="/office-state.json" instructUrl="/api/instruct" />;
+    case VIEW_NAMES.VIRTUAL_OFFICE: {
+      // 백엔드(server/ 오케스트레이터) 위치를 런타임에 결정한다(officeBackend 참조):
+      //  · ?api=<주소> → 그 백엔드에 연결(예: PC를 터널로 공개 → 공개 사이트에서 실제 실행 라이브 관람)
+      //  · localhost(개발) → 같은 오리진(vite 프록시가 server:8787로 전달)
+      //  · 지정 없는 정적 배포 → 미연결(내부 데모 + 지시는 다운로드 폴백)
+      const backend = resolveOfficeBackend();
+      return <VirtualOfficeView stateUrl={backend.stateUrl} instructUrl={backend.instructUrl} />;
+    }
     case VIEW_NAMES.DASHBOARD:
     default:
       return (
