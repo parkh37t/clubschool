@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>APEX AI 오피스 · 자동화 부서</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#F4F2EE; --card:#FFFFFF; --ink:#1C2024; --muted:#7A7F87;
+    --line:#D9DCE1; --accent:#2D6BF0; --brand:#EA6A3A; --brand2:#F0873F;
+    --radius:20px; --shadow:0 18px 40px -22px rgba(20,25,40,.35);
+    --font:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--font); background:
+      radial-gradient(1200px 700px at 50% -10%, #FBFAF8 0%, var(--bg) 55%);
+    color:var(--ink); -webkit-font-smoothing:antialiased; min-height:100vh;
+    padding:clamp(20px,5vw,64px) clamp(16px,4vw,48px) 72px;
+  }
+  .wrap{max-width:1120px;margin:0 auto}
+
+  /* ── 헤더 카피 ── */
+  .eyebrow{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;
+    color:var(--brand);background:#FCEBE1;border:1px solid #F6D3C2;padding:5px 12px;border-radius:999px}
+  .eyebrow b{width:7px;height:7px;border-radius:2px;background:var(--brand);box-shadow:inset -2px -2px 0 rgba(0,0,0,.15)}
+  h1{font-size:clamp(30px,6.2vw,58px);line-height:1.08;letter-spacing:-.02em;font-weight:800;margin:16px 0 0}
+  h1 .num{color:var(--accent)}
+  .sub{font-size:clamp(15px,2.4vw,19px);color:var(--muted);font-weight:600;margin:14px 0 0}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 0}
+  .badge{font-size:13px;font-weight:700;color:#33383F;background:#fff;border:1px solid var(--line);
+    padding:7px 13px;border-radius:999px;box-shadow:0 1px 0 rgba(0,0,0,.02)}
+  .badge.free{color:#1F7A46;background:#E4F5EA;border-color:#BEE6CC}
+
+  /* ── 조직도 ── */
+  .chart{margin:clamp(30px,6vw,56px) 0 0;overflow-x:auto;padding-bottom:6px}
+  .chart-inner{min-width:760px}
+
+  .brand-node{display:flex;justify-content:center}
+  .brand-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    border:1px solid #EFEDE9;padding:20px 30px;display:flex;flex-direction:column;align-items:center;gap:12px;min-width:230px}
+  .brand-mark{width:60px;height:60px;border-radius:16px;background:linear-gradient(150deg,var(--brand),var(--brand2));
+    display:grid;place-items:center;box-shadow:0 10px 22px -10px rgba(234,106,58,.7)}
+  .brand-name{font-size:20px;font-weight:800;letter-spacing:-.01em}
+  .brand-name span{color:var(--muted);font-weight:700}
+
+  /* 커넥터 */
+  .trunk{width:2px;height:34px;background:var(--line);margin:0 auto}
+  .rail-wrap{position:relative;height:34px}
+  .rail{position:absolute;top:0;height:2px;background:var(--line)}
+  .drop{position:absolute;top:0;width:2px;height:34px;background:var(--line)}
+  .node-dot{position:absolute;top:-3px;width:8px;height:8px;border-radius:50%;background:#fff;border:2px solid var(--accent);transform:translateX(-50%)}
+
+  .cards{display:grid;grid-template-columns:repeat(7,1fr);gap:14px}
+  .dept{--c:#888;--cbg:#eee;background:var(--card);border:1px solid #EFEDE9;border-radius:18px;
+    padding:16px 10px 15px;text-align:center;box-shadow:0 8px 22px -18px rgba(20,25,40,.4);
+    display:flex;flex-direction:column;align-items:center;gap:9px;transition:transform .18s ease, box-shadow .18s ease}
+  .dept:hover{transform:translateY(-4px);box-shadow:0 16px 30px -18px rgba(20,25,40,.5)}
+  .avatar{width:76px;height:76px;border-radius:16px;background:var(--cbg);display:grid;place-items:center}
+  .avatar svg{width:60px;height:60px;image-rendering:pixelated;shape-rendering:crispEdges}
+  .dept .name{font-size:15px;font-weight:800;color:var(--c)}
+  .dept .role{font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.4;min-height:32px}
+
+  /* ── CTA ── */
+  .cta{margin:clamp(34px,6vw,56px) auto 0;max-width:640px;text-align:center}
+  .cta p{color:var(--muted);font-weight:600;font-size:15px;margin:0 0 16px}
+  .btn{display:inline-flex;align-items:center;gap:9px;font-family:inherit;font-size:15.5px;font-weight:800;
+    color:#fff;background:linear-gradient(150deg,var(--brand),var(--brand2));border:none;cursor:pointer;
+    padding:14px 26px;border-radius:14px;text-decoration:none;box-shadow:0 14px 26px -12px rgba(234,106,58,.75);
+    transition:transform .15s ease, box-shadow .15s ease}
+  .btn:hover{transform:translateY(-2px);box-shadow:0 20px 32px -12px rgba(234,106,58,.8)}
+  .btn.ghost{color:var(--ink);background:#fff;border:1px solid var(--line);box-shadow:none;margin-left:10px}
+  .btn.ghost:hover{background:#FAF9F7}
+
+  .foot{margin:56px auto 0;text-align:center;color:var(--muted);font-size:12.5px;font-weight:600}
+
+  @media (max-width:640px){
+    h1{font-size:30px} .cards{gap:10px}
+    .brand-card{min-width:200px;padding:18px 24px}
+    .btn.ghost{margin-left:0;margin-top:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow"><b></b>AI 자동화 오피스</span>
+  <h1>AI 하나로 돌리는<br /><span class="num">7개</span> 자동화 부서</h1>
+  <p class="sub">개발부터 법무까지 — 각 부서를 맡은 AI 에이전트가 대신 일합니다.</p>
+  <div class="badges">
+    <span class="badge">7개 부서</span>
+    <span class="badge">12 AI 에이전트</span>
+    <span class="badge free">G1~G6 게이트 파이프라인</span>
+  </div>
+
+  <div class="chart">
+    <div class="chart-inner">
+      <!-- 브랜드 노드 -->
+      <div class="brand-node">
+        <div class="brand-card">
+          <div class="brand-mark">
+            <!-- 원본 마크: APEX 'A' 픽셀 모노그램 -->
+            <svg width="34" height="34" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true">
+              <g fill="#fff">
+                <rect x="5" y="1" width="2" height="1"/>
+                <rect x="4" y="2" width="1" height="1"/><rect x="7" y="2" width="1" height="1"/>
+                <rect x="4" y="3" width="1" height="1"/><rect x="7" y="3" width="1" height="1"/>
+                <rect x="3" y="4" width="1" height="1"/><rect x="8" y="4" width="1" height="1"/>
+                <rect x="3" y="5" width="6" height="1"/>
+                <rect x="2" y="6" width="2" height="1"/><rect x="8" y="6" width="2" height="1"/>
+                <rect x="2" y="7" width="2" height="1"/><rect x="8" y="7" width="2" height="1"/>
+                <rect x="2" y="8" width="1" height="1"/><rect x="9" y="8" width="1" height="1"/>
+              </g>
+            </svg>
+          </div>
+          <div class="brand-name">APEX <span>AI 오피스</span></div>
+        </div>
+      </div>
+
+      <div class="trunk"></div>
+      <div class="rail-wrap" id="railWrap"></div>
+      <div class="cards" id="cards"></div>
+    </div>
+  </div>
+
+  <div class="cta">
+    <p>부서가 실제로 일하는 모습을 픽셀 사무실에서 실시간으로 보세요.</p>
+    <a class="btn" href="./office.html">🏢 라이브 사무실 열기</a>
+    <a class="btn ghost" href="./?view=virtual-office">대시보드에서 보기</a>
+  </div>
+
+  <div class="foot">APEX 가상 사무실 · 12명의 AI 에이전트가 회의 → 작업 → 결재로 프로젝트를 굴립니다</div>
+</div>
+
+<script>
+// ── 부서 정의 (릴스의 7개 부서 구조를 사장님 오피스 톤으로) ──
+const DEPTS = [
+  { key:'dev',    name:'개발',        role:'빌드 팀 · 기획부터 완성까지', c:'#C2703D', bg:'#F6E9DF', ear:'horn' },
+  { key:'design', name:'디자인',      role:'디자인 스튜디오 · 개성 있게',  c:'#8B5FBF', bg:'#EFE7F7', ear:'antenna' },
+  { key:'mkt',    name:'마케팅',      role:'성장 엔진 · 카피·SEO·광고',    c:'#DE6E92', bg:'#F9E7EE', ear:'round' },
+  { key:'social', name:'소셜·콘텐츠', role:'콘텐츠 머신 · 자동 발행',      c:'#4F72CF', bg:'#E6EBF8', ear:'cat' },
+  { key:'fin',    name:'재무',        role:'CFO · 숫자부터 모델링',        c:'#2FA189', bg:'#E1F1EC', ear:'horn' },
+  { key:'ops',    name:'운영',        role:'운영 척추 · 기계처럼 굴리기',  c:'#6BAF42', bg:'#EBF3DF', ear:'antenna' },
+  { key:'legal',  name:'법무',        role:'법무 데스크 · 계약서 대독',    c:'#868C95', bg:'#ECEEF1', ear:'round' },
+];
+
+// ── 귀여운 픽셀 마스코트 생성기 (원본 도형) ──
+// 12x12 그리드. 색은 부서색(c) + 진한 음영(shade) + 흰 배(belly).
+function shade(hex, f){
+  const n=parseInt(hex.slice(1),16); let r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  r=Math.round(r*f); g=Math.round(g*f); b=Math.round(b*f);
+  return '#'+((1<<24)+(r<<16)+(g<<8)+b).toString(16).slice(1);
+}
+function ears(kind, c, dark){
+  // 각 부서 개성: 귀/뿔/안테나/고양이귀
+  if(kind==='horn')   return rects([[3,0,1,1],[8,0,1,1],[3,1,2,1],[7,1,2,1]], c);
+  if(kind==='antenna')return rects([[3,-1,1,1],[8,-1,1,1]], dark)+rects([[3,0,1,1],[8,0,1,1],[3,1,2,1],[7,1,2,1]], c);
+  if(kind==='cat')    return rects([[2,0,2,1],[8,0,2,1],[2,1,2,1],[8,1,2,1]], c)+rects([[3,1,1,1],[8,1,1,1]], dark);
+  return rects([[3,1,2,1],[7,1,2,1]], c); // round
+}
+function rects(list, fill){
+  return list.map(([x,y,w,h])=>`<rect x="${x}" y="${y+1}" width="${w}" height="${h}" fill="${fill}"/>`).join('');
+}
+function mascot(d){
+  const dark = shade(d.c, .72);
+  const belly = '#FFFFFF';
+  // 몸통(둥근 블롭)
+  const body = rects([
+    [3,2,6,1],[2,3,8,1],[2,4,8,1],[2,5,8,1],[2,6,8,1],[2,7,8,1],[3,8,6,1],[4,9,4,1]
+  ], d.c);
+  // 아래 음영
+  const under = rects([[3,8,6,1],[4,9,4,1]], dark);
+  // 흰 배
+  const bel = rects([[4,6,4,1],[4,7,4,1]], belly);
+  // 눈 (흰자+검은자)
+  const eyeW = rects([[3,4,2,1],[7,4,2,1]], '#FFFFFF');
+  const eyeB = rects([[4,4,1,1],[8,4,1,1]], '#22242A');
+  // 볼터치
+  const cheek = rects([[2,5,1,1],[9,5,1,1]], shade(d.bg,.92));
+  // 작은 발
+  const feet = rects([[3,10,1,1],[8,10,1,1]], dark);
+  return `<svg viewBox="-1 -1 14 14" shape-rendering="crispEdges" aria-hidden="true">
+    ${ears(d.ear, d.c, dark)}${body}${under}${bel}${cheek}${eyeW}${eyeB}${feet}
+  </svg>`;
+}
+
+// 카드 렌더
+const cardsEl = document.getElementById('cards');
+cardsEl.innerHTML = DEPTS.map(d=>`
+  <div class="dept" style="--c:${d.c};--cbg:${d.bg}">
+    <div class="avatar">${mascot(d)}</div>
+    <div class="name">${d.name}</div>
+    <div class="role">${d.role}</div>
+  </div>`).join('');
+
+// 커넥터(레일 + 드롭 + 노드닷) — 카드 중심에 맞춰 그림
+function drawRail(){
+  const wrap = document.getElementById('railWrap');
+  const cards = [...cardsEl.children];
+  if(!cards.length) return;
+  const wrapBox = wrap.getBoundingClientRect();
+  const centers = cards.map(c=>{const b=c.getBoundingClientRect();return b.left+b.width/2-wrapBox.left;});
+  const first=centers[0], last=centers[centers.length-1], mid=(first+last)/2;
+  wrap.innerHTML =
+    `<div class="rail" style="left:${first}px;width:${last-first}px"></div>` +
+    centers.map(x=>`<div class="drop" style="left:${x}px"></div>`).join('') +
+    centers.map(x=>`<div class="node-dot" style="left:${x}px"></div>`).join('') +
+    `<div class="node-dot" style="left:${mid}px"></div>`;
+}
+drawRail();
+window.addEventListener('resize', drawRail);
+</script>
+</body>
+</html>
