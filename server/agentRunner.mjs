@@ -51,6 +51,7 @@ async function runMock({ worker, gate, instruction, outDir }) {
     `- 과제: ${instruction.title}`,
     `- 목표: ${instruction.goal || '(미지정)'}`,
     `- 발주 자료(RFP): ${instruction.brief ? `수신됨(${instruction.brief.length}자)` : '없음'}`,
+    `- 첨부 파일: ${(instruction.attachmentPaths && instruction.attachmentPaths.length) ? instruction.attachmentPaths.join(', ') : '없음'}`,
     '',
     '> 이 파일은 **목업 산출물**입니다. `OFFICE_MODE=live` + `ANTHROPIC_API_KEY`로 실행하면',
     `> 실제 ${name} 에이전트가 스킬을 사용해 진짜 산출물로 대체합니다.`,
@@ -76,20 +77,25 @@ async function runLive({ worker, gate, instruction, outDir, log }) {
   const persona = await loadPersona(worker.id);
   const rel = path.relative(REPO_ROOT, outDir) || '.';
   const brief = String(instruction.brief || '').trim(); // 지시 콘솔에서 붙여넣은 RFP·자료 전문
+  const attach = Array.isArray(instruction.attachmentPaths) ? instruction.attachmentPaths : []; // 첨부 파일(상대경로)
+  const hasSource = brief || attach.length > 0;
   const prompt = [
     `# 과제: ${instruction.title}`,
     `목표: ${instruction.goal || '(자유 판단)'}`,
     // 발주 자료(RFP)가 있으면 모든 게이트의 에이전트가 이 내용을 사실 근거로 사용한다.
     ...(brief ? ['', '# 발주 자료 (RFP·요구사항) — 아래 내용을 사실 근거로 사용하세요', brief] : []),
+    // 첨부 파일이 있으면 Read 도구로 직접 열어 근거로 삼는다(PDF·텍스트 등).
+    ...(attach.length ? ['', '# 첨부 파일 — 반드시 Read 도구로 아래 파일을 먼저 열어 내용을 사실 근거로 사용하세요', ...attach.map((p) => `- ${p}`)] : []),
     '',
     `# 당신(${AGENT_NAME[worker.id]})의 이번 게이트 작업 — G${gate.g} ${gate.name}`,
     worker.task,
     '',
     '## 지시',
+    ...(attach.length ? ['- 작업 시작 전, 위 첨부 파일을 Read 도구로 모두 읽으세요.'] : []),
     `- 산출물을 '${rel}/' 폴더에 마크다운 파일로 저장하세요(Write 도구 사용).`,
     '- 한국어로, 근거와 함께 실무 수준으로 작성합니다.',
-    brief
-      ? '- 위 발주 자료(RFP)를 최우선 근거로 삼고, 자료에 없는 값만 "가정"으로 명시합니다(지어내지 않기).'
+    hasSource
+      ? '- 위 발주 자료·첨부를 최우선 근거로 삼고, 자료에 없는 값만 "가정"으로 명시합니다(지어내지 않기).'
       : '- 확정되지 않은 가정은 "미해결"로 명시하고 임의로 지어내지 않습니다(정직성).',
     '- 마지막 줄에 한 줄 요약을 출력하세요.',
   ].join('\n');

@@ -35,9 +35,34 @@ export async function runInstruction(instruction, { setState, deliverablesRoot, 
   }
   const outDir = path.join(deliverablesRoot, slug(instruction.title));
   await fs.mkdir(outDir, { recursive: true });
+
+  // 첨부 파일(_inbox 업로드본)을 과제 폴더로 복사하고, 에이전트가 읽을 상대경로 목록을 만든다.
+  const repoRoot = path.dirname(deliverablesRoot);
+  const attachmentPaths = [];
+  if (Array.isArray(instruction.attachments) && instruction.attachments.length) {
+    const attachDir = path.join(outDir, '_attachments');
+    await fs.mkdir(attachDir, { recursive: true });
+    for (const att of instruction.attachments) {
+      if (!att || !att.path) continue;
+      try {
+        const src = path.resolve(repoRoot, att.path);
+        // 안전장치: 소스는 반드시 DELIVERABLES 안(업로드 _inbox)이어야 한다.
+        if (!src.startsWith(deliverablesRoot + path.sep)) { log(`첨부 무시(허용 경로 밖): ${att.path}`); continue; }
+        const dest = path.join(attachDir, path.basename(att.path));
+        await fs.copyFile(src, dest);
+        attachmentPaths.push(path.relative(repoRoot, dest));
+      } catch (e) {
+        log(`첨부 처리 실패: ${att.name || att.path} — ${e.message}`);
+      }
+    }
+    if (attachmentPaths.length) log(`첨부 ${attachmentPaths.length}건을 과제 폴더로 준비했습니다.`);
+  }
+  // 이후 단계는 첨부 경로가 붙은 인스트럭션을 사용한다(에이전트 프롬프트에서 Read).
+  const inst = { ...instruction, attachmentPaths };
+
   await fs.writeFile(
     path.join(outDir, 'instruction.json'),
-    JSON.stringify({ ...instruction, mode }, null, 2),
+    JSON.stringify({ ...inst, mode }, null, 2),
     'utf8',
   );
   const indexLines = [`# ${instruction.title}`, '', `- 목표: ${instruction.goal || '(미지정)'}`, `- 모드: ${mode}`, '', '## 산출물', ''];
@@ -56,7 +81,7 @@ export async function runInstruction(instruction, { setState, deliverablesRoot, 
     await setState({ stage: gate.stage, phase: 'working', progress: 0.05, agents: workingMap(workers) });
     const artifacts = [];
     for (let w = 0; w < workers.length; w++) {
-      const r = await runWorker({ worker: workers[w], gate, instruction, outDir, mode, log });
+      const r = await runWorker({ worker: workers[w], gate, instruction: inst, outDir, mode, log });
       artifacts.push({ worker: workers[w], ...r });
       const p = Math.min(0.95, ((w + 1) / workers.length) * 0.95);
       await setState({ stage: gate.stage, phase: 'working', progress: p, agents: workingMap(workers) });

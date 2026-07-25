@@ -9,6 +9,7 @@
 
 import http from 'node:http';
 import path from 'node:path';
+import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readState, writeState, clearState } from './state.mjs';
 import { runInstruction } from './orchestrator.mjs';
@@ -16,6 +17,8 @@ import { runInstruction } from './orchestrator.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
 const DELIVERABLES_ROOT = path.join(REPO_ROOT, 'DELIVERABLES');
+const INBOX_DIR = path.join(DELIVERABLES_ROOT, '_inbox'); // 첨부 파일 임시 저장(과제 실행 시 과제 폴더로 복사)
+const MAX_UPLOAD = 25 * 1024 * 1024; // 파일 첨부 상한 25MB
 
 const PORT = Number(process.env.PORT || 8787);
 const MODE = process.env.OFFICE_MODE === 'live' ? 'live' : 'mock';
@@ -27,7 +30,7 @@ const log = (msg) => console.log(`[office] ${msg}`);
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-File-Name');
 }
 
 function sendJson(res, code, obj) {
@@ -47,6 +50,31 @@ function readBody(req) {
     req.on('end', () => resolve(data));
     req.on('error', reject);
   });
+}
+
+// 바이너리 안전 본문 수집(파일 업로드용). maxBytes 초과 시 거부.
+function readBodyBuffer(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let total = 0;
+    req.on('data', (c) => {
+      total += c.length;
+      if (total > maxBytes) { req.destroy(); reject(new Error('파일이 너무 큽니다(최대 25MB).')); return; }
+      chunks.push(c);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
+// 파일명 정리 — 경로 조작(../, 절대경로) 차단. 업로드는 반드시 _inbox 안에만 저장된다.
+function safeName(s) {
+  return String(s || 'file')
+    .replace(/[\\/]/g, '_')        // 경로 구분자 제거
+    .replace(/\.\.+/g, '_')        // 상위 이동 방지
+    .replace(/[:*?"<>|]+/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 80) || 'file';
 }
 
 const server = http.createServer(async (req, res) => {
@@ -99,6 +127,34 @@ const server = http.createServer(async (req, res) => {
       .then(() => runInstruction(instruction, { setState: writeState, deliverablesRoot: DELIVERABLES_ROOT, mode: MODE, log }))
       .catch((err) => log(`오케스트레이션 오류: ${err?.stack || err}`))
       .finally(() => { running = false; });
+    return;
+  }
+
+  // 파일 첨부 업로드 → _inbox에 저장 후 상대경로 반환. 지시 전송 시 attachments로 함께 보낸다.
+  // 바이트 그대로 body로 받고 파일명은 X-File-Name 헤더(URL 인코딩)로 전달.
+  if (req.method === 'POST' && url.pathname === '/api/upload') {
+    let buf;
+    try {
+      buf = await readBodyBuffer(req, MAX_UPLOAD);
+    } catch (e) {
+      sendJson(res, 413, { error: e.message });
+      return;
+    }
+    if (!buf.length) { sendJson(res, 400, { error: '빈 파일입니다.' }); return; }
+    let rawName = 'file';
+    try { rawName = decodeURIComponent(req.headers['x-file-name'] || 'file'); } catch { /* 헤더 디코드 실패 시 기본명 */ }
+    const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const stored = `${stamp}__${safeName(rawName)}`;
+    try {
+      await fs.mkdir(INBOX_DIR, { recursive: true });
+      await fs.writeFile(path.join(INBOX_DIR, stored), buf); // safeName 보장 → _inbox 밖으로 못 나감
+    } catch (e) {
+      sendJson(res, 500, { error: `저장 실패: ${e.message}` });
+      return;
+    }
+    const rel = path.relative(REPO_ROOT, path.join(INBOX_DIR, stored));
+    log(`첨부 수신: ${rawName} (${(buf.length / 1024).toFixed(0)}KB) → ${rel}`);
+    sendJson(res, 200, { ok: true, name: rawName, path: rel, size: buf.length });
     return;
   }
 

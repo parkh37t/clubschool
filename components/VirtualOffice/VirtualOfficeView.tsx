@@ -16,6 +16,15 @@ interface VirtualOfficeViewProps {
   instructUrl?: string;
 }
 
+interface AttachedFile {
+  id: number;
+  name: string;
+  size: number;
+  path?: string; // 서버 저장 상대경로(업로드 완료 시)
+  status: 'uploading' | 'done' | 'error';
+  error?: string;
+}
+
 const GATE_NAMES = ['영업/평가', '기획', '디자인', '구현', '검증/배포', '그로스'];
 
 const FONT = "'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif";
@@ -57,6 +66,36 @@ export function VirtualOfficeView({
   const [instrStatus, setInstrStatus] = useState('');
   const [instrBusy, setInstrBusy] = useState(false);
 
+  // 파일 첨부 상태 — 백엔드(instructUrl) 연결 시에만 업로드 가능.
+  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachIdRef = useRef(0);
+  // 업로드 엔드포인트는 지시 엔드포인트와 같은 오리진(/api/instruct → /api/upload).
+  const uploadUrl = instructUrl ? instructUrl.replace(/\/instruct$/, '/upload') : undefined;
+
+  const uploadFile = async (file: File) => {
+    if (!uploadUrl) return;
+    const id = ++attachIdRef.current;
+    setAttachments((a) => [...a, { id, name: file.name, size: file.size, status: 'uploading' }]);
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'X-File-Name': encodeURIComponent(file.name) },
+        body: file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `업로드 실패 (${res.status})`);
+      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'done', path: data.path } : x)));
+    } catch (e) {
+      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'error', error: (e as Error).message } : x)));
+    }
+  };
+  const handleFiles = (files: FileList | null) => {
+    if (files) Array.from(files).forEach(uploadFile);
+  };
+  const removeAttachment = (id: number) => setAttachments((a) => a.filter((x) => x.id !== id));
+
   useEffect(() => {
     if (!svgRef.current) return;
     const sim = new OfficeSimulator(svgRef.current, {
@@ -94,7 +133,8 @@ export function VirtualOfficeView({
     const title = instrTitle.trim();
     if (!title) { setInstrStatus('과제명을 입력하세요.'); return; }
     const gates = instrGates.map((on, i) => (on ? 'G' + (i + 1) : null)).filter(Boolean);
-    const instruction = { title, goal: instrGoal.trim(), brief: instrBrief.trim(), gates, ts: new Date().toISOString() };
+    const files = attachments.filter((a) => a.status === 'done' && a.path).map((a) => ({ name: a.name, path: a.path }));
+    const instruction = { title, goal: instrGoal.trim(), brief: instrBrief.trim(), attachments: files, gates, ts: new Date().toISOString() };
     const json = JSON.stringify(instruction, null, 2);
     setInstrBusy(true); setInstrStatus('');
     try {
@@ -203,6 +243,49 @@ export function VirtualOfficeView({
             {instrBrief.trim() && (
               <p style={{ fontSize: 11, color: '#1F6B3A', fontWeight: 600, margin: '5px 0 0' }}>
                 자료 {instrBrief.trim().length.toLocaleString()}자 첨부됨 — 에이전트가 이 자료를 근거로 작성합니다.
+              </p>
+            )}
+
+            {/* 파일 첨부 — 백엔드 연결 시 서버로 업로드 → 에이전트가 Read로 직접 열람 */}
+            {uploadUrl ? (
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
+                style={{ marginTop: 8, border: `1.5px dashed ${dragOver ? '#2D8C4E' : '#DDD6C8'}`, background: dragOver ? '#F0F8F2' : '#FCFAF5', borderRadius: 8, padding: '10px 12px', transition: 'border-color .15s ease, background .15s ease' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: '5px 11px', borderRadius: 7, border: '1px solid #DDD6C8', background: '#fff', color: '#24291F' }}
+                  >📎 파일 첨부</button>
+                  <span style={{ fontSize: 11.5, color: '#8B877B' }}>또는 여기로 끌어다 놓기 · PDF·워드·텍스트, 최대 25MB</span>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
+                  style={{ display: 'none' }}
+                />
+                {attachments.length > 0 && (
+                  <ul style={{ listStyle: 'none', margin: '9px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {attachments.map((a) => (
+                      <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: '#fff', border: '1px solid #EEE9DD', borderRadius: 7, padding: '6px 9px' }}>
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{a.name}</span>
+                        <span style={{ fontSize: 11, color: a.status === 'error' ? '#B24A3A' : a.status === 'done' ? '#1F6B3A' : '#8B877B', whiteSpace: 'nowrap' }}>
+                          {a.status === 'uploading' ? '업로드 중…' : a.status === 'error' ? (a.error || '실패') : `${Math.max(1, Math.round(a.size / 1024)).toLocaleString()}KB`}
+                        </span>
+                        <button type="button" onClick={() => removeAttachment(a.id)} title="제거" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8B877B', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <p style={{ fontSize: 11, color: '#8B877B', margin: '7px 0 0', lineHeight: 1.5 }}>
+                파일 첨부는 백엔드 연결 시 가능합니다. 지금은 위 칸에 자료를 텍스트로 붙여넣어 주세요.
               </p>
             )}
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '9px 0' }}>
