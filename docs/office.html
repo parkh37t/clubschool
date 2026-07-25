@@ -3,6 +3,17 @@
 <head>
   <meta charset="utf-8">
   <title>APEX 가상 사무실 · AI 에이전트 오피스</title>
+<script>
+  // ?api=<백엔드주소> 로 열면 → 실제 상태 폴링·지시 전송이 되는 앱 라이브 뷰로 연결한다.
+  // (이 단독 파일은 데모 전용이라 applyOfficeState 훅이 없어, 라이브는 앱 뷰가 담당)
+  // ?api 없으면 그대로 데모로 동작.
+  (function () {
+    try {
+      var api = new URLSearchParams(location.search).get('api');
+      if (api) location.replace('./?view=virtual-office&api=' + encodeURIComponent(api));
+    } catch (e) { /* 무시: 데모로 동작 */ }
+  })();
+</script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #1B1F2E; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
