@@ -3,7 +3,9 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { useIsMobile } from './ui/use-mobile';
-import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, Building2, Sparkles } from 'lucide-react';
+import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, Building2, Sparkles, ChevronDown } from 'lucide-react';
+import { AX_AGENT_MENU } from '../constants/axAgentMenu';
+import { useAxAgentPage, setAxAgentPage } from '../hooks/useAxAgentPage';
 
 interface NavigationProps {
   currentView: string;
@@ -20,13 +22,28 @@ const navItems = [
   { id: 'virtual-office', label: '가상 사무실', icon: Building2, badge: 'AI 팀' },
 ];
 
+const AX_AGENT_VIEW = 'ax-planning-agent';
+
 export const Navigation = React.memo(function Navigation({ currentView, onViewChange }: NavigationProps) {
   const isMobile = useIsMobile();
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
+  // AX 기획 에이전트 서브 메뉴 — 메뉴를 누르면 아래로 펼쳐지고, 화면을 떠나면 접힌다.
+  const agentPage = useAxAgentPage();
+  const [agentOpen, setAgentOpen] = useState(currentView === AX_AGENT_VIEW);
+  const agentActive = currentView === AX_AGENT_VIEW;
+  const handleAgentSub = useCallback((route: string) => {
+    setAxAgentPage(route);
+    if (currentView !== AX_AGENT_VIEW) onViewChange(AX_AGENT_VIEW);
+    if (isMobile) setIsSheetOpen(false);
+  }, [currentView, onViewChange, isMobile]);
+
   const handleNavClick = useCallback((view: string) => {
     console.log('Navigation clicked:', view);
     try {
+      // AX 기획 에이전트: 이미 그 화면이면 서브 메뉴만 접고 펴고, 아니면 화면 이동 + 펼침
+      if (view === AX_AGENT_VIEW) setAgentOpen((o) => (currentView === AX_AGENT_VIEW ? !o : true));
+      else setAgentOpen(false);
       onViewChange(view);
       
       // 모바일에서 메뉴 클릭 시 Sheet 닫기
@@ -36,7 +53,7 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
     } catch (error) {
       console.error('Error in navigation click:', error);
     }
-  }, [onViewChange, isMobile]);
+  }, [onViewChange, isMobile, currentView]);
 
   const handleHamburgerClick = useCallback(() => {
     console.log('Hamburger clicked, current state:', isSheetOpen);
@@ -70,14 +87,16 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
       </div>
       
       {/* 네비게이션 메뉴 - Apple 스타일 */}
-      <nav className="flex-1 p-3 space-y-2" role="navigation" aria-label="메인 네비게이션">
+      <nav className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2" role="navigation" aria-label="메인 네비게이션">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = currentView === item.id;
           
+          const isAgent = item.id === AX_AGENT_VIEW;
+          const showSub = isAgent && agentOpen;
           return (
+            <div key={item.id}>
             <Button
-              key={item.id}
               variant="ghost"
               className={`w-full justify-start h-auto py-3 px-4 rounded-xl transition-all duration-200 ${
                 isActive 
@@ -107,7 +126,49 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
                   New
                 </Badge>
               )}
+              {isAgent && (
+                <ChevronDown className={`h-4 w-4 ml-2 flex-shrink-0 transition-transform duration-200 ${showSub ? 'rotate-180' : ''}`} />
+              )}
             </Button>
+
+            {/* AX 기획 에이전트 서브 메뉴 — con-ai 사이트의 왼쪽 메뉴를 그대로 */}
+            {showSub && (
+              <div className="mt-1 ml-4 pl-4 border-l-2 border-[#EFEAF7] space-y-3 py-1 animate-fade-in" role="group" aria-label="AX 기획 에이전트 하위 메뉴">
+                {AX_AGENT_MENU.map((group, gi) => (
+                  <div key={group.title ?? gi}>
+                    {group.title && (
+                      <div className="px-2 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground">{group.title}</div>
+                    )}
+                    <div className="space-y-0.5">
+                      {group.items.map((sub) => {
+                        const subActive = agentActive && agentPage === sub.route;
+                        return (
+                          <button
+                            key={sub.route}
+                            type="button"
+                            onClick={() => handleAgentSub(sub.route)}
+                            aria-current={subActive ? 'page' : undefined}
+                            className={`w-full flex items-center gap-2.5 text-left rounded-lg px-2 py-1.5 text-[13px] transition-colors ${
+                              subActive ? 'bg-[#EFEAF7] text-[#43306B] font-semibold' : 'text-gray-700 hover:bg-gray-100'
+                            }`}
+                          >
+                            {sub.step ? (
+                              <span className={`h-5 w-5 rounded-full text-[11px] font-bold flex items-center justify-center flex-shrink-0 ${
+                                subActive ? 'bg-[#6A4C9C] text-white' : 'bg-gray-200 text-gray-700'
+                              }`}>{sub.step}</span>
+                            ) : (
+                              <span className={`h-1.5 w-1.5 rounded-full ml-2 mr-1 flex-shrink-0 ${subActive ? 'bg-[#6A4C9C]' : 'bg-gray-400'}`} />
+                            )}
+                            <span className="truncate">{sub.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            </div>
           );
         })}
       </nav>
@@ -132,7 +193,7 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
         </div>
       </div>
     </div>
-  ), [currentView, isMobile, handleNavClick]);
+  ), [currentView, isMobile, handleNavClick, agentOpen, agentActive, agentPage, handleAgentSub]);
 
   // 모바일 버전 - Sheet 사용
   if (isMobile) {
@@ -171,7 +232,7 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
 
   // 데스크톱 버전
   return (
-    <div className="w-72 bg-white border-r border-gray-200 shadow-sm">
+    <div className="w-72 h-screen flex-shrink-0 bg-white border-r border-gray-200 shadow-sm">
       {NavigationContent}
     </div>
   );
