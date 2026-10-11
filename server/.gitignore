@@ -1,3 +1,13 @@
 node_modules/
 .env
 office-state.json
+# hive 실행 데이터 — 작업 원장·메일함·기억·이벤트는 커밋하지 않는다(README·초기 현황판만 둔다)
+hive/tasks.json
+hive/tasks.json.tmp
+hive/approvals.json
+hive/approvals.json.tmp
+hive/briefings/
+hive/inbox/
+hive/outbox/
+hive/memory/
+hive/events.log

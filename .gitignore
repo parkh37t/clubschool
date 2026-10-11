@@ -46,3 +46,14 @@ dist-standalone/
 # 고객 첨부 원본(RFP 등) — 업로드 임시함과 과제별 첨부 사본은 커밋하지 않는다
 DELIVERABLES/_inbox/
 DELIVERABLES/**/_attachments/
+
+# Wylie AX Office hive 실행 데이터(server/hive) — 작업 원장·메일함·기억·이벤트
+server/hive/tasks.json
+server/hive/tasks.json.tmp
+server/hive/approvals.json
+server/hive/approvals.json.tmp
+server/hive/briefings/
+server/hive/inbox/
+server/hive/outbox/
+server/hive/memory/
+server/hive/events.log

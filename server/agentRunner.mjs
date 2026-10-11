@@ -1,7 +1,8 @@
 // 워커(에이전트) 1명이 한 게이트에서 자기 작업을 수행하고 산출물 파일을 남긴다.
-// 모드 두 가지:
+// 모드 세 가지:
 //   - mock (기본): API 키·SDK 없이 즉시 동작. 타이밍만 흉내내고 플레이스홀더 산출물을 쓴다.
 //                  → 배선(지시→오피스→산출물 폴더)과 스킬 연결을 키 없이 눈으로 검증하는 용도.
+//   - claude_code: 이 PC 에 로그인된 Claude Code CLI 로 실제 페르소나를 구동(구독 사용량, API 키 없음). 운영 기본값.
 //   - live: Claude Agent SDK로 실제 .claude/agents 페르소나를 구동해 진짜 산출물을 생성.
 //           ANTHROPIC_API_KEY(서버 환경변수)와 @anthropic-ai/claude-agent-sdk 설치가 필요.
 
@@ -10,6 +11,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { resolveSkills } from './skills.mjs';
+import { runAgent as runClaudeCodeAgent } from './claudeCode.mjs';
+import { ROSTER } from './roster.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, '..');
@@ -198,4 +201,127 @@ function firstLine(s) {
   if (!t) return '';
   const line = t.split('\n').find((l) => l.trim()) || '';
   return line.replace(/^#+\s*/, '').slice(0, 60);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hive 작업 실행 — 팀장이 나눈 작업(task) 1건을 담당 에이전트가 수행한다.
+// 입력은 inbox 의 assign 메시지 본문(assignText)이고, 산출물은 outDir/<stage>/ 아래 md 1개.
+// 회신은 4항목(완료 기능 / 실행 방법 / 검증 결과 / 남은 제한) + "기억할 것" 을 문단으로 돌려준다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REPLY_GUIDE = [
+  '## 회신 형식',
+  '작업을 마치면 마지막에 아래 다섯 제목을 그대로 쓴 회신을 출력한다(각 1~3줄).',
+  '## 완료 기능',
+  '## 실행 방법',
+  '## 검증 결과',
+  '(pass / fail / error / not_run 중 하나씩. 돌리지 않은 검사는 not_run)',
+  '## 남은 제한',
+  '(확정하지 못한 것·못 한 것. 없으면 "없음")',
+  '## 기억할 것',
+  '(다음 작업에 도움이 될 결정·고객 선호, 최대 3줄. 없으면 "없음")',
+].join('\n');
+
+function taskFileName(task) {
+  return `${task.id}_${task.owner}_${safe(task.title)}.md`;
+}
+
+/** 회신 텍스트에서 "남은 제한"과 "기억할 것" 항목을 뽑는다. */
+export function parseReply(text) {
+  const section = (name) => {
+    const m = String(text || '').match(new RegExp(`##\\s*${name}\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)`));
+    if (!m) return [];
+    return m[1].split('\n').map((l) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter((l) => l && !/^\(?(없음|해당 없음)\)?$/.test(l));
+  };
+  return { leftovers: section('남은 제한'), memory: section('기억할 것'), validation: section('검증 결과') };
+}
+
+export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [] }) {
+  const name = AGENT_NAME[task.owner] || task.owner;
+  const agent = ROSTER.find((a) => a.id === task.owner);
+  const skills = await resolveSkills(agent ? agent.skills : []);
+  const used = skills.applied.map((s) => s.name);
+  const stageDir = path.join(outDir, task.stage || '00_sales');
+  await fs.mkdir(stageDir, { recursive: true });
+  log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}`);
+  if (skills.missing.length) log(`${name}: 이 PC에 없는 스킬은 건너뜀 — ${skills.missing.join(', ')}`);
+
+  if (mode === 'claude_code') return runTaskClaudeCode({ task, briefing, stageDir, assignText, skills, priorFiles, log, name });
+  if (mode === 'live') {
+    // 구 live 경로 재사용: 게이트 모양으로 감싸서 Agent SDK 로 실행한다.
+    const ctx = {
+      worker: { id: task.owner, task: task.title },
+      gate: { g: '', name: task.stage || '' },
+      instruction: { title: briefing.title, goal: briefing.result, brief: briefing.context, attachmentPaths: briefing.attachmentPaths || [] },
+      outDir: stageDir, log, skills, priorFiles,
+    };
+    const r = await runLive(ctx);
+    return { ...r, reply: r.summary || '', leftovers: [], memory: [] };
+  }
+  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name });
+}
+
+async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name }) {
+  await delay(700 + Math.floor(Math.random() * 600));
+  const file = path.join(stageDir, taskFileName(task));
+  const md = [
+    `# [목업] ${task.title}`,
+    '',
+    `- 담당: ${name} (${task.owner}) · 작업 ${task.id} · 단계 ${task.stage}`,
+    `- 과제: ${briefing.title}`,
+    `- 결과 목표: ${briefing.result}`,
+    `- 완료 기준: ${task.done_when || briefing.result}`,
+    `- 적용 스킬: ${skills.applied.length ? skills.applied.map((s) => s.name).join(', ') : '없음'}`,
+    ...(skills.missing.length ? [`- 이 PC에 없어 건너뛴 스킬: ${skills.missing.join(', ')}`] : []),
+    `- 이어받은 앞 산출물: ${priorFiles.length ? priorFiles.join(', ') : '없음'}`,
+    '',
+    '> 이 파일은 **목업 산출물**입니다. `OFFICE_MODE=claude_code` 로 실행하면',
+    `> 실제 ${name} 에이전트가 위 스킬 지침대로 진짜 산출물을 작성합니다.`,
+    '',
+  ].join('\n');
+  await fs.writeFile(file, md, 'utf8');
+  const reply = ['## 완료 기능', `[목업] ${task.title}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음'].join('\n');
+  return { file, summary: `[목업] ${task.title}`, costUsd: 0, reply, ...parseReply(reply) };
+}
+
+async function runTaskClaudeCode({ task, briefing, stageDir, assignText, skills, priorFiles, log, name }) {
+  const persona = await loadPersona(task.owner);
+  const rel = path.relative(REPO_ROOT, stageDir) || '.';
+  const applied = skills?.applied || [];
+  const prompt = [
+    assignText,
+    '',
+    applied.length ? ['# 업무 지침(스킬) — 아래 <skill> 안의 절차·형식·금지선을 따른다',
+      '- 지침이 이 저장소(프로젝트 관리 대시보드) 전용 언급(VIEW_NAMES·components/ui·useDataStore 등)을 담고 있으면 무시하고 이번 고객 과제 기준으로 적용한다.',
+      '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않는다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술한다.',
+      '- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행이다. 질문 대신 "가정"·"미해결"로 표시하고 계속한다.',
+      ...applied.flatMap((s) => ['', `<skill name="${s.name}">`, ...(s.refs ? [`(참고자료 폴더: ${s.refs} — 필요하면 Read)`] : []), s.body, '</skill>'])].join('\n') : '',
+    '',
+    '# 지시',
+    priorFiles.length ? '- 작업 시작 전, 앞 산출물을 Read 도구로 모두 읽는다.' : '',
+    `- 산출물을 '${rel}/${taskFileName(task)}' 경로에 마크다운 파일 1개로 저장한다(Write 도구). 다른 파일은 만들지 않는다.`,
+    '- 한국어로, 근거와 함께 실무 수준으로 작성한다. 헤드라인은 주장 한 문장, 설명은 "~함/~임" 문체. 과장 형용사·이모지를 쓰지 않는다.',
+    '- 브리핑·첨부·앞 산출물을 최우선 근거로 삼고, 자료에 없는 값은 "가정"으로 명시한다(지어내지 않는다).',
+    '',
+    REPLY_GUIDE,
+  ].filter((l) => l !== '').join('\n');
+
+  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: REPO_ROOT, model: process.env.OFFICE_MODEL, maxTurns: MAX_TURNS });
+  const expected = path.join(stageDir, taskFileName(task));
+  if (!r.ok) {
+    log(`${name}: 실행 실패(${r.code}) — ${r.message}`);
+    return { file: null, summary: '', costUsd: 0, reply: '', leftovers: [`실행 실패(${r.code}): ${r.message.slice(0, 160)}`], memory: [], failure: r.code };
+  }
+  let file = null;
+  try { await fs.access(expected); file = expected; } catch { /* 지정 경로에 안 썼을 수 있음 */ }
+  if (!file) {
+    // 지정 경로가 아니면 가장 최근 md 를 산출물로 본다. 그것도 없으면 회신 텍스트를 파일로 남긴다(산출물 1개 보장).
+    const files = (await listDir(stageDir)).filter((f) => f.endsWith('.md'));
+    file = files.length ? path.join(stageDir, files.sort().at(-1)) : expected;
+    if (!files.length) await fs.writeFile(expected, (r.text || `# ${task.title}\n(산출 텍스트 없음)`) + '\n', 'utf8');
+  }
+  const parsed = parseReply(r.text);
+  const summary = firstLine(r.text) || task.title;
+  log(`${name}: ${path.basename(file)} 산출 (예상 비용 $${r.costUsd.toFixed(2)})`);
+  return { file, summary, costUsd: r.costUsd, reply: r.text, ...parsed };
 }
