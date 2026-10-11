@@ -100,6 +100,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot, mode, log }
   await delay(1200);
   const plan = await decompose(b, { mode, model: process.env.OFFICE_MODEL, log });
   costUsd += plan.costUsd || 0;
+  log(`팀장 분해: 작업 ${plan.tasks.length}건 · 되물음 ${plan.questions?.length || 0}건 (${plan.via}, 비용 $${(plan.costUsd || 0).toFixed(2)})`);
   if (!plan.tasks.length) {
     const q = plan.questions.join('\n- ');
     await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'question', task: '', body: `브리핑 "${b.title}" 을 작업으로 나누지 못했습니다.\n\n- ${q}\n\n결과 줄을 고쳐 다시 보내 주세요.` });
@@ -157,7 +158,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot, mode, log }
     }
     const outRel = path.relative(REPO_ROOT, r.file);
     const docx = await exportDocx(r.file, log).catch(() => null);
-    await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? path.relative(REPO_ROOT, docx) : '' });
+    await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? path.relative(REPO_ROOT, docx) : '', cost_usd: Number((r.costUsd || 0).toFixed(4)) });
     await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, stage: task.stage, body: r.reply || `산출물: ${outRel}` });
     await hive.routeMail();
     if (r.memory?.length) await hive.appendMemory(task.owner, r.memory, { taskId: task.id });
@@ -167,8 +168,8 @@ export async function runBriefing(raw, { setState, deliverablesRoot, mode, log }
     await setState(await officeState({ briefingId, phase: 'working', current: { stage: boardStage, qa: task.id } }));
     const verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log });
     costUsd += verdict.costUsd || 0;
-    await hive.updateTask(task.id, { gate: verdict.gate, qa: { summary: verdict.summary, checks: verdict.checks, issues: verdict.issues, via: verdict.via } });
-    log(`QA ${task.id}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}`).join(' ')}`);
+    await hive.updateTask(task.id, { gate: verdict.gate, qa: { summary: verdict.summary, checks: verdict.checks, issues: verdict.issues, via: verdict.via, cost_usd: Number((verdict.costUsd || 0).toFixed(4)) } });
+    log(`QA ${task.id}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}`).join(' ')} (QA 비용 $${(verdict.costUsd || 0).toFixed(2)})`);
     if (verdict.gate === 'FAIL') {
       await hive.updateTask(task.id, { status: '실패' });
       await hive.sendMessage({ from: QA_AGENT, to: task.owner, type: 'answer', task: task.id, body: `게이트 FAIL\n\n${verdict.issues.map((i) => `- ${i}`).join('\n')}` });
