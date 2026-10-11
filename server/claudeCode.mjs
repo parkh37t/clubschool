@@ -8,11 +8,36 @@
 //     돌지 않은 호출을 성공처럼 꾸미지 않는다.
 
 import { spawn } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import fsSync, { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const BIN = process.env.CLAUDE_BIN || (process.platform === 'win32' ? 'claude.cmd' : 'claude');
+// 실행 파일 결정 순서: CLAUDE_BIN → PATH 의 claude → (Windows) Claude 데스크톱 앱이 내장한 claude.exe.
+// 데스크톱 앱(%APPDATA%\Claude\claude-code\<버전>\<해시>\claude.exe)으로만 Claude Code 를 쓰는 PC 가 있어서 그 경로를 찾아 준다.
+function findDesktopBundledClaude() {
+  if (process.platform !== 'win32' || !process.env.APPDATA) return null;
+  const root = path.join(process.env.APPDATA, 'Claude', 'claude-code');
+  try {
+    const hits = [];
+    for (const ver of fsSync.readdirSync(root)) {
+      const vdir = path.join(root, ver);
+      if (!fsSync.statSync(vdir).isDirectory()) continue;
+      for (const h of fsSync.readdirSync(vdir)) {
+        const exe = path.join(vdir, h, 'claude.exe');
+        if (fsSync.existsSync(exe)) hits.push({ exe, mtime: fsSync.statSync(exe).mtimeMs });
+      }
+    }
+    hits.sort((a, b) => b.mtime - a.mtime);
+    return hits[0]?.exe || null;
+  } catch { return null; }
+}
+
+const BIN = process.env.CLAUDE_BIN
+  || (process.platform === 'win32' ? (findDesktopBundledClaude() || 'claude.cmd') : 'claude');
+// .cmd/.bat 는 셸이 필요하지만, .exe 를 셸로 돌리면 cmd.exe 가 JSON 인용부호를 깨뜨린다.
+const NEEDS_SHELL = process.platform === 'win32' && /\.(cmd|bat)$/i.test(BIN);
+
+export function claudeBinPath() { return BIN; }
 
 /** CLI 가 PATH 에 있는지. 없으면 null 대신 버전 문자열을 돌려주지 않고 false. */
 export async function claudeAvailable() {
@@ -26,7 +51,7 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env } = {}) {
     let stderr = '';
     let child;
     try {
-      child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: process.platform === 'win32', windowsHide: true });
+      child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: NEEDS_SHELL, windowsHide: true });
     } catch (e) {
       resolve({ code: -1, stdout, stderr, error: e });
       return;

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { readState, writeState, clearState } from './state.mjs';
 import { runBriefing } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
-import { claudeAvailable } from './claudeCode.mjs';
+import { claudeAvailable, claudeBinPath } from './claudeCode.mjs';
 import { ALL_MAIL_IDS } from './roster.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -209,7 +209,7 @@ server.listen(PORT, async () => {
   if (MODE === 'mock') log('mock 모드: 키 없이 배선만 검증(산출물은 목업, QA 내용검토 not_run). 실제 실행은 OFFICE_MODE=claude_code.');
   else if (MODE === 'claude_code') {
     const v = await claudeAvailable();
-    if (v) log(`claude_code 모드: Claude Code CLI ${v} 사용(로그인된 계정의 구독 사용량). API 키 불필요.`);
+    if (v) log(`claude_code 모드: Claude Code CLI ${v} 사용(로그인된 계정의 구독 사용량). API 키 불필요. 실행 파일: ${claudeBinPath()}`);
     else log('경고: claude_code 모드인데 claude CLI 를 찾지 못했습니다. 설치·로그인(claude) 후 다시 실행하세요. 더미로 바꿔 돌리지 않습니다.');
   } else if (!process.env.ANTHROPIC_API_KEY) log('경고: live 모드인데 ANTHROPIC_API_KEY가 없습니다.');
 });
