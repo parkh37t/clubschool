@@ -34,12 +34,27 @@ export interface OfficeSimulatorOptions {
 /** 실전 연동용 외부 상태 스키마 (오케스트레이터가 쓰는 office-state.json 형태).
  *  applyOfficeState(state)로 주입하면 내부 자동 시나리오는 멈추고 이 상태가 화면을 구동한다. */
 export interface OfficeAgentState { state: AgentState; task?: string; }
+
+/** hive(server/hive) 요약 — 작업 원장·승인 큐·메일 이벤트. 서버 orchestrator.officeState()가 만든다. */
+export interface HiveTask { id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean; }
+export interface HiveApproval { id: string; task: string; kind: string; reason: string; status: string; payload?: { output?: string; gate?: string } | null; }
+export interface HiveMail { id: string; from: string; to: string; type: string; task?: string; ts?: string; }
+export interface HiveState {
+  briefing?: string;
+  tasks: HiveTask[];
+  pending: HiveApproval[];
+  approvals?: HiveApproval[];
+  mail: HiveMail[];
+  leader?: { id: string; name: string; state: AgentState; task?: string };
+}
 export interface OfficeState {
   stage: number;
   phase: Phase;
   progress?: number;
   agents?: Record<string, OfficeAgentState>;
-  artifact?: { file: string; score: number };
+  artifact?: { file: string; score: number; gate?: string };
+  hive?: HiveState;
+  question?: string; // 팀장이 되물은 질문(분해 실패 시)
 }
 
 interface DeptDef { label: string; c: string; }
@@ -100,6 +115,13 @@ export class OfficeSimulator {
   private bossDoc: SVGGElement | null = null;
   private walkLayer!: SVGGElement;
 
+  // hive 연동 — 봉투 비행·피드 중복 방지·마지막 hive 스냅샷
+  private envelopes: { node: SVGGElement; from: Pt; to: Pt; t: number; dur: number }[] = [];
+  private seenMail = new Set<string>();
+  private seenTaskState = new Map<string, string>();
+  private hive: HiveState | null = null;
+  private question = '';
+
   private timer: ReturnType<typeof setInterval> | null = null;
   private raf = 0;
   private toastT: ReturnType<typeof setTimeout> | null = null;
@@ -113,6 +135,7 @@ export class OfficeSimulator {
       sales: { label: '영업', c: '#D0684A' }, plan: { label: '기획', c: '#4A7DBF' },
       design: { label: '디자인', c: '#B75FA2' }, pub: { label: '퍼블리싱', c: '#7A68C9' },
       dev: { label: '개발', c: '#3E9C8C' }, dm: { label: '데이터·마케팅', c: '#C79A3A' },
+      lead: { label: '팀장', c: '#6A4C9C' }, // Wylie AX Office 팀장(오케스트레이터) — 와일리 보라
     };
     this.AGENTS = [
       { id: 'han', name: '한도전', role: '영업팀장', dept: 'sales', hair: '#3B2E24', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' },
@@ -140,7 +163,7 @@ export class OfficeSimulator {
     ];
     this.MEET_SPOTS = [{ x: 157, y: 735, top: 1 }, { x: 177, y: 796 }, { x: 237, y: 735, top: 1 }, { x: 257, y: 796 }, { x: 317, y: 735, top: 1 }, { x: 297, y: 796 }];
     this.LOUNGE_SPOTS = [{ x: 698, y: 306 }, { x: 626, y: 324 }, { x: 604, y: 331 }, { x: 622, y: 331 }, { x: 652, y: 376 }, { x: 700, y: 392 }];
-    this.BRIEF_SPOTS = Array.from({ length: 12 }, (_, i) => i < 6 ? { x: 508 + i * 33, y: 800 } : { x: 508 + (i - 6) * 33, y: 826 });
+    this.BRIEF_SPOTS = Array.from({ length: 12 }, (_, i) => i < 6 ? { x: 582 + i * 26, y: 800 } : { x: 582 + (i - 6) * 26, y: 826 });
     this.st = { stage: 0, phase: 'working', progress: 0, speed: opts.initialSpeed ?? 1, playing: true, auto: opts.autoApprove ?? false, clockMin: 540, day: 1, autoWait: 0, meetWait: 0 };
 
     this.buildOffice();
@@ -434,7 +457,7 @@ export class OfficeSimulator {
   private buildBriefingRoom(): void {
     const el = this.el.bind(this);
     el('rect', { x: 500, y: 710, width: 240, height: 150, fill: '#262B3E', stroke: '#161A26', 'stroke-width': 2 });
-    el('text', { x: 512, y: 730, class: 'roomlabel', text: '브리핑 룸 · 사용자 직통' });
+    el('text', { x: 512, y: 730, class: 'roomlabel', text: '팀장실 · 브리핑' });
     el('rect', { x: 520, y: 736, width: 180, height: 62, rx: 3, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
     el('rect', { x: 526, y: 742, width: 168, height: 50, fill: '#101420' });
     el('rect', { x: 526, y: 742, width: 168, height: 11, fill: '#0C1016' });
@@ -446,6 +469,8 @@ export class OfficeSimulator {
     el('rect', { x: 560, y: 798, width: 10, height: 5, fill: '#141824' });
     el('rect', { x: 650, y: 798, width: 10, height: 5, fill: '#141824' });
     this.buildPlant(716, 826);
+    // 팀장 책상 — 재하의 브리핑을 받아 작업을 나누는 자리(Munder Difflin 의 마이클 자리)
+    this.buildDesk({ id: 'lead', name: '팀장', role: '오케스트레이터', dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' }, 512, 778, 12);
   }
 
   private buildDoor(cx: number, cy: number, horiz: boolean): void {
@@ -549,12 +574,46 @@ export class OfficeSimulator {
     m.pos = { ...m.seatAbs };
   }
 
+  /* ── 봉투 비행: hive 메일 이벤트(assign/result/approval…)를 책상 사이를 나는 봉투로 보여 준다 ── */
+  private seatOf(id: string): Pt | null {
+    if (id === 'jaeha') return { x: 650, y: 80 };           // 재하 = 사장실
+    const m = this.M[id];
+    return m ? { x: m.seatAbs.x + 10, y: m.seatAbs.y + 6 } : null;
+  }
+
+  private flyEnvelope(fromId: string, toId: string, type: string): void {
+    const from = this.seatOf(fromId), to = this.seatOf(toId);
+    if (!from || !to || !this.walkLayer) return;
+    const el = this.el.bind(this);
+    const color = type === 'approval' ? '#E8A33D' : type === 'result' || type === 'report' ? '#7FE3A6' : type === 'question' ? '#D0684A' : '#FFFFFF';
+    const g = el('g', { class: 'envelope', transform: `translate(${from.x},${from.y})` }, this.walkLayer) as SVGGElement;
+    el('rect', { x: -7, y: -5, width: 14, height: 10, rx: 1.5, fill: color, stroke: '#24291F', 'stroke-width': 1 }, g);
+    el('path', { d: 'M-7 -5l7 5 7-5', stroke: '#24291F', 'stroke-width': 1, fill: 'none' }, g);
+    const dist = Math.abs(to.x - from.x) + Math.abs(to.y - from.y);
+    this.envelopes.push({ node: g, from, to, t: 0, dur: Math.max(500, Math.min(1800, dist * 2.2)) });
+  }
+
+  private stepEnvelopes(dtms: number): void {
+    if (!this.envelopes.length) return;
+    this.envelopes = this.envelopes.filter(e => {
+      e.t += dtms * this.st.speed;
+      const k = Math.min(1, e.t / e.dur);
+      const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      const x = e.from.x + (e.to.x - e.from.x) * ease;
+      const y = e.from.y + (e.to.y - e.from.y) * ease - Math.sin(k * Math.PI) * 28; // 포물선
+      e.node.setAttribute('transform', `translate(${x},${y})`);
+      if (k >= 1) { e.node.remove(); return false; }
+      return true;
+    });
+  }
+
   private loungeSocial(): void {
     const ls = Object.keys(this.M).filter(id => this.M[id].wander && this.M[id].wander.phase === 'linger');
     ls.forEach(id => this.M[id].node.classList.toggle('talking', ls.length >= 2));
   }
 
   private stepWalk(dtms: number): void {
+    this.stepEnvelopes(dtms);
     for (const id in this.M) {
       const m = this.M[id];
       if (m.mode !== 'walking') continue;
@@ -681,7 +740,8 @@ export class OfficeSimulator {
     st.phase = 'awaiting'; st.progress = 1; st.autoWait = 0;
     const sc = this.SCENARIO[st.stage];
     sc.workers.forEach(w => this.setAgent(w.id, 'waiting', ''));
-    this.feedAdd('게이트', `G${st.stage + 1} 검수 통과 (${sc.artifact.score}점) — 결재 대기`, 'gate');
+    if (this.externalMode) this.feedAdd('게이트', `G${st.stage + 1} ${this.GATES[st.stage]} — 결재 대기`, 'gate');
+    else this.feedAdd('게이트', `G${st.stage + 1} 검수 통과 (${sc.artifact.score}점) — 결재 대기`, 'gate');
     this.setBossDoc(true);
     this.opts.onRender();
   }
@@ -808,13 +868,15 @@ export class OfficeSimulator {
     const stageClamped = Math.max(0, Math.min(ext.stage | 0, this.SCENARIO.length - 1));
     const phaseChanged = ext.phase !== st.phase;
     const stageChanged = stageClamped !== st.stage;
-    // 단계 상승 = 이전 게이트 결재 완료 → 산출물 적재
-    if (ext.stage > this.lastExtStage && ext.artifact) {
+    // 단계 상승 = 이전 게이트 결재 완료 → 산출물 적재 (hive 가 있으면 작업 원장에서 산출물을 만들므로 건너뛴다)
+    if (!ext.hive && ext.stage > this.lastExtStage && ext.artifact) {
       this.artifacts = [{ g: 'G' + ext.stage, f: ext.artifact.file, s: ext.artifact.score + '점' }, ...this.artifacts];
       this.feedAdd('사장', `G${ext.stage} 결재 완료`, 'sys');
     }
     this.lastExtStage = ext.stage;
     st.stage = stageClamped;
+    this.question = ext.question || '';
+    if (ext.hive) this.applyHive(ext.hive);
     if (typeof ext.progress === 'number') st.progress = Math.max(0, Math.min(1, ext.progress));
     if (phaseChanged || stageChanged) {
       st.phase = ext.phase;
@@ -828,6 +890,36 @@ export class OfficeSimulator {
     }
     this.opts.onRender();
   }
+
+  /** hive 스냅샷 → 산출물 패널·피드·봉투·팀장 자리. 상태 변화가 있는 항목만 피드에 쓴다. */
+  private applyHive(h: HiveState): void {
+    this.hive = h;
+    const name = (id: string) => id === 'lead' ? '팀장' : id === 'jaeha' ? '재하' : (this.AGENTS.find(a => a.id === id)?.name ?? id);
+    for (const m of h.mail || []) {
+      if (!m.id || this.seenMail.has(m.id)) continue;
+      this.seenMail.add(m.id);
+      this.flyEnvelope(m.from, m.to, m.type);
+      const what = m.type === 'assign' ? '작업 배정' : m.type === 'result' ? '산출물 회신' : m.type === 'approval' ? '승인 요청' : m.type === 'question' ? '질문' : m.type === 'answer' ? '답변' : m.type === 'report' ? '보고' : m.type;
+      this.feedAdd(name(m.from), `${name(m.to)}에게 ${what}${m.task ? ` (${m.task})` : ''}`, m.type === 'approval' || m.type === 'question' ? 'gate' : undefined);
+    }
+    for (const t of h.tasks || []) {
+      const key = `${t.status}|${t.gate}`;
+      if (this.seenTaskState.get(t.id) === key) continue;
+      this.seenTaskState.set(t.id, key);
+      if (t.status === '완료') this.feedAdd('QA', `${t.id} ${t.title} — 게이트 ${t.gate} · 완료`, 'sys');
+      else if (t.status === '실패') this.feedAdd('QA', `${t.id} ${t.title} — 게이트 FAIL`, 'gate');
+      else if (t.status === '승인대기') this.feedAdd('팀장', `${t.id} ${t.title} — 재하 승인 대기`, 'gate');
+    }
+    this.artifacts = (h.tasks || []).filter(t => t.status === '완료' && t.output).map(t => ({
+      g: t.id, f: (t.output || '').split('/').pop() || t.title, s: t.gate,
+    })).reverse();
+    if (h.leader) this.setAgent('lead', h.leader.state, h.leader.task || '');
+    this.setBossDoc((h.pending || []).length > 0);
+  }
+
+  /** 마지막 hive 스냅샷(React 패널이 작업판·승인 카드를 그린다). */
+  getHive(): HiveState | null { return this.hive; }
+  getQuestion(): string { return this.question; }
 
   private driveExternalPhase(phase: Phase, workers: Worker[]): void {
     if (phase === 'meeting') {
@@ -896,16 +988,16 @@ export class OfficeSimulator {
       };
     });
     return {
-      teamLabel: this.opts.teamLabel ?? '컨버전스1팀 · 파일럿',
+      teamLabel: this.opts.teamLabel ?? '와일리 컨버전스 · AX Office',
       clock: this.clockStr(),
       playLabel: st.phase === 'done-all' ? '▶ 재생' : (st.playing ? '⏸ 일시정지' : '▶ 재생'),
       speedLabel: `속도 ${st.speed}×`,
       auto: st.auto,
       gates,
-      showApprovalCard: st.phase === 'awaiting',
-      approvalDesc: `G${st.stage + 1} ${this.GATES[Math.min(st.stage, 5)]} 게이트 검수 통과`,
-      approvalFile: sc.artifact.file,
-      approvalScore: sc.artifact.score + '점',
+      showApprovalCard: st.phase === 'awaiting' && !(this.hive && this.hive.pending.length === 0 && !this.question),
+      approvalDesc: this.hive ? '재하 승인 대기' : `G${st.stage + 1} ${this.GATES[Math.min(st.stage, 5)]} 게이트 검수 통과`,
+      approvalFile: this.hive ? (this.hive.pending[0]?.payload?.output?.split('/').pop() ?? '') : sc.artifact.file,
+      approvalScore: this.hive ? (this.hive.pending[0]?.payload?.gate ?? '') : sc.artifact.score + '점',
       feed: this.feed,
       feedEmpty: this.feed.length === 0,
       artifacts: this.artifacts,
