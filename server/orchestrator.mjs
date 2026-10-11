@@ -11,6 +11,8 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { pickGates, AGENT_NAME } from './gates.mjs';
 import { runWorker } from './agentRunner.mjs';
+import { hasSkill } from './skills.mjs';
+import { exportDocx } from './docxExport.mjs';
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -19,7 +21,12 @@ function slug(s) {
 }
 
 const idleMap = (workers) => Object.fromEntries(workers.map((w) => [w.id, { state: 'idle', task: '' }]));
-const workingMap = (workers) => Object.fromEntries(workers.map((w) => [w.id, { state: 'working', task: w.task }]));
+// current: 지금 실행 중인 작업 — 같은 사람이 여러 작업을 맡으면(G1 한도전 전략→검수) 현재 작업명을 보여준다.
+const workingMap = (workers, current) => {
+  const map = Object.fromEntries(workers.map((w) => [w.id, { state: 'working', task: w.task }]));
+  if (current) map[current.id] = { state: 'working', task: current.task };
+  return map;
+};
 const waitingMap = (workers) => Object.fromEntries(workers.map((w) => [w.id, { state: 'waiting', task: '' }]));
 
 /**
@@ -68,26 +75,40 @@ export async function runInstruction(instruction, { setState, deliverablesRoot, 
   const indexLines = [`# ${instruction.title}`, '', `- 목표: ${instruction.goal || '(미지정)'}`, `- 모드: ${mode}`, '', '## 산출물', ''];
   log(`지시 접수: "${instruction.title}" — 게이트 ${gates.map((g) => 'G' + g.g).join(', ')} (${mode} 모드)`);
 
+  const produced = []; // 지금까지 나온 산출물(저장소 기준 상대경로) — 뒤 작업자가 Read로 이어받는다
+  let totalCost = 0;
+
   for (let i = 0; i < gates.length; i++) {
     const gate = gates[i];
-    const workers = gate.workers;
+    // 필수 스킬이 이 PC에 없는 작업(예: 와일리 검수)은 건너뛴다.
+    const workers = [];
+    for (const w of gate.workers) {
+      if (w.requires && !(await hasSkill(w.requires))) {
+        log(`G${gate.g} ${AGENT_NAME[w.id]}·${w.task}: '${w.requires}' 스킬이 이 PC에 없어 건너뜀`);
+        continue;
+      }
+      workers.push(w);
+    }
 
     // 1) 킥오프 회의 — 담당자 소집(오피스: 회의실 이동 안무)
     await setState({ stage: gate.stage, phase: 'meeting', progress: 0, agents: idleMap(workers) });
-    log(`G${gate.g} ${gate.name}: 킥오프 (${workers.map((w) => AGENT_NAME[w.id]).join(', ')})`);
+    log(`G${gate.g} ${gate.name}: 킥오프 (${[...new Set(workers.map((w) => AGENT_NAME[w.id]))].join(', ')})`);
     await delay(1600);
 
-    // 2) 작업 — 워커를 순차 실행하며 진행률을 올린다
-    await setState({ stage: gate.stage, phase: 'working', progress: 0.05, agents: workingMap(workers) });
+    // 2) 작업 — 워커를 순차 실행. 현재 작업자를 표시하고, 앞 산출물을 넘겨 이어받게 한다.
     const artifacts = [];
     for (let w = 0; w < workers.length; w++) {
-      const r = await runWorker({ worker: workers[w], gate, instruction: inst, outDir, mode, log });
-      artifacts.push({ worker: workers[w], ...r });
-      const p = Math.min(0.95, ((w + 1) / workers.length) * 0.95);
-      await setState({ stage: gate.stage, phase: 'working', progress: p, agents: workingMap(workers) });
+      const progress = Math.max(0.05, Math.min(0.95, (w / workers.length) * 0.95));
+      await setState({ stage: gate.stage, phase: 'working', progress, agents: workingMap(workers, workers[w]) });
+      const r = await runWorker({ worker: workers[w], gate, instruction: inst, outDir, mode, log, priorFiles: [...produced] });
+      totalCost += r.costUsd || 0;
+      // 고객 제출·공유용 Word 사본(.docx)을 같은 폴더에 만든다.
+      const docx = r.file.toLowerCase().endsWith('.md') ? await exportDocx(r.file, log) : null;
+      artifacts.push({ worker: workers[w], ...r, docx });
+      produced.push(path.relative(repoRoot, r.file));
     }
     for (const a of artifacts) {
-      indexLines.push(`- **G${gate.g}** ${AGENT_NAME[a.worker.id]} · ${path.basename(a.file)} — ${a.summary}`);
+      indexLines.push(`- **G${gate.g}** ${AGENT_NAME[a.worker.id]} · ${path.basename(a.file)}${a.docx ? ` (Word: ${path.basename(a.docx)})` : ''} — ${a.summary}`);
     }
 
     // 3) 결재 대기 — 검수 통과, 사장 결재 요청
@@ -109,5 +130,9 @@ export async function runInstruction(instruction, { setState, deliverablesRoot, 
     }
   }
 
+  if (totalCost > 0) {
+    indexLines.push('', `- 예상 비용 합계: $${totalCost.toFixed(2)} (SDK 추정치, 청구서 아님)`);
+    log(`이번 지시 예상 비용 합계: $${totalCost.toFixed(2)}`);
+  }
   await fs.writeFile(path.join(outDir, '_index.md'), indexLines.join('\n') + '\n', 'utf8');
 }
