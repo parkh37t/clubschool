@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { OfficeSimulator } from './officeSimulator';
 import type { RenderVals, HiveState } from './officeSimulator';
+import { normalizeBase, saveOfficeBackend } from './officeBackend';
 import './virtualOffice.css';
 
 interface VirtualOfficeViewProps {
@@ -14,6 +15,10 @@ interface VirtualOfficeViewProps {
   pollMs?: number;
   /** 브리핑 제출 대상(백엔드 API). 지정 시 브리핑을 POST(경로 B). 미지정 시 복사/다운로드(경로 A). */
   instructUrl?: string;
+  /** 연결된 백엔드 기준 주소(표시용). ''=같은 오리진, undefined=미연결 */
+  backendBase?: string;
+  /** 백엔드 주소를 어디서 정했는지(표시용) */
+  backendSource?: 'query' | 'saved' | 'local' | 'none';
 }
 
 interface AttachedFile {
@@ -69,7 +74,26 @@ export function VirtualOfficeView({
   stateUrl,
   pollMs = 2000,
   instructUrl,
+  backendBase,
+  backendSource = 'none',
 }: VirtualOfficeViewProps) {
+  // 공개 사이트(GitHub Pages)에서 PC 서버에 붙기 위한 주소 입력 — 저장 후 새로고침하면 officeBackend 가 읽는다.
+  const [serverInput, setServerInput] = useState(backendBase || '');
+  const [serverMsg, setServerMsg] = useState('');
+  const connectServer = () => {
+    const base = normalizeBase(serverInput);
+    if (!base) { setServerMsg('https:// 로 시작하는 서버 주소를 넣어 주세요.'); return; }
+    saveOfficeBackend(base);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('api');
+    window.location.href = url.toString(); // 저장한 주소로 다시 연결
+  };
+  const disconnectServer = () => {
+    saveOfficeBackend(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete('api');
+    window.location.href = url.toString();
+  };
   const svgRef = useRef<SVGSVGElement>(null);
   const simRef = useRef<OfficeSimulator | null>(null);
   const [, setVersion] = useState(0);
@@ -230,7 +254,8 @@ export function VirtualOfficeView({
           <span style={{ width: 12, height: 12, background: WYLIE, boxShadow: 'inset -3px -3px 0 rgba(0,0,0,.18)', display: 'inline-block', flexShrink: 0 }} />
           <span>Wylie AX Office</span>
           <span style={{ fontWeight: 600, fontSize: 12.5, color: '#8B877B', background: '#FFFFFF', border: '1px solid #DDD6C8', padding: '3px 9px', borderRadius: 999 }}>{rv.teamLabel}</span>
-          {hive && <span style={{ fontWeight: 700, fontSize: 11.5, color: WYLIE_DARK, background: WYLIE_TINT, border: `1px solid ${WYLIE}`, padding: '2px 8px', borderRadius: 999 }}>hive 연결</span>}
+          {hive && <span style={{ fontWeight: 700, fontSize: 11.5, color: WYLIE_DARK, background: WYLIE_TINT, border: `1px solid ${WYLIE}`, padding: '2px 8px', borderRadius: 999 }}>hive 연결{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>}
+          {!hive && stateUrl && <span style={{ fontWeight: 700, fontSize: 11.5, color: '#A14A2A', background: '#FBEFE9', border: '1px solid #E3B39F', padding: '2px 8px', borderRadius: 999 }}>서버 응답 없음{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>}
         </div>
         <div style={{ fontSize: 13, color: '#8B877B', fontWeight: 600, fontFamily: MONO, letterSpacing: '.06em' }}>{rv.clock}</div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -245,6 +270,25 @@ export function VirtualOfficeView({
           <button className="apex-btn apex-btn--ghost" onClick={() => sim?.reset()}>리셋</button>
         </div>
       </header>
+
+      {/* 서버 주소 — 공개 사이트에서 PC 에 띄운 서버(터널 주소)에 붙인다. 로컬 개발(같은 오리진)에서는 숨김 */}
+      {backendSource !== 'local' && (
+        <section aria-label="서버 연결" style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '10px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: WYLIE_DARK, whiteSpace: 'nowrap' }}>PC 서버 주소</span>
+          <input
+            value={serverInput}
+            onChange={(e) => setServerInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') connectServer(); }}
+            placeholder="https://xxxx.trycloudflare.com  (PC 에서 start-ax-office.ps1 이 출력한 주소)"
+            style={{ ...inputStyle, marginTop: 0, flex: '1 1 320px', fontFamily: MONO, fontSize: 12.5 }}
+          />
+          <button className="apex-btn apex-btn--primary" onClick={connectServer}>연결</button>
+          {backendBase && <button className="apex-btn apex-btn--ghost" onClick={disconnectServer}>연결 해제</button>}
+          <span style={{ fontSize: 11.5, color: '#8B877B', flexBasis: '100%' }}>
+            {serverMsg || (backendSource === 'saved' ? '이 브라우저에 저장된 주소로 연결 중입니다. 주소가 바뀌면 다시 넣어 주세요(터널을 새로 켤 때마다 바뀝니다).' : '미연결이면 내부 데모만 돕니다. PC 에서 서버와 터널을 켠 뒤 그 주소를 넣으면 실제 작업을 여기서 봅니다.')}
+          </span>
+        </section>
+      )}
 
       {/* 게이트 보드 */}
       <section aria-label="파이프라인 게이트 현황" style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '14px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>

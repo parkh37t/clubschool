@@ -10,6 +10,7 @@ export const VIEW_NAMES = {
   PROJECT_REVIEW: 'project-review',
   MEMBER_PROFILE: 'member-profile',
   MONTHLY_DETAILS: 'monthly-details',
+  AX_PLANNING_AGENT: 'ax-planning-agent',
   VIRTUAL_OFFICE: 'virtual-office',
 } as const;
 

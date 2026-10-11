@@ -3,7 +3,7 @@ import { Button } from "./ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetDescription, SheetHeader } from "./ui/sheet";
 import { Badge } from "./ui/badge";
 import { useIsMobile } from './ui/use-mobile';
-import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, Building2 } from 'lucide-react';
+import { BarChart3, Users, FolderOpen, Menu, Settings, TrendingUp, Target, Building2, Sparkles } from 'lucide-react';
 
 interface NavigationProps {
   currentView: string;
@@ -16,6 +16,7 @@ const navItems = [
   { id: 'analytics', label: '데이터 분석', icon: TrendingUp },
   { id: 'members', label: '인력 관리', icon: Users },
   { id: 'projects', label: '프로젝트 관리', icon: FolderOpen },
+  { id: 'ax-planning-agent', label: 'AX 기획 에이전트', icon: Sparkles, badge: 'con-ai' },
   { id: 'virtual-office', label: '가상 사무실', icon: Building2, badge: 'AI 팀' },
 ];
 
@@ -49,10 +50,10 @@ export const Navigation = React.memo(function Navigation({ currentView, onViewCh
         <div className="flex items-start gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold leading-tight truncate">
-              그룹 운영 대시보드
+              AX 에이전트
             </h2>
             <p className="text-muted-foreground leading-tight mt-1 truncate">
-              프로젝트 & 인력 관리 시스템
+              와일리 컨버전스 · 에이전트 오피스
             </p>
           </div>
         </div>

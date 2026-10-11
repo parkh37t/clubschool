@@ -104,9 +104,26 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 ## 프론트 연결
 
 가상 사무실 뷰는 `components/VirtualOffice/officeBackend.ts`의 `resolveOfficeBackend()`로 이 서버 위치를 정합니다.
-- `?api=<주소>` → 그 주소의 서버에 연결(예: PC를 터널로 공개한 주소 — 공개 사이트에서 실제 실행 관람)
+- `?api=<주소>` → 그 주소의 서버에 연결하고 브라우저에 기억(다음부터 `?api` 없이도 연결). `?api=off` 로 지움
 - `localhost`(개발) → 같은 오리진. `vite.config.ts` 프록시가 `/office-state.json`·`/api`를 이 서버(8787)로 넘김
+- 기억해 둔 주소 → 공개 사이트의 "PC 서버 주소" 칸에 넣은 값
 - 지정 없는 정적 배포 → 미연결(오피스 자체 데모)
+
+### 공개 사이트(GitHub Pages)에서 PC 서버 보기
+
+서버는 PC 에서 돌고, 화면은 `https://parkh37t.github.io/clubschool/?view=virtual-office` 로 봅니다.
+브라우저(https)가 PC 의 `localhost:8787` 에 직접 닿을 수 없으므로 PC 를 https 주소로 공개하는 단계가 하나 필요합니다.
+
+```
+start-ax-office.cmd   ← 저장소 루트에서 더블클릭(또는 powershell -ExecutionPolicy Bypass -File start-ax-office.ps1)
+```
+1. `server/office-server.mjs` 를 `OFFICE_MODE=claude_code` 로 새 창에 띄움
+2. cloudflared 임시 공개 주소(`https://xxxx.trycloudflare.com` → `localhost:8787`)를 새 창에 띄움(없으면 winget 설치를 물어봄 — 계정 불필요)
+3. `https://parkh37t.github.io/clubschool/?view=virtual-office&api=https://xxxx.trycloudflare.com` 을 출력·복사·브라우저로 엶
+
+공개 주소는 켤 때마다 바뀝니다. 사이트가 주소를 브라우저에 기억하므로, 바뀌면 "PC 서버 주소" 칸에 새 주소만 넣으면 됩니다.
+산출물·hive 는 여전히 PC 의 `DELIVERABLES/`·`server/hive/` 에 쌓이고, 사이트는 그걸 보여 주기만 합니다.
+공개 주소에는 인증이 없으니 쓸 때만 켜고 끝나면 창을 닫습니다.
 
 ## 보안·비용 주의
 - **API 키는 서버(환경변수)에만.** 브라우저/프론트 코드/저장소/채팅에 넣지 않습니다.
