@@ -2,7 +2,7 @@
 // con-ai(packages/model-adapter/src/claude-code-cli.ts)에서 검증된 패턴을 옮긴 것:
 //   - API 키 없음. 구독 계정의 사용량으로 잡힌다. 자격 증명을 우리 코드가 보지 않는다.
 //   - 구조화 출력은 `claude -p --output-format json --json-schema <schema>` 로 받는다.
-//   - 팀장(분해)·QA(판정)처럼 도구가 필요 없는 호출은 `--bare --tools ""` 로 격리한다.
+//   - 팀장(분해)·QA(판정)처럼 도구가 필요 없는 호출은 `--tools "" --setting-sources ""` 로 격리한다(--bare 는 API 키 전용).
 //   - 역할 에이전트(산출물 작성)는 Read/Write/Grep/Glob 만 허용하고 Bash 는 막는다.
 //   - 실패는 코드로 분류해 돌려준다(cli_missing / not_logged_in / timeout / parse / error).
 //     돌지 않은 호출을 성공처럼 꾸미지 않는다.
@@ -69,7 +69,7 @@ function classify(r) {
   if (r.error && r.error.code === 'ENOENT') return 'cli_missing';
   if (/\[timeout\]/.test(r.stderr)) return 'timeout';
   const text = (r.stdout + '\n' + r.stderr).toLowerCase();
-  if (/not logged in|please run \/login|authentication error|invalid api key|log in/.test(text)) return 'not_logged_in';
+  if (/not logged in|please run \/login|authentication error|failed to authenticate|oauth session expired|invalid api key|log in/.test(text)) return 'not_logged_in';
   if (/rate limit|429|overloaded/.test(text)) return 'rate_limit';
   return 'error';
 }
@@ -105,9 +105,11 @@ function extractStructured(res) {
 export async function runStructured({ system, prompt, schema, model, timeoutMs = 240000, maxTurns = 3 }) {
   // 빈 임시 디렉터리에서 돌린다 — cwd 의 CLAUDE.md·훅·MCP 가 섞이지 않게(con-ai 와 같은 이유).
   const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'ax-office-'));
+  // `--bare` 는 키체인/OAuth 자격 증명을 읽지 않아(API 키 전용) claude.ai 로그인 PC 에서는 "Not logged in" 이 난다.
+  // 그래서 --bare 대신 --tools "" + --setting-sources "" + --strict-mcp-config 로 격리한다.
   const argv = [
     BIN, '-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema),
-    '--bare', '--tools', '', '--setting-sources', '', '--strict-mcp-config',
+    '--tools', '', '--setting-sources', '', '--strict-mcp-config',
     '--no-session-persistence', '--max-turns', String(maxTurns),
   ];
   if (system) argv.push('--system-prompt', system);
