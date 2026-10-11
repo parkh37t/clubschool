@@ -37,3 +37,12 @@ yarn-error.log*
 .cache/
 .vite/
 dist-standalone/
+
+# 사내 전용 스킬 — 공개 저장소에 올리지 않는다(각 PC의 .claude/skills 에만 둔다)
+.claude/skills/wylie-*/
+.claude/skills/ba-agent/
+.claude/skills/proposal-maker/
+
+# 고객 첨부 원본(RFP 등) — 업로드 임시함과 과제별 첨부 사본은 커밋하지 않는다
+DELIVERABLES/_inbox/
+DELIVERABLES/**/_attachments/

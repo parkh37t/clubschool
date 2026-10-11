@@ -65,6 +65,22 @@ export default [
     },
   },
   {
+    // 오케스트레이터 서버(server/*.mjs)는 브라우저가 아니라 Node에서 돈다 — Node 전역을 선언한다.
+    files: ['server/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+  {
     ignores: ['dist', 'node_modules', '*.config.js', '*.config.ts'],
   },
 ];
