@@ -15,6 +15,7 @@ import { runStructured } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
 import { hasSkill } from './skills.mjs';
 import { AGENTS_DIR } from './paths.mjs';
+import { getSettings, languageLine } from './settings.mjs';
 
 const APPROVAL_PATTERNS = [
   { kind: '외부발송', re: /(고객|발주처|외부)\s*(에게|에)?\s*(발송|전송|제출|공유)|메일 발송|공유 링크/ },
@@ -102,7 +103,8 @@ async function decomposeByRules(b) {
 }
 
 // ── claude_code 분해 ──
-const DECOMPOSE_SCHEMA = {
+// 담당 enum 은 호출할 때마다 현재 명단(추가 인원 포함)으로 만든다.
+const decomposeSchema = () => ({
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -130,7 +132,7 @@ const DECOMPOSE_SCHEMA = {
     },
   },
   required: ['summary', 'questions', 'tasks'],
-};
+});
 
 async function loadLeaderPersona() {
   // (예전에는 URL.pathname 으로 경로를 만들어 Windows·한글 경로에서 파일을 못 찾고 기본 문구로 넘어갔다)
@@ -179,7 +181,8 @@ export async function decompose(briefing, { mode, model, log }) {
 
   if (mode === 'claude_code') {
     const system = await loadLeaderPersona();
-    const r = await runStructured({ system, prompt: decomposePrompt(b), schema: DECOMPOSE_SCHEMA, model });
+    const lang = languageLine(await getSettings());
+    const r = await runStructured({ system, prompt: decomposePrompt(b) + lang, schema: decomposeSchema(), model });
     if (r.ok) {
       const tasks = (r.data.tasks || []).map((t) => ({ ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '' }));
       return { tasks, questions: r.data.questions || [], summary: r.data.summary, via: 'claude_code', costUsd: r.costUsd };

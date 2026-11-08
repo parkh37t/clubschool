@@ -70,10 +70,12 @@ export async function claudeAvailable() {
   return r.code === 0 && !r.error ? r.stdout.trim() : false;
 }
 
-function run(argv, { cwd, stdin, timeoutMs = 300000, env } = {}) {
+/** onLine 이 있으면 stdout 을 줄 단위로 넘긴다(stream-json 실시간 처리). */
+function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine } = {}) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
+    let partial = '';
     let child;
     try {
       child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: NEEDS_SHELL, windowsHide: true });
@@ -83,7 +85,14 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env } = {}) {
     }
     ACTIVE.add(child);
     const timer = setTimeout(() => { killTree(child); stderr += '\n[timeout]'; }, timeoutMs);
-    child.stdout.on('data', (d) => { stdout += d; });
+    child.stdout.on('data', (d) => {
+      stdout += d;
+      if (!onLine) return;
+      partial += d;
+      const lines = partial.split('\n');
+      partial = lines.pop();
+      for (const l of lines) if (l.trim()) { try { onLine(l); } catch { /* 기록 실패가 실행을 멈추지 않게 */ } }
+    });
     child.stderr.on('data', (d) => { stderr += d; });
     child.on('error', (e) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code: -1, stdout, stderr, error: e }); });
     child.on('close', (code) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code, stdout, stderr, error: null }); });
@@ -194,27 +203,84 @@ export async function runStructured({ system, prompt, schema, model, timeoutMs =
   return { ok: true, data, costUsd: Number(res.total_cost_usd || 0), raw: res };
 }
 
+/** stream-json 출력에서 마지막 result 이벤트와 마지막 assistant 글을 찾는다. */
+function streamResult(stdout) {
+  let res = null;
+  let lastText = '';
+  for (const l of stdout.split('\n')) {
+    if (!l.trim().startsWith('{')) continue;
+    let ev;
+    try { ev = JSON.parse(l); } catch { continue; }
+    if (ev.type === 'result') res = ev;
+    else if (ev.type === 'assistant') {
+      for (const c of ev.message?.content || []) if (c?.type === 'text' && c.text) lastText = c.text;
+    }
+  }
+  return { res, lastText };
+}
+
 /**
- * 파일을 읽고 쓰는 역할 에이전트 호출(산출물 작성용). cwd 는 저장소 루트.
- * 허용 도구: Read, Write, Grep, Glob. Bash·Skill 은 막는다(무인 실행에서 명령 실행 금지).
- * @returns {Promise<{ok:true, text, costUsd, raw}|{ok:false, code, message, raw}>}
+ * 파일을 읽고 쓰는 역할 에이전트 호출(산출물 작성용).
+ * 출력은 stream-json 으로 받아 onEvent 로 한 줄씩 넘긴다(가상 사무실 '터미널' 탭의 실시간 기록).
+ * 허용 도구: Read, Write, Edit, Grep, Glob. Bash·Skill 은 막는다(무인 실행에서 명령 실행 금지).
+ * maxBudgetUsd 를 넘으면 CLI 가 멈추고 code:'budget' 으로 돌려준다(그때까지 쓴 비용 포함) — 호출한 쪽이 승인 카드로 올린다.
+ * @returns {Promise<{ok:true, text, costUsd, raw}|{ok:false, code, message, costUsd, text, raw}>}
  */
-export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000, maxTurns = 40, addDirs = [] }) {
+export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000, maxTurns = 40, addDirs = [], maxBudgetUsd, onEvent }) {
   const argv = [
-    BIN, '-p', '--output-format', 'json',
+    BIN, '-p', '--output-format', 'stream-json', '--verbose',
     '--allowedTools', 'Read', 'Write', 'Edit', 'Grep', 'Glob',
     '--disallowedTools', 'Bash', 'Skill', 'WebFetch', 'WebSearch',
     '--permission-mode', 'acceptEdits',
     '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence',
     '--max-turns', String(maxTurns),
   ];
+  if (maxBudgetUsd > 0) argv.push('--max-budget-usd', String(Number(maxBudgetUsd).toFixed(2)));
   for (const d of addDirs) argv.push('--add-dir', d);
   if (system) argv.push('--system-prompt', system);
   if (model) argv.push('--model', model);
-  const r = await run(argv, { cwd, stdin: prompt, timeoutMs });
-  const res = parseResultJson(r.stdout);
-  if (r.code !== 0 || r.error || !res || res.is_error) {
-    return { ok: false, code: classify(r), message: (res?.result || r.stderr || r.stdout || '').toString().slice(0, 600), raw: res };
+  const onLine = onEvent ? (l) => { try { onEvent(JSON.parse(l)); } catch { /* JSON 아닌 줄 무시 */ } } : undefined;
+  const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine });
+  const { res, lastText } = streamResult(r.stdout);
+  const costUsd = Number(res?.total_cost_usd || 0);
+  if (res?.subtype === 'error_max_budget_usd') {
+    return { ok: false, code: 'budget', message: `비용 상한($${Number(maxBudgetUsd).toFixed(2)}) 도달`, costUsd, text: lastText, raw: res };
   }
-  return { ok: true, text: String(res.result || ''), costUsd: Number(res.total_cost_usd || 0), raw: res };
+  if (r.code !== 0 || r.error || !res || res.is_error) {
+    return { ok: false, code: res?.subtype === 'error_max_turns' ? 'max_turns' : classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), costUsd, text: lastText, raw: res };
+  }
+  return { ok: true, text: String(res.result || lastText || ''), costUsd, raw: res };
+}
+
+/**
+ * 팀장 상주 세션 1턴 — 같은 세션을 이어 가며(--session-id 로 시작, 이후 --resume) 재하의 메시지를 한 건씩 처리한다.
+ * hive 를 읽기만 한다(Read·Grep·Glob). 답은 구조화 출력(schema)으로 받는다.
+ * @returns {Promise<{ok:true, data, costUsd, sessionId}|{ok:false, code, message, costUsd}>}
+ */
+export async function runLeaderTurn({ system, prompt, schema, sessionId, resume, cwd, addDirs = [], model, onEvent, timeoutMs = 300000, maxTurns = 12 }) {
+  const argv = [
+    BIN, '-p', '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(schema),
+    '--allowedTools', 'Read', 'Grep', 'Glob',
+    '--disallowedTools', 'Bash', 'Write', 'Edit', 'Skill', 'WebFetch', 'WebSearch',
+    '--setting-sources', '', '--strict-mcp-config', '--max-turns', String(maxTurns),
+  ];
+  argv.push(resume ? '--resume' : '--session-id', sessionId);
+  for (const d of addDirs) argv.push('--add-dir', d);
+  if (system) argv.push('--system-prompt', system);
+  if (model) argv.push('--model', model);
+  const onLine = onEvent ? (l) => { try { onEvent(JSON.parse(l)); } catch { /* 무시 */ } } : undefined;
+  const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine });
+  const { res } = streamResult(r.stdout);
+  const costUsd = Number(res?.total_cost_usd || 0);
+  if (r.code !== 0 || r.error || !res || res.is_error) {
+    return { ok: false, code: classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), costUsd };
+  }
+  const data = extractStructured(res);
+  if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', costUsd };
+  return { ok: true, data, costUsd, sessionId: res.session_id || sessionId };
+}
+
+/** 대화형 터미널(node-pty)에서 띄울 실행 파일과 셸 필요 여부. */
+export function interactiveCommand() {
+  return { bin: BIN, needsShell: NEEDS_SHELL };
 }

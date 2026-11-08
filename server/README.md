@@ -4,9 +4,11 @@
 → 12 AI 에이전트(`.claude/agents`)에게 **메시지(hive)** 로 배정 → 산출물마다 **QA 게이트**(pass/fail/error/not_run) →
 승인이 필요한 작업은 **재하가 결정할 때까지 멈추고** → 현황판·보고를 남깁니다. 진행은 가상 사무실이 2초마다 그립니다.
 
-> Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것입니다.
+> Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것입니다. 코드는 가져오지 않고
+> 운영 방식만 따랐습니다 — 팀장 상주 세션과 입력 대기열, hive 규칙(기억·편지함), "나에게 질문", 서킷 브레이커·예산, 역할 템플릿으로 인원 추가.
 > 상태는 전부 hive(기본 `server/hive/`)의 평문 파일에 있습니다(`hive/README.md`). 서버를 재시작해도 남습니다.
 > 더블클릭으로 쓰는 설치형 앱은 `desktop/README.md` 를 보세요(앱이 이 서버를 내부에서 띄웁니다).
+> 화면·안내·역할 템플릿은 한국어(기본)와 영어 두 벌입니다. 언어는 화면 오른쪽 위에서 바꾸고 `hive/settings.json` 에 남습니다.
 
 ## 실행
 
@@ -32,7 +34,7 @@ API 키가 필요 없고 자격 증명을 코드가 보지 않습니다. 팀장 
 ```bash
 OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 ```
-`.env.example` 의 선택 변수: `OFFICE_MODEL`, `OFFICE_MAX_USD`, `OFFICE_MAX_TURNS`, `CLAUDE_BIN`, `OFFICE_APPROVAL_TIMEOUT_MS`.
+`.env.example` 의 선택 변수: `OFFICE_MODEL`, `OFFICE_MAX_USD`, `OFFICE_AGENT_DAILY_USD`, `OFFICE_MAX_TURNS`, `CLAUDE_BIN`, `OFFICE_APPROVAL_TIMEOUT_MS`.
 
 ### 환경 변수 (위치·동시 작업)
 
@@ -44,6 +46,10 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `OFFICE_HIVE_DIR` | `server/hive` | 작업 원장·메일함·기억·이벤트 위치. 지정하면 `office-state.json` 도 그 안에 둔다 |
 | `OFFICE_DELIVERABLES_DIR` | `<저장소>/DELIVERABLES` | 산출물·첨부 위치. 역할 에이전트가 이 폴더를 작업 폴더(cwd)로 돈다 |
 | `OFFICE_DIST_DIR` | `<저장소>/dist` | 함께 내보낼 빌드된 화면 |
+| `OFFICE_MAX_USD` | 2 | 작업 1건 비용 상한(달러 환산 추정)의 기본값. 화면 모니터 탭에서 바꾸면 `settings.json` 값이 우선 |
+| `OFFICE_AGENT_DAILY_USD` | 5 | 에이전트 1명의 하루 예산 기본값(80% 제한 · 100% 중지). 모니터 탭에서 변경 |
+| `OFFICE_MOCK_COST_USD` | 0 | (mock 시험용) 작업 1건이 쓴 것처럼 볼 비용. 상한보다 크면 '상한 초과' 승인 카드가 뜬다. 사용량 합계에는 넣지 않음 |
+| `OFFICE_MOCK_QUESTION` | (없음) | (mock 시험용) `1` 이면 역할 에이전트가 회신에 "재하에게 질문"을 한 줄 넣는다 |
 
 경로 계산은 `paths.mjs` 한 곳에 있습니다. 원장(`tasks.json`)의 `output`·`docx`, 첨부 경로는 산출물 폴더 기준 상대경로('/' 구분)입니다.
 
@@ -57,7 +63,14 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | 엔드포인트 | 용도 |
 | --- | --- |
 | `GET /office-state.json` | 가상 사무실이 2초 폴링. `{stage, phase, progress, agents, artifact, concurrency, hive:{tasks, pending, mail, leader}, question}`. 브리핑 전에는 hive 로 만든 빈 사무실(`idle:true`) |
-| `POST /api/instruct` | 브리핑 `{title, result, context, constraints[], question_policy, deadline, attachments, gates?}` → 202, 백그라운드 실행. 구 지시(`goal`·`brief`·`gates`)도 받는다(gates = 그 단계 전부) |
+| `POST /api/instruct` | 브리핑 양식 `{title, result, context, constraints[], question_policy, deadline, attachments, gates?}` → 202 `{queued, position}`. 대기열에 넣고 차례가 오면 실행. 구 지시(`goal`·`brief`·`gates`)도 받는다 |
+| `GET /api/queue` · `POST /api/queue` · `DELETE /api/queue/:id` | 팀장 대기열 보기 / 메시지 넣기 `{text}` / 아직 대기 중인 항목 취소. POST·DELETE 는 이 PC 화면에서 온 요청만 |
+| `GET /api/questions` · `POST /api/questions/:id/answer` | "나에게 질문" 목록 / 답하기 `{answer, by}`(by 없으면 400). 팀장 질문의 답은 대기열 메시지로, 역할 에이전트 질문의 답은 그 사람 편지함으로 |
+| `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산 `{lang, max_task_usd, agent_daily_usd}`. 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만 |
+| `GET /api/agents/templates` · `POST /api/agents` · `DELETE /api/agents/:id` | 역할 템플릿 12종 / 템플릿으로 인원 추가 `{template, name, name_en}`(최대 6명) / 빼기(진행·대기 작업이 있으면 409). POST·DELETE 는 이 PC 화면에서만 |
+| `GET /api/breakers` · `POST /api/breakers/:agent/reset` | 서킷 브레이커 단계 / 재하가 초기화 `{by, reason}`(둘 다 필수) |
+| `GET /api/live?task=<id>` · `?stream=lead` · `&after=<n>` | 작업별(또는 팀장 세션) 실시간 기록 줄. `GET /api/live/latest?agent=` 는 그 사람의 가장 최근 작업 기록 |
+| `GET·POST /api/pty` · `DELETE /api/pty/:id` · `WS /api/pty/ws?id=` | 대화형 터미널(node-pty) 목록·열기 `{agent}`·닫기, 입출력 WebSocket. 모두 이 PC 화면(Origin 이 127.0.0.1·localhost)에서만 |
 | `GET /api/hive` | 작업 원장·승인 큐·메일 이벤트·현황판 |
 | `GET /api/inbox/:agent` | 에이전트 inbox (재하의 보고·승인 요청은 `jaeha`) |
 | `POST /api/approve` | `{id, decision:"approved"|"rejected", by, reason}` — by·reason 없으면 400 |
@@ -68,14 +81,45 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
 | `GET /api/auth` | `claude auth status` 중 `loggedIn` 만(계정 메일·조직 정보는 버림). 1분 기억, `?refresh=1` 로 다시 확인 |
 | `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login`. 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
-| `GET /api/usage` | 역할 실행·QA `cost_usd`, 팀장 분해 비용의 합계 — 에이전트별·일별(CLI 추정치, 청구서 아님) |
+| `GET /api/usage` | 역할 실행·QA `cost_usd`, 팀장 분해·상주 세션 비용의 합계 — 에이전트별·일별·작업별, 상한·예산 설정값(CLI 추정치, 청구서 아님) |
 
 ## 흐름
 
 ```
-브리핑 → 팀장 분해(tasks.json) → assign 메시지(inbox/<담당>) → 담당 실행 → result 메시지(inbox/lead)
+입력창 메시지 → 대기열(queue.json) → 팀장 상주 세션이 하나씩 처리 → [일을 맡긴 메시지면] 브리핑으로 정리해 대기열에 등록
+브리핑 → 팀장 분해(tasks.json) → assign 메시지(inbox/<담당>) → 담당 실행(hive 규칙) → result 메시지(inbox/lead)
       → QA 판정(gate) → [승인 필요] approvals.json 에서 대기 → 완료 → 다음 작업 … → 팀장 보고(blackboard.md · inbox/jaeha)
 ```
+
+### 팀장 상주 세션과 대기열
+- 입력창은 두 방식입니다. **메시지**(기본)는 대기열에 들어가 팀장 상주 세션이 한 건씩 받습니다. 진행 상황을 묻거나 일을 맡길 수 있고,
+  "결과: …"가 있으면 팀장이 브리핑으로 정리해 대기열에 다시 넣습니다. **브리핑 양식**은 4요소를 직접 채워 바로 대기열에 넣습니다.
+- 상주 세션은 `claude -p --resume <세션 id>` 로 이어집니다(id 는 `settings.json`). 팀장은 hive 폴더에서 읽기만 하고 고치지 않습니다.
+  세션이 깨지면 새 세션으로 한 번 다시 시도합니다.
+- 대기열은 두 줄로 돕니다 — 메시지는 한 번에 1건(팀장 대화형 터미널이 열려 있으면 잠시 멈춤), 브리핑도 한 번에 1건.
+  브리핑이 도는 동안 들어온 브리핑은 차례를 기다립니다(예전처럼 409 로 거절하지 않음). 대기 중인 항목은 화면에서 취소할 수 있습니다.
+
+### hive 규칙 — 작업을 시작할 때마다
+1. 자기 기억(`memory/<담당>.md`)을 읽고, 2. 재하가 준 답(질문 탭)을 따르고, 3. 편지함의 다른 안 읽은 편지를 자료 울타리 안에서 읽습니다.
+4. 읽은 편지는 `inbox/<담당>/.done/` 으로 옮깁니다(이벤트 `inbox_done`). 회신의 "재하에게 질문"은 질문 탭(`questions.json`)에 쌓입니다.
+
+### 서킷 브레이커와 예산
+- 연속 문제(실행 실패·QA FAIL·비용 상한 초과) 1회 **조정**(다음 지시에 주의 메모) → 2회 **제한**(최대 턴·비용 상한 절반) → 3회 **중지**.
+- 하루 예산 80% 사용이면 제한, 100%면 중지. 정상 완료가 나오면 연속 횟수는 0 으로 돌아가지만 **중지는 재하가 풀어야** 내려옵니다.
+- 중지된 사람에게 작업이 가면 그 작업만 멈추고 '재개' 승인 카드가 뜹니다 — 승인하면 단계를 풀고 다시 배정, 반려하면 그 담당 작업 보류.
+  모니터 탭의 [초기화]도 같은 일을 합니다(행위자·사유 필수). 상태는 `breakers.json`.
+- 작업 1건이 상한을 넘으면 Claude Code 가 그 자리에서 멈추고(`--max-budget-usd`) '비용' 승인 카드가 뜹니다.
+  승인하면 상한을 두 배로 올려 이어서 실행, 반려하면 보류.
+
+### 인원 추가(역할 템플릿)
+- 템플릿 12종(일정·품질·문서·리서치·카피·콘텐츠·데이터 엔지니어링·보안·모바일·접근성·모션·고객 지원) — 역할·목표·캐릭터·스킬이 한·영 두 벌입니다(`agentTemplates.mjs`).
+- 추가한 사람은 `agents.json` 에 남고 팀장 명단에 들어가 다음 브리핑부터 배정받습니다. 사무실 아래쪽 확장 구역에 책상이 생깁니다(최대 6명).
+
+### 실시간 기록과 대화형 터미널
+- 역할 실행은 `--output-format stream-json --verbose` 로 돌고, 사건마다 한 줄씩 `live/<작업>.jsonl` 에 쌓입니다(시작·글·도구·결과·QA·완료).
+  터미널 탭이 책상별로 1초마다 이어 받아 xterm 에 그립니다.
+- [터미널 열기]는 그 사람의 페르소나를 붙인 대화형 Claude Code 를 node-pty 로 엽니다(팀장은 hive 폴더에서 상주 세션을 이어서,
+  역할 에이전트는 최근 산출물 과제 폴더에서). 재하가 직접 입력하는 세션이므로 Claude Code 의 평소 권한 확인을 그대로 거칩니다.
 
 - 결과 줄이 비어 있으면 팀장은 나누지 않고 `inbox/jaeha` 에 되묻습니다(`question`).
 - **작업 풀**: 선행이 끝난 작업을 `OFFICE_CONCURRENCY` 건(기본 2, 최대 3)까지 동시에 돌립니다. 같은 담당자의 작업은 동시에 돌리지 않습니다.
@@ -83,7 +127,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 - 승인 대기는 그 작업만 멈추고 풀 자리를 차지하지 않습니다 — 다른 작업은 계속 돕니다. 기본 무한 대기(`OFFICE_APPROVAL_TIMEOUT_MS=0`).
   커맨드 센터 '승인' 탭 또는 `/api/approve` 로 풉니다.
 - 선행 작업이 실패·보류로 끝나면 뒤 작업은 그 자리에서 보류로 닫힙니다.
-- 브리핑은 한 번에 1건입니다(실행 중에 새 브리핑을 보내면 409).
+- 브리핑은 한 번에 1건이고, 나머지는 대기열에서 차례를 기다립니다.
 - 서버가 다시 켜지면, 지난번에 돌다 끊긴 작업(대기·진행·검수)은 보류로 닫고 남은 승인 대기는 이어서 지켜봅니다(결정되면 작업 상태만 마감, 보고서는 다시 쓰지 않음).
 
 ## 파일 구성
@@ -103,6 +147,12 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `skills.mjs` | 스킬 지침서 찾기(저장소 → 사용자 폴더 → 동기화 폴더) |
 | `docxExport.mjs` | 마크다운 산출물 → Word |
 | `state.mjs` | `office-state.json` 읽기/쓰기 |
+| `leaderSession.mjs` | 팀장 상주 세션과 대기열(`queue.json`) — 메시지 처리·브리핑 등록·두 줄 실행 |
+| `settings.mjs` | 언어·작업당 상한·하루 예산·팀장 세션 id(`settings.json`), 서버가 만드는 상태 문구의 한·영 |
+| `breaker.mjs` | 서킷 브레이커(조정·제한·중지)와 하루 예산 판정(`breakers.json`) |
+| `agentTemplates.mjs` | 인원 추가용 역할 템플릿 12종(한·영) |
+| `live.mjs` | stream-json 사건 → 실시간 기록 줄(`live/`) |
+| `pty.mjs` | 대화형 터미널(node-pty) 세션과 WebSocket 입출력 |
 
 ## 산출물
 
@@ -159,7 +209,10 @@ start-ax-office.cmd   ← 저장소 루트에서 더블클릭(또는 powershell 
 ## 보안·비용 주의
 - **API 키는 서버(환경변수)에만.** 브라우저/프론트 코드/저장소/채팅에 넣지 않습니다.
 - 무인 실행 에이전트는 **문서 읽기·쓰기만** 허용합니다(PC 명령 실행 `Bash` 차단). claude_code 모드도 같습니다.
-- 작업 1건마다 **비용 상한(`OFFICE_MAX_USD`)·턴 상한(`OFFICE_MAX_TURNS`)** 이 걸려 있어, 넘으면 그때까지 쓴 내용으로 마감합니다.
-  표시되는 비용은 SDK 추정치이며 청구서가 아닙니다 — 실제 사용량은 Anthropic 콘솔에서 확인하세요.
+- 작업 1건마다 **비용 상한(모니터 탭 · 기본 `OFFICE_MAX_USD`)·턴 상한(`OFFICE_MAX_TURNS`)** 이 걸려 있습니다. claude_code 모드는 상한에서
+  멈추고 승인 카드를 띄우며, 에이전트별 하루 예산을 넘으면 서킷 브레이커가 그 사람을 중지합니다.
+  표시되는 비용은 CLI 추정치이며 청구서가 아닙니다 — 실제 사용량은 Anthropic 콘솔에서 확인하세요.
+- 설정·대기열·인원 추가·브레이커 초기화·터미널처럼 상태를 바꾸는 API 는 이 PC 화면(Origin 이 127.0.0.1·localhost)에서 온 요청만 받습니다.
+  대화형 터미널은 공개 주소(터널)로는 열리지 않습니다.
 - 업로드한 고객 원본(`DELIVERABLES/_inbox/`, `*/_attachments/`)은 커밋되지 않습니다(`.gitignore`).
 - 터널로 공개한 엔드포인트에는 인증이 없습니다. 쓸 때만 켜고, 상시 운영하려면 인증을 앞단에 두세요.

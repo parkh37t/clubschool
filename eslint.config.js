@@ -77,8 +77,12 @@ export default [
         URL: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
       },
     },
+    // 나머지 펼침({ secret: _x, ...rest })으로 필드를 빼는 패턴은 허용한다.
+    rules: { 'no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_', ignoreRestSiblings: true }] },
   },
   {
     // 설치형 앱(desktop/) — Electron main 프로세스(CommonJS)와 빌드 보조 스크립트는 Node 에서 돈다.
@@ -86,7 +90,7 @@ export default [
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',
-      globals: { process: 'readonly', require: 'readonly', module: 'writable', __dirname: 'readonly', console: 'readonly', setTimeout: 'readonly', Buffer: 'readonly' },
+      globals: { process: 'readonly', require: 'readonly', module: 'writable', __dirname: 'readonly', console: 'readonly', setTimeout: 'readonly', setInterval: 'readonly', clearInterval: 'readonly', Buffer: 'readonly' },
     },
   },
   {

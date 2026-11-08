@@ -53,3 +53,9 @@ nsis:
   shortcutName: Wylie AX Office
   artifactName: Wylie-AX-Office-Setup-${version}.${ext}
   runAfterFinish: true
+  # 설치 프로그램 언어 — Windows 언어가 한국어면 한국어, 아니면 영어(선택 창 없이 자동). 앱 화면 언어는 앱 안에서 바꾼다.
+  multiLanguageInstaller: true
+  displayLanguageSelector: false
+  installerLanguages:
+    - ko_KR
+    - en_US

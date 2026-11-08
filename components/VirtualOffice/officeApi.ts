@@ -6,17 +6,55 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 export type AgentStatus = '대기' | '진행' | '검수' | '승인대기';
 
 export interface RosterSkill { spec: string; name: string | null; available: boolean; }
+export type BreakerLevel = 'normal' | 'steer' | 'constrain' | 'stop';
+/** 서킷 브레이커 — 연속 문제·하루 예산으로 정한 단계(server/breaker.mjs) */
+export interface BreakerInfo { level: BreakerLevel; reason: string; reason_code?: string; reason_detail?: string; ratio: number; used_today: number; budget: number; failures: number; }
+export interface AgentLookLite { hair: string; skin: string; shirt: string; style: string; glasses?: boolean; }
 export interface RosterMember {
-  id: string; name: string; dept: string; role: string; stages: string[];
+  id: string; name: string; name_en?: string; dept: string; dept_en?: string; role: string; role_en?: string; stages: string[];
   skills: RosterSkill[]; status: AgentStatus; task: string; usd: number;
+  custom?: boolean; template?: string; look?: AgentLookLite | null; breaker?: BreakerInfo | null;
 }
-export interface RosterResponse { members: RosterMember[]; running: boolean; mode: string; concurrency: number; }
+export interface RosterResponse { members: RosterMember[]; running: boolean; mode: string; concurrency: number; max_custom?: number; }
+
+/** 대기열 — 팀장에게 보낸 메시지와 브리핑(server/leaderSession.mjs) */
+export interface QueueItem {
+  id: string; kind: 'message' | 'briefing'; title: string; text: string; by: string;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled'; created: string; started: string | null; finished: string | null; reply: string; error: string; briefing_id?: string; cost_usd?: number;
+}
+export interface QueueResponse { items: QueueItem[]; leader_terminal: boolean; running: boolean; }
+
+/** 질문(ask me) — 에이전트가 재하에게 묻는 것 */
+export interface Question {
+  id: string; from: string; task: string; text: string; status: 'open' | 'answered';
+  asked_at: string; answer: string | null; answered_by: string | null; answered_at: string | null;
+}
+
+export interface UsageTask { id: string; owner: string; title: string; status: string; gate: string; cost_usd: number; qa_usd: number; cap_usd: number; at: string; }
+export interface UsageResponse {
+  total: number; byAgent: Record<string, number>; byDay: Record<string, number>; byAgentDay: Record<string, Record<string, number>>;
+  tasks: UsageTask[]; max_task_usd: number; agent_daily_usd: number;
+}
+
+export interface AgentTemplate {
+  id: string; name: { ko: string; en: string }; dept: { ko: string; en: string }; role: { ko: string; en: string }; goal: { ko: string; en: string };
+  stages: string[]; skills: string[]; look: AgentLookLite;
+}
+
+/** 실시간 기록 한 줄(server/live.mjs) */
+export interface LiveLine {
+  ts: string; k: string; text?: string; tool?: string; size?: number; error?: boolean; status?: string;
+  cost?: number; turns?: number; cap?: number; level?: string; gate?: string; agent?: string; task?: string;
+}
+
+export interface OfficeSettings { lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; leader_session: boolean; }
 
 /** events.log 한 줄. 종류(kind)마다 채워지는 필드가 다르다. */
 export interface HiveEvent {
   ts: string; kind: string; id?: string; title?: string; owner?: string; status?: string; gate?: string;
   from?: string; to?: string; type?: string; task?: string; agent?: string; cost_usd?: number;
   by?: string; approval_kind?: string; note?: string; what?: string;
+  level?: string; reason?: string; reason_code?: string; reason_detail?: string; item_kind?: string; action?: string; count?: number; template?: string;
 }
 
 export interface AuthState { loggedIn: boolean | null; cli: boolean; checked_at?: string; mode?: string; }
@@ -86,6 +124,17 @@ export async function postJson(url: string, body: unknown): Promise<{ ok: boolea
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (!res.ok) return { ok: false, error: String(data.error || res.status) };
     return { ok: true, data };
+  } catch {
+    return { ok: false, error: '서버에 연결하지 못했습니다.' };
+  }
+}
+
+/** DELETE. 성공이면 { ok:true }, 실패면 { ok:false, error }. */
+export async function deleteJson(url: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return res.ok ? { ok: true } : { ok: false, error: String(data.error || res.status) };
   } catch {
     return { ok: false, error: '서버에 연결하지 못했습니다.' };
   }

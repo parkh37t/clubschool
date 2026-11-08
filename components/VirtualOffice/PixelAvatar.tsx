@@ -1,13 +1,16 @@
 import { AVATARS } from './officeTheme';
+import type { AvatarLook } from './officeTheme';
 
 interface PixelAvatarProps {
   id: string;
   size?: number;
+  /** 추가 인원처럼 표에 없는 사람의 외형(역할 템플릿) */
+  look?: { hair: string; skin: string; shirt: string; style: string; glasses?: boolean } | null;
 }
 
 /** 12×12 픽셀 초상 — 사무실 캐릭터와 같은 머리·피부·부서색(셔츠). 카드와 커맨드 센터 머리에 쓴다. */
-export function PixelAvatar({ id, size = 40 }: PixelAvatarProps) {
-  const a = AVATARS[id] ?? AVATARS.lead;
+export function PixelAvatar({ id, size = 40, look }: PixelAvatarProps) {
+  const a: AvatarLook = AVATARS[id] ?? (look ? { ...look, style: (look.style as AvatarLook['style']) || 'short' } : AVATARS.lead);
   const px = (x: number, y: number, w: number, h: number, fill: string) => <rect x={x} y={y} width={w} height={h} fill={fill} />;
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" shapeRendering="crispEdges" aria-hidden style={{ display: 'block', flexShrink: 0, background: '#E9E1CF', borderRadius: 4 }}>

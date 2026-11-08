@@ -7,7 +7,10 @@
 //     approvals.json       승인 대기 큐: 재하가 approve/reject 할 때까지 해당 작업은 멈춘다
 //     inbox/<agent>/       받은 메시지 1건 = md 1파일 (front matter + 본문)
 //     outbox/<agent>/      보낼 메시지. routeMail()이 수신자 inbox로 옮긴다
-//     memory/<agent>.md    에이전트별 장기 기억(결정·배운 것·고객 선호), 작업 끝날 때 3줄 이내 추가
+//     inbox/<agent>/.done/ 처리한 메시지(Munder Difflin hive 규칙 — 작업이 끝나면 읽은 편지를 여기로 옮긴다)
+//     memory/<agent>.md    에이전트별 장기 기억(결정·배운 것·고객 선호), 작업 끝날 때 3줄 이내 추가, 작업 시작 때 읽는다
+//     questions.json       에이전트가 재하에게 묻는 질문(ask me)과 답
+//     live/<task>.jsonl    역할 실행 실시간 기록(stream-json 요약). live/lead.jsonl = 팀장 상주 세션
 //     blackboard.md        팀장이 갱신하는 공유 현황판
 //     open_items.md        확정하지 못한 것(추측하지 않고 여기에 남긴다)
 //     events.log           추가 전용 이벤트 로그(jsonl). 대시보드·봉투 애니메이션 원천
@@ -48,6 +51,7 @@ const ledgerLock = makeLock(); // tasks.json (작업·메시지 번호·미확�
 const approvalLock = makeLock(); // approvals.json
 const appendLock = makeLock(); // events.log·memory·open_items 추가 쓰기
 const routeLock = makeLock(); // outbox → inbox 이동(같은 파일을 두 번 옮기지 않게)
+const questionLock = makeLock(); // questions.json
 
 async function readJson(file, fallback) {
   try {
@@ -340,6 +344,91 @@ export async function readInbox(agent, { task, type } = {}) {
     out.push(m);
   }
   return out;
+}
+
+/**
+ * 안 읽은 편지 — 작업 시작 때 에이전트가 읽는다(hive 규칙). exclude 에 든 id(지금 배정 메시지 등)는 뺀다.
+ * inbox/<agent>/ 바로 아래 .md 만 안 읽은 것이다(읽은 것은 .done/ 으로 옮겨져 있다).
+ */
+export async function unreadInbox(agent, { exclude = [] } = {}) {
+  const all = await readInbox(agent);
+  return all.filter((m) => !exclude.includes(m.id)).reverse(); // 오래된 것부터
+}
+
+/** 처리한 메시지를 inbox/<agent>/.done/ 으로 옮긴다. 옮긴 개수. */
+export function markInboxDone(agent, ids) {
+  return routeLock(async () => {
+    const dir = p('inbox', agent);
+    const done = path.join(dir, '.done');
+    let files = [];
+    try { files = (await fs.readdir(dir)).filter((f) => f.endsWith('.md')); } catch { return 0; }
+    await fs.mkdir(done, { recursive: true });
+    let n = 0;
+    for (const f of files) {
+      if (!ids.some((id) => f.startsWith(id + '_'))) continue;
+      try { await fs.rename(path.join(dir, f), path.join(done, f)); n += 1; } catch { /* 이미 옮겨졌을 수 있음 */ }
+    }
+    if (n) await appendEvent({ kind: 'inbox_done', agent, count: n });
+    return n;
+  });
+}
+
+// ── 질문(ask me) — 에이전트가 재하에게 묻는 것. 작업을 멈추지 않는다(답은 다음 작업 때 inbox 로 읽힌다) ──
+export async function loadQuestions() {
+  return readJson(p('questions.json'), { seq: 0, questions: [] });
+}
+
+export async function addQuestion({ from, task, text, briefing }) {
+  const q = await questionLock(async () => {
+    const book = await loadQuestions();
+    book.seq += 1;
+    const item = { id: `Q-${String(book.seq).padStart(4, '0')}`, from, task: task || '', briefing: briefing || '', text: String(text || '').slice(0, 1000), status: 'open', asked_at: nowIso(), answer: null, answered_by: null, answered_at: null };
+    book.questions.push(item);
+    await writeJson(p('questions.json'), book);
+    return item;
+  });
+  await appendEvent({ kind: 'question', id: q.id, from: q.from, task: q.task });
+  return q;
+}
+
+/** 재하의 답. by·answer 가 없으면 거부. 답은 질문한 에이전트 inbox 로 간다(호출하는 쪽에서 메시지 발송). */
+export async function answerQuestion(id, { answer, by }) {
+  if (!answer || !by) throw new Error('답과 답한 사람(by)이 필요합니다.');
+  const q = await questionLock(async () => {
+    const book = await loadQuestions();
+    const found = book.questions.find((x) => x.id === id);
+    if (!found) throw new Error(`질문 ${id} 없음`);
+    if (found.status !== 'open') throw new Error(`이미 답함: ${found.id}`);
+    Object.assign(found, { status: 'answered', answer: String(answer).slice(0, 2000), answered_by: by, answered_at: nowIso() });
+    await writeJson(p('questions.json'), book);
+    return { ...found };
+  });
+  await appendEvent({ kind: 'question', id: q.id, from: q.from, task: q.task, status: 'answered', by });
+  return q;
+}
+
+// ── 실시간 기록(live) — 역할 실행 stream-json 을 줄 단위 요약으로 남긴다 ──
+const safeStream = (s) => String(s || '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'misc';
+
+export function appendLive(stream, entry) {
+  const line = JSON.stringify({ ts: nowIso(), ...entry });
+  return appendLock(async () => {
+    await fs.mkdir(p('live'), { recursive: true });
+    await fs.appendFile(p('live', safeStream(stream) + '.jsonl'), line + '\n', 'utf8');
+  });
+}
+
+/** after 번째 줄 다음부터(0부터). { lines, next } */
+export async function readLive(stream, after = 0, limit = 400) {
+  try {
+    const raw = await fs.readFile(p('live', safeStream(stream) + '.jsonl'), 'utf8');
+    const all = raw.split('\n').filter(Boolean);
+    const from = Math.max(0, Number(after) || 0);
+    const lines = all.slice(from, from + limit).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+    return { lines, next: from + lines.length, total: all.length };
+  } catch {
+    return { lines: [], next: 0, total: 0 };
+  }
 }
 
 // ── 승인 큐 ──

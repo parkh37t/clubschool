@@ -86,8 +86,8 @@
 .axo-canvas{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#1B1F2E;border:3px solid #2B2340;border-radius:6px;overflow:hidden;}
 .axo-canvas svg{width:100%;height:100%;display:block;}
 .axo-cc{width:440px;flex-shrink:0;min-height:0;display:flex;flex-direction:column;background:#FFFDF8;border:1px solid #DDD6C8;border-radius:6px;overflow:hidden;}
-.axo-tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:0 10px 8px;}
-.axo-tab{position:relative;display:flex;align-items:center;justify-content:center;gap:5px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;padding:5px 6px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#4A4A40;}
+.axo-tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:0 10px 8px;}
+.axo-tab{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:5px 4px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#4A4A40;}
 .axo-tab:hover:not(:disabled){background:#F7F3FC;border-color:#C9B8E6;}
 .axo-tab[aria-selected="true"]{background:#EFEAF7;border-color:#6A4C9C;color:#43306B;box-shadow:inset 0 -2px 0 #6A4C9C;}
 .axo-tab:disabled{cursor:not-allowed;color:#B4AE9F;background:#F7F4EC;border-style:dashed;}
@@ -98,6 +98,8 @@
 .axo-agents{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;}
 .axo-agent{display:flex;align-items:center;gap:7px;flex:0 0 186px;min-width:0;text-align:left;cursor:pointer;padding:7px 9px;border:1px solid #DDD6C8;border-radius:6px;color:#24291F;font:inherit;}
 .axo-agent--add{flex:0 0 150px;justify-content:center;border-style:dashed;background:#F7F4EC;color:#9A968A;cursor:not-allowed;}
+.axo-agent--add-on{cursor:pointer;color:#43306B;border-color:#6A4C9C;background:#F7F3FC;}
+.axo-agent--add-on:hover{background:#EFEAF7;}
 .axo-iconbtn{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:4px 9px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#24291F;}
 .axo-iconbtn:hover{background:#F7F4EC;}
 @media (max-width: 1180px){ .axo-cc{width:390px;} }

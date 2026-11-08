@@ -1,0 +1,179 @@
+// 화면 패널 문구 — 한국어(기본)·영어. 사무실 그림 안 문구는 simText.ts.
+// 서버 데이터의 상태 값(대기·진행…)·승인 종류는 한국어 그대로 오므로 표시할 때만 바꾼다(statusLabel 등).
+
+import { createContext, useContext } from 'react';
+import type { Lang } from './simText';
+import { SIM_TEXT } from './simText';
+
+export type { Lang };
+
+type Dict = Record<string, string>;
+
+const ko: Dict = {
+  'top.demo': '데모', 'top.hive': 'hive 연결', 'top.noServer': '서버 응답 없음', 'top.concurrency': '동시 {r}/{l}',
+  'top.pause': '일시정지', 'top.play': '재생', 'top.pauseTitle': '사무실 애니메이션 일시정지·재생(작업 진행과는 무관)', 'top.autoDemo': '자동 결재(데모)', 'top.reset': '리셋', 'top.lang': '언어',
+  'login.title': 'Claude 로그인이 풀려 있습니다', 'login.body': '이 상태에서는 팀장 분해·역할 실행·QA가 "로그인 필요"로 실패합니다. [로그인]을 누르면 새 PowerShell 창에서 로그인을 진행합니다.',
+  'login.button': '로그인', 'login.opening': '로그인 창을 여는 중…', 'login.opened': 'PowerShell 창이 열렸습니다. 브라우저에서 승인한 뒤 화면의 코드를 그 창에 붙여 넣으세요. 끝나면 이 배너가 사라집니다.', 'login.failed': '로그인 창을 열지 못했습니다: {e}',
+  'cli.missing': 'Claude Code CLI를 찾지 못했습니다.', 'cli.body': 'Claude 데스크톱 앱이 설치·로그인돼 있는지 확인하세요. CLI 없이 더미로 바꿔 돌리지 않습니다.',
+  'question.title': '팀장이 되물었습니다', 'question.hint': '결과 줄을 고쳐 다시 보내 주세요.',
+  'srv.label': 'PC 서버 주소', 'srv.placeholder': 'https://xxxx.trycloudflare.com  (PC 에서 start-ax-office.ps1 이 출력한 주소)', 'srv.connect': '연결', 'srv.disconnect': '연결 해제',
+  'srv.bad': 'https:// 로 시작하는 서버 주소를 넣어 주세요.', 'srv.saved': '이 브라우저에 저장된 주소로 연결 중입니다. 터널을 새로 켜면 주소가 바뀝니다.', 'srv.none': '미연결이면 내부 데모만 돕니다. PC 에서 서버와 터널을 켠 뒤 그 주소를 넣으면 실제 작업을 여기서 봅니다.',
+  'legend.working': '작업 중', 'legend.waiting': '승인·QA 대기', 'legend.idle': '대기', 'legend.lead': '팀장',
+  'legend.hive': '봉투 = 메시지(배정·회신·승인 요청) · 책상을 누르면 그 사람 선택', 'legend.demo': '데모 — 게이트마다 담당자들이 회의실에서 킥오프', 'gates.aria': '파이프라인 게이트 현황', 'gate.approve': '결재',
+  'office.aria': '팀장과 AI 에이전트가 메시지를 주고받으며 일하는 픽셀 사무실 평면도. 책상을 누르면 그 에이전트를 선택합니다.',
+  'cc.title': '커맨드 센터', 'cc.leadIdle': '팀장이 사무실을 운영 중', 'cc.auto': '자동 진행', 'cc.autoTitle': '브리핑을 받으면 팀장이 나눠 자동으로 진행합니다. 외부 발송·비용·삭제·범위 변경·수치 확정만 승인 카드로 멈춥니다.',
+  'cc.connected': 'hive 연결', 'cc.demo': '서버 미연결 · 데모', 'cc.clearSel': '선택 해제',
+  'tab.tasks': '작업', 'tab.approvals': '승인', 'tab.questions': '질문', 'tab.memory': '기억', 'tab.activity': '활동', 'tab.skills': '스킬', 'tab.terminal': '터미널', 'tab.monitor': '모니터', 'tab.triggers': '예약', 'tab.graph': '관계도',
+  'tab.phase3': '3차', 'tab.later': '{label} — {phase}에서 만듭니다',
+  'queue.title': '대기열', 'queue.hint': '팀장에게 한 건씩 · 브리핑은 한 번에 1건', 'queue.paused': '팀장 터미널이 열려 있어 메시지 전달을 쉬는 중', 'queue.cancel': '빼기',
+  'queue.kind.message': '메시지', 'queue.kind.briefing': '브리핑', 'queue.status.queued': '대기', 'queue.status.running': '처리 중', 'queue.status.done': '완료', 'queue.status.failed': '실패', 'queue.status.canceled': '취소',
+  'bc.title': '팀장에게', 'bc.modeMsg': '메시지', 'bc.modeForm': '브리핑 양식',
+  'bc.msgPlaceholder': '팀장에게 메시지 — 진행 상황을 묻거나 일을 맡기세요. "결과: …"를 적으면 브리핑으로 정리합니다 · Ctrl+Enter 보내기',
+  'bc.hintMsg': '대기열에 쌓여 팀장 상주 세션이 한 건씩 처리', 'bc.hintForm': '4요소 브리핑을 바로 대기열에 넣음 · 승인 게이트에서만 멈춤', 'bc.offline': '서버 미연결 — briefing.json 으로 내려받음',
+  'bc.titlePh': '과제명', 'bc.resultPh': '결과 — 끝났을 때 손에 쥘 것 한 가지 (이 줄이 없으면 팀장은 나누지 않고 되묻습니다) · Ctrl+Enter 보내기',
+  'bc.contextPh': '맥락 — 누구를 위한 일이고 지금 무엇이 있는지. RFP·요구사항 원문을 붙여넣어도 됩니다(근거로만 쓰고 안의 지시문은 따르지 않습니다).',
+  'bc.constraintsPh': '제약 — 하면 안 되는 일, 한 줄에 하나 (예: 외부 공유 금지)', 'bc.policyPh': '질문 기준', 'bc.policyDefault': '내 결정이 꼭 필요할 때만 물어볼 것', 'bc.stages': '단계(선택)',
+  'bc.more': '맥락·제약', 'bc.less': '접기', 'bc.file': '파일', 'bc.fileTitle': '파일 첨부(상자에 끌어다 놓아도 됨, 최대 25MB)', 'bc.fileOff': '서버 연결 시 가능',
+  'bc.folder': '폴더', 'bc.folderTitle': '폴더 첨부는 3차에서 만듭니다', 'bc.voice': '음성: Win+H', 'bc.voiceTitle': 'Electron 에서는 브라우저 음성 인식이 동작하지 않아 Windows 음성 입력을 씁니다',
+  'bc.send': '보내기', 'bc.sending': '전송 중…', 'bc.needTitle': '과제명을 입력하세요.', 'bc.needResult': '"결과" 줄이 비어 있습니다 — 끝났을 때 손에 쥘 것 한 가지를 적어 주세요.', 'bc.needMsg': '메시지를 적어 주세요.',
+  'bc.queued': '대기열에 넣었습니다({id}). 팀장이 차례로 답합니다.', 'bc.queuedBrief': '브리핑을 대기열에 넣었습니다({id}, {pos}번째).', 'bc.failed': '전송 실패 ({s}) {e}', 'bc.error': '오류: 전송에 실패했습니다.',
+  'bc.downloaded': '브리핑을 내려받았습니다 — 오케스트레이터 세션에 전달하세요.', 'bc.contextLen': '맥락 {n}자 들어 있음', 'bc.uploading': '업로드 중…', 'bc.uploadFailed': '업로드 실패', 'bc.remove': '제거',
+  'ag.aria': '에이전트', 'ag.leadBadge': '팀장', 'ag.idle': '대기 중', 'ag.demo': '데모', 'ag.usage': '누적 사용량 {v} (CLI 추정)', 'ag.add': '인원 추가', 'ag.addHint': '역할 템플릿', 'ag.full': '가득 참', 'ag.custom': '추가 인원',
+  'tasks.title': '작업판', 'tasks.offline': '서버에 연결하면 팀장이 나눈 작업 원장이 여기에 보입니다. 지금은 데모 시나리오가 돕니다.',
+  'tasks.empty': '브리핑을 보내면 팀장이 나눈 작업이 여기에 쌓입니다. 선행 작업이 없는 작업은 담당이 겹치지 않는 한 동시에 시작합니다.', 'tasks.gate': '게이트 {g}', 'tasks.needsApproval': '승인 필요', 'tasks.cap': '상한 {v}',
+  'ap.pending': '승인 대기 {n}건 — 해당 작업만 멈춤', 'ap.none': '승인 대기 없음', 'ap.by': '행위자', 'ap.reason': '사유 (필수 — 없으면 기록되지 않음)', 'ap.approve': '승인', 'ap.reject': '반려',
+  'ap.needReason': '사유를 적어야 기록됩니다.', 'ap.done': '{id} {d} 기록됨', 'ap.failed': '실패: {e}', 'ap.history': '결정 기록', 'ap.approved': '승인', 'ap.rejected': '반려',
+  'ap.demoNone': '데모: 결재 대기가 생기면 여기에 카드가 뜹니다.', 'ap.demoApprove': '결재하기(데모)', 'ap.budgetNote': '상한 {cap} · 지금까지 {cost} — 승인하면 상한 두 배로 이어서 실행', 'ap.resumeNote': '서킷 브레이커 중지 — 승인하면 다시 배정',
+  'qs.offline': '서버에 연결하면 에이전트가 재하에게 묻는 질문이 여기에 쌓입니다.', 'qs.open': '답을 기다리는 질문 {n}건', 'qs.none': '열린 질문 없음 — 작업은 멈추지 않고 가정으로 진행합니다.',
+  'qs.answerPh': '답 — 질문한 에이전트가 다음 작업 때 읽습니다(팀장은 바로 받음)', 'qs.send': '답하기', 'qs.answered': '답한 질문', 'qs.by': '답한 사람', 'qs.need': '답과 답한 사람을 적어 주세요.', 'qs.sent': '{id} 답을 보냈습니다.',
+  'mem.offline': '서버에 연결하면 에이전트별 기억(hive/memory)이 보입니다.', 'mem.agent': '에이전트', 'mem.choose': '선택…', 'mem.pick': '아래 에이전트 카드를 누르거나 위에서 고르면 그 사람의 기억 파일을 보여 줍니다.',
+  'mem.fail': '기억 파일을 읽지 못했습니다.', 'mem.empty': "{name}의 기억이 아직 없습니다. 작업이 끝날 때 회신의 '기억할 것'이 3줄 이내로 쌓이고, 다음 작업 시작 때 읽힙니다.",
+  'act.demoEmpty': '데모 활동이 여기에 기록됩니다.', 'act.filtered': '{name} 관련 활동만 보입니다.', 'act.all': 'hive 이벤트 로그(events.log)를 3초마다 이어 받습니다.', 'act.empty': '아직 기록된 활동이 없습니다.',
+  'sk.offline': '서버에 연결하면 역할별 스킬(업무 지침서)과 이 PC 에서 쓸 수 있는지가 보입니다.', 'sk.lead': '팀장은 스킬 없이 브리핑 분해·배정·추적·보고만 합니다(.claude/agents/leader.md).',
+  'sk.hint': '작업마다 서버가 스킬 지침을 찾아 에이전트 지시문에 넣습니다. 이 PC 에 없는 사내 스킬은 공용 스킬로 대체되거나 건너뜁니다.', 'sk.none': '연결된 스킬 없음 — 페르소나만으로 작업', 'sk.use': '사용: {n}', 'sk.missing': '이 PC 에 없음: {n}',
+  'tm.offline': '서버에 연결하면 책상별 실시간 기록과 대화형 터미널을 씁니다.', 'tm.desk': '책상', 'tm.open': '터미널 열기', 'tm.close': '터미널 닫기', 'tm.backLive': '기록 보기', 'tm.live': '실시간 기록',
+  'tm.noTask': '{name}의 작업 기록이 아직 없습니다.', 'tm.leadLog': '팀장 상주 세션 기록', 'tm.task': '작업 {id} · {title}', 'tm.ptyOff': '대화형 터미널을 쓸 수 없습니다(node-pty 없음).',
+  'tm.ptyNote': '직접 입력하는 대화형 세션 — 구독 사용량을 씁니다', 'tm.exited': '[세션 종료: {code}]', 'tm.connecting': '연결 중…', 'tm.openFailed': '터미널을 열지 못했습니다: {e}', 'tm.leadPause': '팀장 터미널이 열려 있는 동안 대기열의 메시지 전달은 쉽니다.',
+  'mo.offline': '서버에 연결하면 사용량·예산·서킷 브레이커가 보입니다.', 'mo.title': '사용량 (CLI 추정 — 청구서 아님)', 'mo.total': '합계', 'mo.today': '오늘', 'mo.byAgent': '에이전트별 오늘 · 하루 예산 대비', 'mo.byDay': '일별 (최근 7일)',
+  'mo.tasks': '작업별 비용', 'mo.cap': '작업당 상한($)', 'mo.budget': '에이전트 하루 예산($)', 'mo.save': '저장', 'mo.saved': '저장됨', 'mo.level': '단계', 'mo.reset': '초기화', 'mo.resetReason': '초기화 사유',
+  'mo.breakerHint': '연속 문제 1회 조정 · 2회 제한(턴·상한 절반) · 3회 중지 · 하루 예산 80% 제한 · 100% 중지', 'mo.stopHint': "중지된 에이전트는 '승인' 탭의 재개 카드로 풉니다.", 'mo.needReason': '초기화하려면 사유를 적어 주세요.',
+  'add.title': '인원 추가 — 역할 템플릿', 'add.name': '이름', 'add.nameEn': '영어 이름(선택)', 'add.add': '추가', 'add.close': '닫기', 'add.limit': '추가 인원 {n}/{max} — 확장 구역 책상 수만큼',
+  'add.added': '추가한 인원', 'add.remove': '빼기', 'add.goal': '목표', 'add.stages': '산출물 단계', 'add.skills': '스킬', 'add.done': '{name} 추가됨', 'add.removed': '{name} 뺌', 'add.offline': '서버에 연결해야 인원을 추가할 수 있습니다.',
+  'lv.normal': '정상', 'lv.steer': '조정', 'lv.constrain': '제한', 'lv.stop': '중지',
+  'ev.briefing': '브리핑 접수 — {title}', 'ev.task': '{id} {title} → {status}{gate}', 'ev.mail': '→ {to} {what}{task}', 'ev.approvalPending': '승인 요청 {id} · {task} · {kind}', 'ev.approvalDone': '{id} {d} ({task})',
+  'ev.usage': '{what} 사용량 {v}', 'ev.question': '질문 {id}{task}', 'ev.questionAnswered': '{id} 답함', 'ev.queue': '대기열 {id} {kind} → {status}', 'ev.breaker': '서킷 브레이커 → {level}{reason}',
+  'ev.agentAdd': '인원 추가 {id}', 'ev.agentRemove': '인원 삭제 {id}', 'ev.leaderReply': '상주 세션 답 {id}', 'ev.inboxDone': '받은 편지 {n}건 처리 → inbox/.done',
+  'tl.start': '시작', 'tl.assign': '배정', 'tl.tool': '도구', 'tl.text': '글', 'tl.tool_result': '결과', 'tl.note': '메모', 'tl.end': '끝', 'tl.error': '오류', 'tl.qa_start': 'QA', 'tl.qa': 'QA 판정',
+  'tl.approval': '승인 요청', 'tl.approval_done': '승인 결과', 'tl.budget_stop': '상한 초과', 'tl.done': '완료', 'tl.user_msg': '재하', 'tl.briefing_queued': '브리핑 등록', 'tl.session_new': '새 세션',
+  'tl.assignText': '{msg} 받음 · 비용 상한 ${cap}{level}', 'tl.resultText': '{size}자{err}', 'tl.endText': '{status} · ${cost} · {turns}턴', 'tl.qaStart': '고지표가 판정 중', 'tl.budgetText': '상한 ${cap} 도달 — 승인 대기 {msg}',
+};
+
+const en: Dict = {
+  'top.demo': 'Demo', 'top.hive': 'hive connected', 'top.noServer': 'Server not responding', 'top.concurrency': 'Parallel {r}/{l}',
+  'top.pause': 'Pause', 'top.play': 'Play', 'top.pauseTitle': 'Pause or resume the office animation (work keeps running)', 'top.autoDemo': 'Auto-approve (demo)', 'top.reset': 'Reset', 'top.lang': 'Language',
+  'login.title': 'Claude is signed out', 'login.body': 'In this state splitting, role runs and QA fail with "not logged in". Press [Sign in] to sign in from a new PowerShell window.',
+  'login.button': 'Sign in', 'login.opening': 'Opening the sign-in window…', 'login.opened': 'A PowerShell window opened. Approve in the browser, then paste the code into that window. This banner disappears when done.', 'login.failed': "Couldn't open the sign-in window: {e}",
+  'cli.missing': 'Claude Code CLI not found.', 'cli.body': 'Check that the Claude desktop app is installed and signed in. The app never falls back to a dummy run.',
+  'question.title': 'The lead asked back', 'question.hint': 'Fix the result line and send it again.',
+  'srv.label': 'PC server URL', 'srv.placeholder': 'https://xxxx.trycloudflare.com  (printed by start-ax-office.ps1 on the PC)', 'srv.connect': 'Connect', 'srv.disconnect': 'Disconnect',
+  'srv.bad': 'Enter a server URL starting with https://', 'srv.saved': 'Connected with the URL saved in this browser. The URL changes when the tunnel restarts.', 'srv.none': 'Without a server only the demo runs. Start the server and tunnel on the PC, then enter its URL to watch real work here.',
+  'legend.working': 'Working', 'legend.waiting': 'Approval · QA', 'legend.idle': 'Idle', 'legend.lead': 'Lead',
+  'legend.hive': 'Envelopes = messages (assign, reply, approval) · click a desk to select', 'legend.demo': 'Demo — each gate starts with a kickoff in the meeting room', 'gates.aria': 'Pipeline gates', 'gate.approve': 'Approve',
+  'office.aria': 'Pixel office where the lead and AI agents exchange messages while they work. Click a desk to select that agent.',
+  'cc.title': 'COMMAND CENTER', 'cc.leadIdle': 'The lead runs the floor', 'cc.auto': 'Auto', 'cc.autoTitle': 'The lead splits each briefing and runs it automatically. Only external sends, costs, deletions, scope changes and number commitments stop for approval.',
+  'cc.connected': 'hive connected', 'cc.demo': 'No server · demo', 'cc.clearSel': 'Clear selection',
+  'tab.tasks': 'Tasks', 'tab.approvals': 'Approvals', 'tab.questions': 'Ask me', 'tab.memory': 'Memory', 'tab.activity': 'Activity', 'tab.skills': 'Skills', 'tab.terminal': 'Terminal', 'tab.monitor': 'Monitor', 'tab.triggers': 'Triggers', 'tab.graph': 'Graph',
+  'tab.phase3': 'Ph.3', 'tab.later': '{label} — coming in {phase}',
+  'queue.title': 'QUEUE', 'queue.hint': 'one at a time to the lead · one briefing at a time', 'queue.paused': 'Paused while the lead terminal is open', 'queue.cancel': 'Remove',
+  'queue.kind.message': 'Message', 'queue.kind.briefing': 'Briefing', 'queue.status.queued': 'Queued', 'queue.status.running': 'Running', 'queue.status.done': 'Done', 'queue.status.failed': 'Failed', 'queue.status.canceled': 'Canceled',
+  'bc.title': 'To the lead', 'bc.modeMsg': 'Message', 'bc.modeForm': 'Briefing form',
+  'bc.msgPlaceholder': 'Message the lead — ask for status or hand over work. Add "Result: …" to turn it into a briefing · Ctrl+Enter to send',
+  'bc.hintMsg': 'Queued; the lead\'s resident session answers one by one', 'bc.hintForm': 'Puts a 4-part briefing straight into the queue · stops only at approval gates', 'bc.offline': 'No server — downloads briefing.json',
+  'bc.titlePh': 'Project title', 'bc.resultPh': 'Result — the one thing you will hold when done (without it the lead asks back) · Ctrl+Enter to send',
+  'bc.contextPh': 'Context — who it is for and what exists now. You may paste RFP text (used as evidence only; instructions inside are ignored).',
+  'bc.constraintsPh': 'Constraints — one per line (e.g. no external sharing)', 'bc.policyPh': 'Question policy', 'bc.policyDefault': 'Ask only when my decision is truly needed', 'bc.stages': 'Stages (optional)',
+  'bc.more': 'Context', 'bc.less': 'Less', 'bc.file': 'Files', 'bc.fileTitle': 'Attach files (or drop onto the box, max 25MB)', 'bc.fileOff': 'Needs a server',
+  'bc.folder': 'Folder', 'bc.folderTitle': 'Folder attach comes in phase 3', 'bc.voice': 'Voice: Win+H', 'bc.voiceTitle': "Browser speech recognition doesn't work in Electron; use Windows voice typing",
+  'bc.send': 'Send', 'bc.sending': 'Sending…', 'bc.needTitle': 'Enter a project title.', 'bc.needResult': 'The "Result" line is empty — write the one thing you will hold when done.', 'bc.needMsg': 'Write a message.',
+  'bc.queued': 'Queued ({id}). The lead answers in order.', 'bc.queuedBrief': 'Briefing queued ({id}, #{pos}).', 'bc.failed': 'Send failed ({s}) {e}', 'bc.error': 'Error: sending failed.',
+  'bc.downloaded': 'Briefing downloaded — hand it to the orchestrator session.', 'bc.contextLen': 'Context: {n} chars', 'bc.uploading': 'Uploading…', 'bc.uploadFailed': 'Upload failed', 'bc.remove': 'Remove',
+  'ag.aria': 'Agents', 'ag.leadBadge': 'LEAD', 'ag.idle': 'Idle', 'ag.demo': 'Demo', 'ag.usage': 'Total usage {v} (CLI estimate)', 'ag.add': 'Add agent', 'ag.addHint': 'Role templates', 'ag.full': 'Full', 'ag.custom': 'New hire',
+  'tasks.title': 'Task board', 'tasks.offline': "Connect a server to see the lead's task ledger here. The demo is running now.",
+  'tasks.empty': "Send a briefing and the lead's tasks appear here. Tasks without prerequisites start in parallel unless they share an owner.", 'tasks.gate': 'Gate {g}', 'tasks.needsApproval': 'Needs approval', 'tasks.cap': 'Cap {v}',
+  'ap.pending': '{n} pending — only those tasks wait', 'ap.none': 'No pending approvals', 'ap.by': 'Actor', 'ap.reason': 'Reason (required — not recorded without it)', 'ap.approve': 'Approve', 'ap.reject': 'Reject',
+  'ap.needReason': 'A reason is required.', 'ap.done': '{id} {d} recorded', 'ap.failed': 'Failed: {e}', 'ap.history': 'Decisions', 'ap.approved': 'Approved', 'ap.rejected': 'Rejected',
+  'ap.demoNone': 'Demo: approval cards show up here.', 'ap.demoApprove': 'Approve (demo)', 'ap.budgetNote': 'Cap {cap} · spent {cost} — approve to continue with double the cap', 'ap.resumeNote': 'Circuit breaker stop — approve to assign again',
+  'qs.offline': 'Connect a server to see the questions agents ask you.', 'qs.open': '{n} open questions', 'qs.none': 'No open questions — work continues on stated assumptions.',
+  'qs.answerPh': 'Answer — the agent reads it on its next task (the lead gets it right away)', 'qs.send': 'Answer', 'qs.answered': 'Answered', 'qs.by': 'Answered by', 'qs.need': 'Enter an answer and who answered.', 'qs.sent': 'Answer to {id} sent.',
+  'mem.offline': 'Connect a server to see each agent\'s memory (hive/memory).', 'mem.agent': 'Agent', 'mem.choose': 'Choose…', 'mem.pick': "Click an agent card below or pick one above to see that agent's memory file.",
+  'mem.fail': "Couldn't read the memory file.", 'mem.empty': "No memory for {name} yet. Up to 3 lines from 'Remember' are added after each task and read at the start of the next.",
+  'act.demoEmpty': 'Demo activity is recorded here.', 'act.filtered': "Showing {name}'s activity only.", 'act.all': 'Streaming the hive event log (events.log) every 3 seconds.', 'act.empty': 'No activity yet.',
+  'sk.offline': 'Connect a server to see each role\'s skills and whether they exist on this PC.', 'sk.lead': 'The lead has no skills; it only splits, assigns, tracks and reports (.claude/agents/leader.md).',
+  'sk.hint': 'For each task the server finds the skill guide and adds it to the agent prompt. Company skills missing on this PC fall back to public ones or are skipped.', 'sk.none': 'No skills — works from the persona only', 'sk.use': 'Uses: {n}', 'sk.missing': 'Not on this PC: {n}',
+  'tm.offline': 'Connect a server for per-desk live logs and an interactive terminal.', 'tm.desk': 'Desk', 'tm.open': 'Open terminal', 'tm.close': 'Close terminal', 'tm.backLive': 'Live log', 'tm.live': 'Live log',
+  'tm.noTask': 'No runs for {name} yet.', 'tm.leadLog': 'Lead resident session', 'tm.task': 'Task {id} · {title}', 'tm.ptyOff': 'Interactive terminal unavailable (node-pty missing).',
+  'tm.ptyNote': 'Interactive session you type into — uses your subscription', 'tm.exited': '[session ended: {code}]', 'tm.connecting': 'Connecting…', 'tm.openFailed': "Couldn't open the terminal: {e}", 'tm.leadPause': 'While the lead terminal is open, queued messages wait.',
+  'mo.offline': 'Connect a server to see usage, budgets and circuit breakers.', 'mo.title': 'Usage (CLI estimate — not a bill)', 'mo.total': 'Total', 'mo.today': 'Today', 'mo.byAgent': 'By agent today · vs daily budget', 'mo.byDay': 'By day (last 7)',
+  'mo.tasks': 'Per task', 'mo.cap': 'Per-task cap ($)', 'mo.budget': 'Agent daily budget ($)', 'mo.save': 'Save', 'mo.saved': 'Saved', 'mo.level': 'Level', 'mo.reset': 'Reset', 'mo.resetReason': 'Reason for reset',
+  'mo.breakerHint': '1 issue steer · 2 constrain (half turns and cap) · 3 stop · 80% of daily budget constrains · 100% stops', 'mo.stopHint': 'Stopped agents resume from the card in Approvals.', 'mo.needReason': 'Enter a reason to reset.',
+  'add.title': 'Add agent — role templates', 'add.name': 'Name', 'add.nameEn': 'English name (optional)', 'add.add': 'Add', 'add.close': 'Close', 'add.limit': '{n}/{max} added — annex desk limit',
+  'add.added': 'Added agents', 'add.remove': 'Remove', 'add.goal': 'Goal', 'add.stages': 'Stages', 'add.skills': 'Skills', 'add.done': '{name} added', 'add.removed': '{name} removed', 'add.offline': 'Connect a server to add agents.',
+  'lv.normal': 'Normal', 'lv.steer': 'Steer', 'lv.constrain': 'Constrain', 'lv.stop': 'Stop',
+  'ev.briefing': 'Briefing received — {title}', 'ev.task': '{id} {title} → {status}{gate}', 'ev.mail': '→ {to} {what}{task}', 'ev.approvalPending': 'Approval requested {id} · {task} · {kind}', 'ev.approvalDone': '{id} {d} ({task})',
+  'ev.usage': '{what} usage {v}', 'ev.question': 'Question {id}{task}', 'ev.questionAnswered': '{id} answered', 'ev.queue': 'Queue {id} {kind} → {status}', 'ev.breaker': 'Circuit breaker → {level}{reason}',
+  'ev.agentAdd': 'Agent added {id}', 'ev.agentRemove': 'Agent removed {id}', 'ev.leaderReply': 'Resident session replied {id}', 'ev.inboxDone': '{n} messages handled → inbox/.done',
+  'tl.start': 'start', 'tl.assign': 'assigned', 'tl.tool': 'tool', 'tl.text': 'says', 'tl.tool_result': 'result', 'tl.note': 'note', 'tl.end': 'end', 'tl.error': 'error', 'tl.qa_start': 'QA', 'tl.qa': 'QA verdict',
+  'tl.approval': 'approval', 'tl.approval_done': 'decision', 'tl.budget_stop': 'cap hit', 'tl.done': 'done', 'tl.user_msg': 'Jaeha', 'tl.briefing_queued': 'briefing queued', 'tl.session_new': 'new session',
+  'tl.assignText': '{msg} received · cost cap ${cap}{level}', 'tl.resultText': '{size} chars{err}', 'tl.endText': '{status} · ${cost} · {turns} turns', 'tl.qaStart': 'Go Jipyo is reviewing', 'tl.budgetText': 'Cap ${cap} reached — awaiting approval {msg}',
+};
+
+const DICTS: Record<Lang, Dict> = { ko, en };
+
+export type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
+export function makeT(lang: Lang): TFn {
+  const d = DICTS[lang] ?? ko;
+  return (key, vars) => {
+    let s = d[key] ?? ko[key] ?? key;
+    if (vars) for (const k in vars) s = s.split(`{${k}}`).join(String(vars[k]));
+    return s;
+  };
+}
+
+const STATUS_EN: Record<string, string> = { '대기': 'Waiting', '진행': 'Working', '검수': 'In QA', '승인대기': 'Awaiting', '완료': 'Done', '보류': 'On hold', '실패': 'Failed' };
+const GATE_EN: Record<string, string> = { '미점검': 'Unchecked' };
+const KIND_EN: Record<string, string> = { '외부발송': 'External send', '비용': 'Cost', '삭제': 'Deletion', '범위변경': 'Scope change', '수치확정': 'Number commit', '산출물승인': 'Deliverable', '재개': 'Resume', '승인 필요': 'Approval' };
+
+export const statusLabel = (lang: Lang, s: string): string => (lang === 'en' ? STATUS_EN[s] ?? s : s);
+export const gateLabel = (lang: Lang, g: string): string => (lang === 'en' ? GATE_EN[g] ?? g : g);
+export const kindLabel = (lang: Lang, k: string): string => (lang === 'en' ? KIND_EN[k] ?? k : k);
+
+/** 서킷 브레이커 사유 — 한국어는 서버 문장 그대로, 영어는 사유 코드로 풀어 쓴다(세부 내용은 원문 유지). */
+const BREAKER_EN: Record<string, string> = { cap: 'Cost cap exceeded', qa_fail: 'QA FAIL', fail: 'Run failed', budget: 'Daily budget used', reset: 'Resumed by' };
+export function breakerReason(lang: Lang, b: { reason?: string; reason_code?: string; reason_detail?: string } | null | undefined): string {
+  if (!b) return '';
+  if (lang !== 'en' || !b.reason_code || !BREAKER_EN[b.reason_code]) return b.reason ?? '';
+  return `${BREAKER_EN[b.reason_code]}${b.reason_detail ? ` — ${b.reason_detail}` : ''}`;
+}
+
+/** 표시 이름 — 기본 12인·팀장·재하는 표, 추가 인원은 명단 API 의 name/name_en. */
+export function displayName(lang: Lang, id: string | undefined, roster?: { id: string; name: string; name_en?: string }[] | null): string {
+  if (!id) return '';
+  const fixed = SIM_TEXT[lang].names[id];
+  if (fixed) return fixed;
+  const m = roster?.find((x) => x.id === id);
+  if (m) return lang === 'en' ? m.name_en || m.name : m.name;
+  return id;
+}
+
+export interface OfficeLang {
+  lang: Lang;
+  t: TFn;
+  name: (id: string | undefined) => string;
+}
+
+export const OfficeLangContext = createContext<OfficeLang>({ lang: 'ko', t: makeT('ko'), name: (id) => displayName('ko', id) });
+
+export function useOfficeLang(): OfficeLang {
+  return useContext(OfficeLangContext);
+}

@@ -60,6 +60,19 @@ server/hive/events.log
 server/hive/_archive-*/
 server/hive/office-state.json
 server/hive/office-state.json.tmp
+# 2차 — 대기열·질문·서킷 브레이커·추가 인원·설정·실시간 기록·터미널 페르소나
+server/hive/queue.json
+server/hive/queue.json.tmp
+server/hive/questions.json
+server/hive/questions.json.tmp
+server/hive/breakers.json
+server/hive/breakers.json.tmp
+server/hive/agents.json
+server/hive/agents.json.tmp
+server/hive/settings.json
+server/hive/settings.json.tmp
+server/hive/live/
+server/hive/pty/
 server/office-state.json.tmp
 
 # Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)

@@ -3,6 +3,9 @@
  * 순수 TS 클래스로 포팅. React는 VirtualOfficeView가 함수형 래퍼로 감싼다.
  * 좌표/색상은 hi-fi 원본 그대로 보존. onRender 콜백으로 React 재렌더를 유발한다. */
 
+import { SIM_TEXT } from './simText';
+import type { Lang, SimText } from './simText';
+
 type Pt = { x: number; y: number };
 type Phase = 'meeting' | 'returning' | 'working' | 'awaiting' | 'done-all';
 type AgentState = 'idle' | 'working' | 'waiting';
@@ -73,6 +76,12 @@ interface DeptDef { label: string; c: string; }
 interface AgentDef {
   id: string; name: string; role: string; dept: string;
   hair: string; skin: string; hairStyle: string; acc: string | null;
+  shirt?: string; // 추가 인원은 부서색 대신 템플릿 색
+}
+/** 추가 인원(역할 템플릿) — 사무실 '확장 구역' 책상에 앉는다. */
+export interface CustomAgentDesk {
+  id: string; name: string; role: string;
+  look?: { hair: string; skin: string; shirt: string; style: string; glasses?: boolean } | null;
 }
 interface CharOpts {
   skin?: string; hair?: string; shirt?: string;
@@ -137,6 +146,10 @@ export class OfficeSimulator {
   private idle = false; // 서버 연결됨 · 브리핑 전(게이트 보드를 전부 '대기'로)
   private boards: OfficeState['boards'] = undefined;
   private selectedId: string | null = null;
+  private lang: Lang = 'ko';
+  private T: SimText = SIM_TEXT.ko;
+  private custom: CustomAgentDesk[] = [];
+  private H = 880; // 그림 높이 — 추가 인원이 있으면 확장 구역만큼 늘어난다
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private raf = 0;
@@ -182,6 +195,7 @@ export class OfficeSimulator {
     this.BRIEF_SPOTS = Array.from({ length: 12 }, (_, i) => i < 6 ? { x: 582 + i * 26, y: 800 } : { x: 582 + (i - 6) * 26, y: 826 });
     this.st = { stage: 0, phase: 'working', progress: 0, speed: opts.initialSpeed ?? 1, playing: true, auto: opts.autoApprove ?? false, clockMin: 540, day: 1, autoWait: 0, meetWait: 0 };
 
+    this.applyText();
     this.buildOffice();
     this.startStage();
     this.last = Date.now();
@@ -193,6 +207,47 @@ export class OfficeSimulator {
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);
+  }
+
+  /** 문구 표(한·영)를 부서·이름·역할·게이트·데모 작업에 입힌다. */
+  private applyText(): void {
+    for (const k in this.DEPT) this.DEPT[k].label = this.T.dept[k] ?? this.DEPT[k].label;
+    this.AGENTS.forEach(a => { a.name = this.T.names[a.id] ?? a.name; a.role = this.T.roles[a.id] ?? a.role; });
+    this.GATES = [...this.T.gates];
+    this.SCENARIO.forEach((sc, i) => sc.workers.forEach((w, j) => { w.task = this.T.demoTasks[i]?.[j] ?? w.task; }));
+  }
+
+  /** 다시 그리기 — 언어·추가 인원이 바뀌었을 때. 걷던 사람은 자리로 돌아오고 상태·강조는 다시 입힌다. */
+  private rebuild(): void {
+    this.envelopes = [];
+    this.buildOffice();
+    for (const id in this.agentStates) {
+      const s = this.agentStates[id];
+      this.setAgent(id, s.state, s.task);
+    }
+    const sel = this.selectedId;
+    this.selectedId = null;
+    this.highlightAgent(sel);
+    this.setBossDoc(Boolean(this.hive && this.hive.pending.length));
+    if (!this.externalMode) this.startStage();
+    this.opts.onRender();
+  }
+
+  /** 화면 언어 전환(ko | en). */
+  setLang(lang: Lang): void {
+    if (lang === this.lang) return;
+    this.lang = lang;
+    this.T = SIM_TEXT[lang];
+    this.applyText();
+    this.rebuild();
+  }
+
+  /** 추가 인원 책상을 맞춘다(명단 API 기준). 바뀐 것이 없으면 다시 그리지 않는다. */
+  syncCustomAgents(list: CustomAgentDesk[]): void {
+    const key = (l: CustomAgentDesk[]) => l.map(a => `${a.id}:${a.name}:${a.role}`).join('|');
+    if (key(list) === key(this.custom)) return;
+    this.custom = list.slice(0, 6);
+    this.rebuild();
   }
 
   destroy(): void {
@@ -301,8 +356,10 @@ export class OfficeSimulator {
     const sp = el('pattern', { id: 'stone', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, defs);
     el('rect', { x: 0, y: 0, width: 24, height: 24, fill: '#4E5670' }, sp);
     el('path', { d: 'M24 0H0V24', fill: 'none', stroke: '#454C64', 'stroke-width': 1 }, sp);
-    el('rect', { x: 0, y: 0, width: 760, height: 880, fill: 'url(#tile)' });
-    el('rect', { x: 4, y: 4, width: 752, height: 872, fill: 'none', stroke: '#141827', 'stroke-width': 4, rx: 8 });
+    this.H = this.custom.length ? 1080 : 880;
+    this.svg.setAttribute('viewBox', `0 0 760 ${this.H}`);
+    el('rect', { x: 0, y: 0, width: 760, height: this.H, fill: 'url(#tile)' });
+    el('rect', { x: 4, y: 4, width: 752, height: this.H - 8, fill: 'none', stroke: '#141827', 'stroke-width': 4, rx: 8 });
     this.buildCorridors();
     for (const key in this.ZONES) {
       const z = this.ZONES[key], d = this.DEPT[key];
@@ -310,7 +367,7 @@ export class OfficeSimulator {
       el('rect', { x: z.x, y: z.y, width: 236, height: 18, fill: '#4A3628' });
       el('rect', { x: z.x, y: z.y + 18, width: 236, height: 2, fill: 'rgba(0,0,0,.25)' });
       this.buildShelf(z.x + 152, z.y + 3);
-      const chipW = key === 'dm' ? 104 : d.label.length * 12 + 28;
+      const chipW = Math.min(150, Math.max(46, [...d.label].reduce((w, ch) => w + (/[가-힣]/.test(ch) ? 12 : 7), 0) + 28));
       el('rect', { x: z.x + 8, y: z.y + 3, width: chipW, height: 13, rx: 3, fill: '#2A2218' });
       el('rect', { x: z.x + 13, y: z.y + 6, width: 7, height: 7, fill: d.c });
       el('text', { x: z.x + 24, y: z.y + 13, class: 'zlabel', fill: '#F0E8D8', text: d.label });
@@ -326,7 +383,28 @@ export class OfficeSimulator {
     });
     this.buildBossRoom(); this.buildLounge(); this.buildServerRoom();
     this.buildMeetingRoom(); this.buildBriefingRoom(); this.buildDoors();
+    if (this.custom.length) this.buildAnnex();
     this.walkLayer = el('g', { id: 'walkLayer' }) as SVGGElement;
+  }
+
+  /** 확장 구역 — 인원 추가로 들어온 사람의 책상(최대 6). 걷는 안무 없이 자리에서 일한다. */
+  private buildAnnex(): void {
+    const el = this.el.bind(this);
+    const y0 = 884;
+    el('rect', { x: 20, y: 864, width: 720, height: 20, fill: 'url(#stone)' });
+    el('rect', { x: 20, y: y0, width: 720, height: 176, fill: 'url(#wood)', stroke: '#6E4A2E', 'stroke-width': 2 });
+    el('rect', { x: 20, y: y0, width: 720, height: 18, fill: '#4A3628' });
+    const label = this.T.rooms.ext;
+    const w = Math.min(220, [...label].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? 12 : 7), 0) + 28);
+    el('rect', { x: 28, y: y0 + 3, width: w, height: 13, rx: 3, fill: '#2A2218' });
+    el('rect', { x: 33, y: y0 + 6, width: 7, height: 7, fill: '#6A4C9C' });
+    el('text', { x: 44, y: y0 + 13, class: 'zlabel', fill: '#F0E8D8', text: label });
+    this.buildPlant(700, y0 + 140);
+    this.custom.forEach((c, i) => {
+      const look = c.look || { hair: '#2A2230', skin: '#EAC49C', shirt: '#6A4C9C', style: 'short' };
+      const acc = look.glasses ? 'glasses' : null;
+      this.buildDesk({ id: c.id, name: c.name, role: c.role, dept: 'ext', hair: look.hair, skin: look.skin, hairStyle: look.style, acc, shirt: look.shirt }, 46 + i * 116, y0 + 72, 13 + i);
+    });
   }
 
   private buildCorridors(): void {
@@ -346,7 +424,7 @@ export class OfficeSimulator {
     el('rect', { x: 12, y: 6, width: 32, height: 24, rx: 3, fill: '#3A3F52' }, g);
     el('rect', { x: 12, y: 6, width: 32, height: 3, rx: 1.5, fill: '#4A5068' }, g);
     const av = el('g', { class: 'avatar' }, g) as SVGGElement;
-    const ch = this.buildChar(av, 18, 0, { ...a, shirt: this.DEPT[a.dept].c, charId: a.id }, idx);
+    const ch = this.buildChar(av, 18, 0, { ...a, shirt: a.shirt || this.DEPT[a.dept]?.c || '#6A4C9C', charId: a.id }, idx);
     el('rect', { x: 0, y: 28, width: 56, height: 13, fill: '#8A5A34' }, g);
     el('path', { d: 'M0 34.5H56', stroke: '#7A4E2C', 'stroke-width': 1 }, g);
     el('rect', { x: 0, y: 41, width: 56, height: 7, fill: '#5E3D22' }, g);
@@ -377,7 +455,7 @@ export class OfficeSimulator {
     el('rect', { x: 580, y: 20, width: 160, height: 182, fill: '#4E7CA6', stroke: '#33506E', 'stroke-width': 2 });
     el('rect', { x: 580, y: 20, width: 160, height: 18, fill: '#2F3A50' });
     el('rect', { x: 580, y: 38, width: 160, height: 2, fill: 'rgba(0,0,0,.25)' });
-    el('text', { x: 590, y: 33, class: 'roomlabel', text: '사장실 · 결재' });
+    el('text', { x: 590, y: 33, class: 'roomlabel', text: this.T.rooms.boss });
     el('rect', { x: 694, y: 23, width: 32, height: 13, fill: '#E8A33D' });
     el('rect', { x: 697, y: 25, width: 26, height: 9, fill: '#2D8C4E' });
     el('rect', { x: 596, y: 52, width: 128, height: 104, rx: 4, fill: '#5D8CB5' });
@@ -393,7 +471,7 @@ export class OfficeSimulator {
     el('circle', { cx: 692, cy: 107, r: 2.4, fill: '#D0684A' }, doc);
     el('rect', { x: 630, y: 126, width: 14, height: 10, rx: 2, fill: '#3A3F52' });
     el('rect', { x: 674, y: 126, width: 14, height: 10, rx: 2, fill: '#3A3F52' });
-    el('text', { x: 660, y: 172, class: 'nrole', 'text-anchor': 'middle', text: '게이트 최종 승인' });
+    el('text', { x: 660, y: 172, class: 'nrole', 'text-anchor': 'middle', text: this.T.rooms.bossNote });
     doc.addEventListener('click', () => { if (this.st.phase === 'awaiting') this.approve(false); });
     this.bossDoc = doc;
   }
@@ -403,7 +481,7 @@ export class OfficeSimulator {
     el('rect', { x: 580, y: 250, width: 160, height: 182, fill: '#BFB9A8', stroke: '#8F897A', 'stroke-width': 2 });
     el('rect', { x: 580, y: 250, width: 160, height: 18, fill: '#4A4438' });
     el('rect', { x: 580, y: 268, width: 160, height: 2, fill: 'rgba(0,0,0,.2)' });
-    el('text', { x: 590, y: 263, class: 'roomlabel', text: '라운지' });
+    el('text', { x: 590, y: 263, class: 'roomlabel', text: this.T.rooms.lounge });
     el('circle', { cx: 716, cy: 259, r: 6.5, fill: '#F4EEE0', stroke: '#141824', 'stroke-width': 1.5 });
     el('path', { d: 'M716 259v-4M716 259l3 2', stroke: '#141824', 'stroke-width': 1.4, fill: 'none' });
     el('rect', { x: 588, y: 278, width: 26, height: 44, rx: 2, fill: '#2E3440' });
@@ -435,7 +513,7 @@ export class OfficeSimulator {
   private buildServerRoom(): void {
     const el = this.el.bind(this);
     el('rect', { x: 580, y: 480, width: 160, height: 182, fill: '#20242F', stroke: '#12151E', 'stroke-width': 2 });
-    el('text', { x: 590, y: 502, class: 'roomlabel', text: '서버룸 · 실행 계층' });
+    el('text', { x: 590, y: 502, class: 'roomlabel', text: this.T.rooms.server });
     [596, 646, 696].forEach((rx, r) => {
       el('rect', { x: rx, y: 514, width: 40, height: 60, rx: 2, fill: '#2E3440' });
       for (let j = 0; j < 4; j++) {
@@ -458,7 +536,7 @@ export class OfficeSimulator {
     el('rect', { x: 20, y: 710, width: 440, height: 150, fill: '#4E7CA6', stroke: '#33506E', 'stroke-width': 2 });
     el('rect', { x: 20, y: 710, width: 440, height: 18, fill: '#2F3A50' });
     el('rect', { x: 20, y: 728, width: 440, height: 2, fill: 'rgba(0,0,0,.25)' });
-    el('text', { x: 30, y: 723, class: 'roomlabel', text: '회의실 · 킥오프' });
+    el('text', { x: 30, y: 723, class: 'roomlabel', text: this.T.rooms.meeting });
     this.buildShelf(370, 713);
     el('rect', { x: 36, y: 738, width: 52, height: 30, fill: '#F4EEE0', stroke: '#8F897A', 'stroke-width': 2 });
     el('path', { d: 'M42 746h38M42 752h26M42 758h32', stroke: '#2D8C4E', 'stroke-width': 1.6, fill: 'none' });
@@ -476,12 +554,12 @@ export class OfficeSimulator {
   private buildBriefingRoom(): void {
     const el = this.el.bind(this);
     el('rect', { x: 500, y: 710, width: 240, height: 150, fill: '#262B3E', stroke: '#161A26', 'stroke-width': 2 });
-    el('text', { x: 512, y: 730, class: 'roomlabel', text: '팀장실 · 브리핑' });
+    el('text', { x: 512, y: 730, class: 'roomlabel', text: this.T.rooms.briefing });
     el('rect', { x: 520, y: 736, width: 180, height: 62, rx: 3, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
     el('rect', { x: 526, y: 742, width: 168, height: 50, fill: '#101420' });
     el('rect', { x: 526, y: 742, width: 168, height: 11, fill: '#0C1016' });
     el('circle', { cx: 535, cy: 747.5, r: 2.6, fill: '#D0684A', class: 'onair' });
-    el('text', { x: 542, y: 751, class: 'btask', style: 'fill:#7FE3A6;font-size:8.5px;letter-spacing:.08em', text: 'ON AIR · 사용자 채널' });
+    el('text', { x: 542, y: 751, class: 'btask', style: 'fill:#7FE3A6;font-size:8.5px;letter-spacing:.08em', text: this.T.rooms.onAir });
     ([[534, 14], [549, 22], [564, 10], [579, 26], [594, 18], [609, 28], [624, 12], [639, 24], [654, 20], [669, 16]] as [number, number][])
       .forEach((p, i) => el('rect', { x: p[0], y: 788 - p[1], width: 8, height: p[1], fill: i === 5 ? '#E8A33D' : '#2D8C4E' }));
     el('path', { d: 'M526 790h168', stroke: '#2E3440', 'stroke-width': 2 });
@@ -489,7 +567,7 @@ export class OfficeSimulator {
     el('rect', { x: 650, y: 798, width: 10, height: 5, fill: '#141824' });
     this.buildPlant(716, 826);
     // 팀장 책상 — 재하의 브리핑을 받아 작업을 나누는 자리(Munder Difflin 의 마이클 자리)
-    this.buildDesk({ id: 'lead', name: '팀장', role: '오케스트레이터', dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' }, 512, 778, 12);
+    this.buildDesk({ id: 'lead', name: this.T.names.lead, role: this.T.roles.lead, dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' }, 512, 778, 12);
   }
 
   private buildDoor(cx: number, cy: number, horiz: boolean): void {
@@ -706,13 +784,13 @@ export class OfficeSimulator {
     sc.workers.forEach(w => { if (this.M[w.id].mode !== 'seated') this.seatInstant(w.id); });
     if (sc.workers.length < 2) {
       st.phase = 'working';
-      this.feedAdd('오케스트레이터', `G${st.stage + 1} ${this.GATES[st.stage]} 시작 — 단독 스프린트`, 'sys');
+      this.feedAdd(this.T.feed.orchestrator, this.T.feed.soloStart(`G${st.stage + 1} ${this.GATES[st.stage]}`), 'sys');
       this.beginWork();
       return;
     }
     st.phase = 'meeting';
     this.meetNeed = sc.workers.length; this.meetArr = 0;
-    this.feedAdd('오케스트레이터', `G${st.stage + 1} ${this.GATES[st.stage]} 시작 — 회의실 킥오프 소집`, 'sys');
+    this.feedAdd(this.T.feed.orchestrator, this.T.feed.kickoff(`G${st.stage + 1} ${this.GATES[st.stage]}`), 'sys');
     sc.workers.forEach((w, i) => {
       const a = this.AGENTS.find(x => x.id === w.id)!;
       const spot = this.MEET_SPOTS[i % this.MEET_SPOTS.length];
@@ -721,7 +799,7 @@ export class OfficeSimulator {
       this.walk(w.id, pts, () => {
         this.M[w.id].node.classList.add('talking');
         this.meetArr++;
-        if (this.meetArr === this.meetNeed) this.feedAdd('회의실', `킥오프 진행 중 — 역할·산출물 정렬 (${this.meetNeed}명)`, 'gate');
+        if (this.meetArr === this.meetNeed) this.feedAdd(this.T.feed.meeting, this.T.feed.kickoffOn(this.meetNeed), 'gate');
       });
     });
     this.opts.onRender();
@@ -731,7 +809,7 @@ export class OfficeSimulator {
     const st = this.st;
     st.phase = 'returning';
     const sc = this.SCENARIO[st.stage];
-    this.feedAdd('회의실', '킥오프 종료 — 전원 자리 복귀', 'gate');
+    this.feedAdd(this.T.feed.meeting, this.T.feed.kickoffEnd, 'gate');
     let back = 0;
     sc.workers.forEach(w => {
       this.walk(w.id, this.returnPts(w.id), () => {
@@ -750,7 +828,7 @@ export class OfficeSimulator {
     sc.workers.forEach(w => {
       this.setAgent(w.id, 'working', w.task);
       const a = this.AGENTS.find(x => x.id === w.id)!;
-      this.feedAdd(a.name, `${w.task} 착수`);
+      this.feedAdd(a.name, this.T.feed.start(w.task));
     });
     this.opts.onRender();
   }
@@ -760,8 +838,8 @@ export class OfficeSimulator {
     st.phase = 'awaiting'; st.progress = 1; st.autoWait = 0;
     const sc = this.SCENARIO[st.stage];
     sc.workers.forEach(w => this.setAgent(w.id, 'waiting', ''));
-    if (this.externalMode) this.feedAdd('게이트', `G${st.stage + 1} ${this.GATES[st.stage]} — 결재 대기`, 'gate');
-    else this.feedAdd('게이트', `G${st.stage + 1} 검수 통과 (${sc.artifact.score}점) — 결재 대기`, 'gate');
+    if (this.externalMode) this.feedAdd(this.T.feed.gate, this.T.feed.awaitExt(`G${st.stage + 1} ${this.GATES[st.stage]}`), 'gate');
+    else this.feedAdd(this.T.feed.gate, this.T.feed.awaitDemo(`G${st.stage + 1}`, sc.artifact.score), 'gate');
     this.setBossDoc(true);
     this.opts.onRender();
   }
@@ -770,14 +848,14 @@ export class OfficeSimulator {
     const st = this.st;
     const sc = this.SCENARIO[st.stage];
     this.setBossDoc(false);
-    this.artifacts = [{ g: 'G' + (st.stage + 1), f: sc.artifact.file, s: sc.artifact.score + '점' }, ...this.artifacts];
-    this.feedAdd('사장', `G${st.stage + 1} 결재 완료${byAuto ? ' (자동)' : ''}`, 'sys');
+    this.artifacts = [{ g: 'G' + (st.stage + 1), f: sc.artifact.file, s: this.T.feed.points(sc.artifact.score) }, ...this.artifacts];
+    this.feedAdd(this.T.feed.boss, this.T.feed.approved(`G${st.stage + 1}`, byAuto), 'sys');
     sc.workers.forEach(w => this.setAgent(w.id, 'idle', ''));
     st.stage++;
     if (st.stage >= this.SCENARIO.length) {
       st.phase = 'done-all';
-      this.feedAdd('오케스트레이터', '전 게이트 통과 — 브리핑 룸 총회 소집', 'sys');
-      this.toast('G6까지 전 게이트 통과 — 파이프라인 완료');
+      this.feedAdd(this.T.feed.orchestrator, this.T.feed.allPassed, 'sys');
+      this.toast(this.T.feed.allPassedToast);
       this.AGENTS.forEach((a, i) => {
         if (this.M[a.id].mode !== 'seated') this.seatInstant(a.id);
         const spot = this.BRIEF_SPOTS[i];
@@ -788,7 +866,7 @@ export class OfficeSimulator {
       this.opts.onRender();
       return;
     }
-    this.toast(`G${st.stage} 결재 완료 — G${st.stage + 1} ${this.GATES[st.stage]} 착수`);
+    this.toast(this.T.feed.nextToast(`G${st.stage}`, `G${st.stage + 1} ${this.GATES[st.stage]}`));
     this.opts.onRender();
     setTimeout(() => { if (this.st.phase !== 'done-all') this.startStage(); }, 500);
   }
@@ -880,7 +958,7 @@ export class OfficeSimulator {
 
   /** 지시 콘솔에서 지시가 접수됐음을 라이브 피드에 남긴다(오케스트레이터 실행 대기 표시). */
   noteInstruction(title: string): void {
-    this.feedAdd('지시', `접수: ${title} — 오케스트레이터 실행 대기`, 'sys');
+    this.feedAdd(this.T.feed.order, this.T.feed.received(title), 'sys');
   }
 
   /* ── 실전 연동: 외부(오케스트레이터) 상태를 화면에 반영 ──
@@ -900,8 +978,8 @@ export class OfficeSimulator {
     const stageChanged = stageClamped !== st.stage;
     // 단계 상승 = 이전 게이트 결재 완료 → 산출물 적재 (hive 가 있으면 작업 원장에서 산출물을 만들므로 건너뛴다)
     if (!ext.hive && ext.stage > this.lastExtStage && ext.artifact) {
-      this.artifacts = [{ g: 'G' + ext.stage, f: ext.artifact.file, s: ext.artifact.score + '점' }, ...this.artifacts];
-      this.feedAdd('사장', `G${ext.stage} 결재 완료`, 'sys');
+      this.artifacts = [{ g: 'G' + ext.stage, f: ext.artifact.file, s: this.T.feed.points(ext.artifact.score) }, ...this.artifacts];
+      this.feedAdd(this.T.feed.boss, this.T.feed.approved(`G${ext.stage}`, false), 'sys');
     }
     this.lastExtStage = ext.stage;
     st.stage = stageClamped;
@@ -926,21 +1004,21 @@ export class OfficeSimulator {
   /** hive 스냅샷 → 산출물 패널·피드·봉투·팀장 자리. 상태 변화가 있는 항목만 피드에 쓴다. */
   private applyHive(h: HiveState): void {
     this.hive = h;
-    const name = (id: string) => id === 'lead' ? '팀장' : id === 'jaeha' ? '재하' : (this.AGENTS.find(a => a.id === id)?.name ?? id);
+    const name = (id: string) => this.T.names[id] ?? this.custom.find(c => c.id === id)?.name ?? (this.AGENTS.find(a => a.id === id)?.name ?? id);
     for (const m of h.mail || []) {
       if (!m.id || this.seenMail.has(m.id)) continue;
       this.seenMail.add(m.id);
       this.flyEnvelope(m.from, m.to, m.type);
-      const what = m.type === 'assign' ? '작업 배정' : m.type === 'result' ? '산출물 회신' : m.type === 'approval' ? '승인 요청' : m.type === 'question' ? '질문' : m.type === 'answer' ? '답변' : m.type === 'report' ? '보고' : m.type;
-      this.feedAdd(name(m.from), `${name(m.to)}에게 ${what}${m.task ? ` (${m.task})` : ''}`, m.type === 'approval' || m.type === 'question' ? 'gate' : undefined);
+      const what = this.T.feed.mailType[m.type] ?? m.type;
+      this.feedAdd(name(m.from), this.T.feed.mail(name(m.to), what, m.task), m.type === 'approval' || m.type === 'question' ? 'gate' : undefined);
     }
     for (const t of h.tasks || []) {
       const key = `${t.status}|${t.gate}`;
       if (this.seenTaskState.get(t.id) === key) continue;
       this.seenTaskState.set(t.id, key);
-      if (t.status === '완료') this.feedAdd('QA', `${t.id} ${t.title} — 게이트 ${t.gate} · 완료`, 'sys');
-      else if (t.status === '실패') this.feedAdd('QA', `${t.id} ${t.title} — 게이트 FAIL`, 'gate');
-      else if (t.status === '승인대기') this.feedAdd('팀장', `${t.id} ${t.title} — 재하 승인 대기`, 'gate');
+      if (t.status === '완료') this.feedAdd(this.T.feed.qa, this.T.feed.taskDone(t.id, t.title, t.gate), 'sys');
+      else if (t.status === '실패') this.feedAdd(this.T.feed.qa, this.T.feed.taskFail(t.id, t.title), 'gate');
+      else if (t.status === '승인대기') this.feedAdd(this.T.feed.lead, this.T.feed.taskAwait(t.id, t.title), 'gate');
     }
     this.artifacts = (h.tasks || []).filter(t => t.status === '완료' && t.output).map(t => ({
       g: t.id, f: (t.output || '').split('/').pop() || t.title, s: t.gate,
@@ -989,15 +1067,15 @@ export class OfficeSimulator {
       this.walk(w.id, pts, () => {
         this.M[w.id].node.classList.add('talking');
         this.meetArr++;
-        if (this.meetArr === this.meetNeed) this.feedAdd('회의실', `킥오프 진행 중 — 역할·산출물 정렬 (${this.meetNeed}명)`, 'gate');
+        if (this.meetArr === this.meetNeed) this.feedAdd(this.T.feed.meeting, this.T.feed.kickoffOn(this.meetNeed), 'gate');
       });
     });
   }
 
   private driveDoneAll(): void {
     // hive 상태에서는 모든 작업이 끝났다는 뜻(PASS 여부와 무관)이므로 '통과'라고 쓰지 않는다.
-    this.feedAdd('팀장', this.hive ? '브리핑 작업 마감 — 보고서를 현황판·재하 inbox 에 남김' : '전 게이트 통과 — 브리핑 룸 총회 소집', 'sys');
-    this.toast(this.hive ? '브리핑 완료 — 팀장 보고서 작성됨' : '전 게이트 통과 — 파이프라인 완료');
+    this.feedAdd(this.T.feed.lead, this.hive ? this.T.feed.briefDone : this.T.feed.allPassed, 'sys');
+    this.toast(this.hive ? this.T.feed.briefDoneToast : this.T.feed.allPassedToast);
     this.AGENTS.forEach((a, i) => {
       if (this.M[a.id].mode !== 'seated') this.seatInstant(a.id);
       const spot = this.BRIEF_SPOTS[i];
@@ -1011,24 +1089,25 @@ export class OfficeSimulator {
     const st = this.st;
     const sc = this.SCENARIO[Math.min(st.stage, this.SCENARIO.length - 1)];
     const gates: GateVals[] = this.GATES.map((name, i) => {
-      let cls = 'pending', label = '대기', pct = 0;
+      const L = this.T.gate;
+      let cls = 'pending', label = L.waiting, pct = 0;
       const b = this.externalMode && !this.idle ? this.boards?.[i] : undefined;
       if (this.idle) { /* 브리핑 전 — 모든 게이트 대기 */ }
       else if (b) {
         // hive 집계 — 단계마다 따로: 진행 > 결재 대기 > 완료 > 대기, 작업 없는 단계는 '해당 없음'
         pct = b.total ? Math.round((b.done / b.total) * 100) : 0;
-        if (!b.total) label = '해당 없음';
-        else if (b.active) { cls = 'active'; label = `진행 중 ${b.done}/${b.total}`; }
-        else if (b.awaiting) { cls = 'awaiting'; label = `결재 대기 ${b.awaiting}건`; pct = 100; }
-        else if (b.done + b.closed === b.total) { cls = 'done'; label = b.closed ? `완료 ${b.done}/${b.total}` : '완료'; }
-        else label = `대기 ${b.done}/${b.total}`;
+        if (!b.total) label = L.none;
+        else if (b.active) { cls = 'active'; label = L.activeOf(b.done, b.total); }
+        else if (b.awaiting) { cls = 'awaiting'; label = L.awaitingN(b.awaiting); pct = 100; }
+        else if (b.done + b.closed === b.total) { cls = 'done'; label = b.closed ? L.doneOf(b.done, b.total) : L.done; }
+        else label = L.waitingOf(b.done, b.total);
       }
-      else if (i < st.stage) { cls = 'done'; label = '완료'; pct = 100; }
-      else if (i === st.stage && st.phase === 'meeting') { cls = 'active'; label = '킥오프 회의'; pct = 0; }
-      else if (i === st.stage && st.phase === 'returning') { cls = 'active'; label = '자리 복귀'; pct = 0; }
-      else if (i === st.stage && st.phase === 'working') { cls = 'active'; label = '진행 중 ' + Math.round(st.progress * 100) + '%'; pct = Math.round(st.progress * 100); }
-      else if (i === st.stage && st.phase === 'awaiting') { cls = 'awaiting'; label = '결재 대기'; pct = 100; }
-      else if (st.phase === 'done-all') { cls = 'done'; label = '완료'; pct = 100; }
+      else if (i < st.stage) { cls = 'done'; label = L.done; pct = 100; }
+      else if (i === st.stage && st.phase === 'meeting') { cls = 'active'; label = L.kickoff; pct = 0; }
+      else if (i === st.stage && st.phase === 'returning') { cls = 'active'; label = L.returning; pct = 0; }
+      else if (i === st.stage && st.phase === 'working') { cls = 'active'; label = L.progress(Math.round(st.progress * 100)); pct = Math.round(st.progress * 100); }
+      else if (i === st.stage && st.phase === 'awaiting') { cls = 'awaiting'; label = L.awaiting; pct = 100; }
+      else if (st.phase === 'done-all') { cls = 'done'; label = L.done; pct = 100; }
       return {
         num: 'G' + (i + 1), name, label, pct: pct + '%',
         bg: cls === 'active' ? '#DFF2E6' : cls === 'awaiting' ? '#FBEED6' : 'transparent',
@@ -1042,16 +1121,16 @@ export class OfficeSimulator {
       };
     });
     return {
-      teamLabel: this.opts.teamLabel ?? '와일리 컨버전스 · AX Office',
+      teamLabel: this.lang === 'ko' ? (this.opts.teamLabel ?? this.T.team) : this.T.team,
       clock: this.clockStr(),
-      playLabel: st.phase === 'done-all' && !this.externalMode ? '▶ 재생' : (st.playing ? '⏸ 일시정지' : '▶ 재생'),
-      speedLabel: `속도 ${st.speed}×`,
+      playLabel: st.phase === 'done-all' && !this.externalMode ? this.T.play : (st.playing ? this.T.pause : this.T.play),
+      speedLabel: this.T.speed(st.speed),
       auto: st.auto,
       gates,
       showApprovalCard: st.phase === 'awaiting' && !(this.hive && this.hive.pending.length === 0 && !this.question),
-      approvalDesc: this.hive ? '재하 승인 대기' : `G${st.stage + 1} ${this.GATES[Math.min(st.stage, 5)]} 게이트 검수 통과`,
+      approvalDesc: this.hive ? this.T.approvalHive : this.T.approvalDemo(`G${st.stage + 1} ${this.GATES[Math.min(st.stage, 5)]}`),
       approvalFile: this.hive ? (this.hive.pending[0]?.payload?.output?.split('/').pop() ?? '') : sc.artifact.file,
-      approvalScore: this.hive ? (this.hive.pending[0]?.payload?.gate ?? '') : sc.artifact.score + '점',
+      approvalScore: this.hive ? (this.hive.pending[0]?.payload?.gate ?? '') : this.T.feed.points(sc.artifact.score),
       feed: this.feed,
       feedEmpty: this.feed.length === 0,
       artifacts: this.artifacts,

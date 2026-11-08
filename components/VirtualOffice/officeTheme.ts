@@ -58,6 +58,10 @@ export const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
 };
 export const GATE_COLOR: Record<string, string> = { PASS: OK_FG, CONDITIONAL: WARN_FG, FAIL: BAD_FG, '미점검': MUTED };
 
+export const smallMuted = { fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.55 } as const;
+export const BREAKER_COLOR: Record<string, { bg: string; fg: string }> = {
+  normal: { bg: '#EEF8F1', fg: OK_FG }, steer: { bg: '#FBF3DC', fg: WARN_FG }, constrain: { bg: '#FBE7D3', fg: '#B5621B' }, stop: { bg: '#F8E3DF', fg: BAD_FG },
+};
 export const panelStyle = { background: '#FFFFFF', border: `1px solid ${LINE}`, borderRadius: 14 } as const;
 export const h2Style = { fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: MUTED, margin: 0 } as const;
 export const inputStyle = { width: '100%', boxSizing: 'border-box' as const, font: 'inherit', fontSize: 13, padding: '8px 10px', border: `1px solid ${LINE}`, borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical' as const, lineHeight: 1.5 };

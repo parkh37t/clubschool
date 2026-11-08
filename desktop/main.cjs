@@ -9,6 +9,7 @@
 //   4) 트레이: 열기 / 산출물 폴더 열기 / Windows 시작 시 실행 / 종료
 //      종료 시 서버와 claude 자식 프로세스를 pid 트리로 모두 정리한다(이름으로 죽이지 않는다).
 //   5) `Wylie AX Office.exe --quit` — 실행 중인 앱에 트레이 '종료'와 같은 종료를 전달한다(스크립트·제거 전 정리용).
+//   6) 트레이·알림·오류 문구는 화면 언어(한국어 기본·영어)를 따른다 — hive/settings.json 의 lang, 실행 중에는 /api/settings.
 
 'use strict';
 
@@ -44,6 +45,49 @@ let serverStopped = false; // 트레이 종료와 before-quit 이 겹쳐도 한 
 let port = 0;
 let quitting = false;
 let hintShown = false;
+let lang = 'ko'; // 'ko' | 'en' — 화면에서 바꾸면 트레이 메뉴도 따라 바뀐다
+
+const TEXT = {
+  ko: {
+    open: '열기', outputs: '산출물 폴더 열기', atLogin: 'Windows 시작 시 실행', atLoginDev: 'Windows 시작 시 실행 (설치본에서만)', quit: '종료',
+    hint: '창을 닫아도 트레이에서 계속 실행됩니다. 끝내려면 트레이 아이콘 → 종료.',
+    stopped: 'AX Office 서버가 멈췄습니다.', stoppedDetail: (f) => `기록: ${f}\n앱을 다시 실행해 주세요.`,
+    noDist: (d) => `화면 빌드(dist)가 없습니다.\n저장소에서 npm run build 후 다시 실행하세요.\n\n${d}`,
+    startFail: (m, f) => `AX Office 서버를 시작하지 못했습니다.\n${m}\n\n기록: ${f}`,
+  },
+  en: {
+    open: 'Open', outputs: 'Open deliverables folder', atLogin: 'Start with Windows', atLoginDev: 'Start with Windows (installed app only)', quit: 'Quit',
+    hint: 'AX Office keeps running in the tray when you close the window. To quit: tray icon → Quit.',
+    stopped: 'The AX Office server stopped.', stoppedDetail: (f) => `Log: ${f}\nPlease start the app again.`,
+    noDist: (d) => `The screen build (dist) is missing.\nRun npm run build in the repository and start again.\n\n${d}`,
+    startFail: (m, f) => `Could not start the AX Office server.\n${m}\n\nLog: ${f}`,
+  },
+};
+const T = () => TEXT[lang] || TEXT.ko;
+
+/** 시작 전(서버가 뜨기 전)에는 hive/settings.json 에서 언어를 읽는다. 없으면 한국어. */
+function readSavedLang() {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(hiveDir, 'settings.json'), 'utf8'));
+    if (s.lang === 'en' || s.lang === 'ko') lang = s.lang;
+  } catch { /* 처음 실행 — 기본값 */ }
+}
+
+/** 화면에서 언어를 바꾸면 트레이 메뉴를 다시 만든다(5초마다 확인). */
+function watchLang() {
+  const iv = setInterval(async () => {
+    if (quitting) { clearInterval(iv); return; }
+    try {
+      const s = await getJson(`http://127.0.0.1:${port}/api/settings`);
+      if ((s.lang === 'en' || s.lang === 'ko') && s.lang !== lang) {
+        lang = s.lang;
+        log(`언어 변경: ${lang}`);
+        if (tray) tray.setContextMenu(buildTrayMenu());
+      }
+    } catch { /* 다음 주기 */ }
+  }, 5000);
+  iv.unref();
+}
 
 function log(line) {
   const text = `[${new Date().toISOString()}] [desktop] ${line}\n`;
@@ -120,8 +164,8 @@ function startServer() {
     if (!quitting) {
       dialog.showMessageBox({
         type: 'error', title: APP_NAME,
-        message: 'AX Office 서버가 멈췄습니다.',
-        detail: `기록: ${logFile}\n앱을 다시 실행해 주세요.`,
+        message: T().stopped,
+        detail: T().stoppedDetail(logFile),
       }).finally(() => quitApp());
     }
   });
@@ -170,7 +214,7 @@ function createWindow() {
     win.hide();
     if (!hintShown && tray && process.platform === 'win32') {
       hintShown = true;
-      tray.displayBalloon({ title: APP_NAME, content: '창을 닫아도 트레이에서 계속 실행됩니다. 끝내려면 트레이 아이콘 → 종료.', iconType: 'info' });
+      tray.displayBalloon({ title: APP_NAME, content: T().hint, iconType: 'info' });
     }
   });
 }
@@ -190,14 +234,14 @@ function buildTrayMenu() {
   const packaged = app.isPackaged;
   const atLogin = packaged ? app.getLoginItemSettings({ args: loginItemArgs() }).openAtLogin : false;
   return Menu.buildFromTemplate([
-    { label: '열기', click: showWindow },
+    { label: T().open, click: showWindow },
     {
-      label: '산출물 폴더 열기',
+      label: T().outputs,
       click: () => { fs.mkdirSync(outDir, { recursive: true }); shell.openPath(outDir); },
     },
     { type: 'separator' },
     {
-      label: packaged ? 'Windows 시작 시 실행' : 'Windows 시작 시 실행 (설치본에서만)',
+      label: packaged ? T().atLogin : T().atLoginDev,
       type: 'checkbox', checked: atLogin, enabled: packaged,
       click: (item) => {
         // 시작 프로그램으로 켤 때는 창 없이 트레이로만 뜬다(--hidden).
@@ -207,7 +251,7 @@ function buildTrayMenu() {
       },
     },
     { type: 'separator' },
-    { label: '종료', click: quitApp },
+    { label: T().quit, click: quitApp },
   ]);
 }
 
@@ -235,10 +279,11 @@ async function start() {
   const logDir = path.join(dataRoot, 'logs');
   for (const d of [hiveDir, outDir, logDir]) fs.mkdirSync(d, { recursive: true });
   logFile = path.join(logDir, 'office-server.log');
-  log(`앱 시작 v${app.getVersion()} packaged=${app.isPackaged} hidden=${START_HIDDEN}`);
+  readSavedLang();
+  log(`앱 시작 v${app.getVersion()} packaged=${app.isPackaged} hidden=${START_HIDDEN} lang=${lang}`);
 
   if (!fs.existsSync(path.join(DIST_DIR, 'index.html'))) {
-    dialog.showErrorBox(APP_NAME, `화면 빌드(dist)가 없습니다.\n저장소에서 npm run build 후 다시 실행하세요.\n\n${DIST_DIR}`);
+    dialog.showErrorBox(APP_NAME, T().noDist(DIST_DIR));
     app.quit();
     return;
   }
@@ -251,13 +296,14 @@ async function start() {
     log(`시작 실패: ${e.message}`);
     quitting = true;
     stopServer();
-    dialog.showErrorBox(APP_NAME, `AX Office 서버를 시작하지 못했습니다.\n${e.message}\n\n기록: ${logFile}`);
+    dialog.showErrorBox(APP_NAME, T().startFail(e.message, logFile));
     app.quit();
     return;
   }
 
   createTray();
   createWindow();
+  watchLang();
 }
 
 if (!app.requestSingleInstanceLock()) {

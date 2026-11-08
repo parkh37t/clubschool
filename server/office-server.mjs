@@ -17,9 +17,15 @@ import { readState, writeState, clearState } from './state.mjs';
 import { runBriefing, watchOrphanApprovals, CONCURRENCY } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
 import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren } from './claudeCode.mjs';
-import { ALL_MAIL_IDS, ROSTER, LEADER, AGENT_IDS, QA_AGENT } from './roster.mjs';
+import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, loadCustomAgents, addCustomAgent, removeCustomAgent, agentById, nameOf } from './roster.mjs';
 import { resolveSkills } from './skills.mjs';
-import { DELIVERABLES_DIR, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, isInside } from './paths.mjs';
+import { DELIVERABLES_DIR, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
+import { getSettings, updateSettings, publicSettings, stateText } from './settings.mjs';
+import { templateSummaries } from './agentTemplates.mjs';
+import { allBreakers, resetBreaker } from './breaker.mjs';
+import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from './leaderSession.mjs';
+import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
+import { loadPersona } from './agentRunner.mjs';
 
 const MAX_UPLOAD = 25 * 1024 * 1024; // 파일 첨부 상한 25MB
 
@@ -31,7 +37,8 @@ if (process.env.OFFICE_MODE && !['live', 'claude_code', 'mock'].includes(process
   process.exit(1);
 }
 
-let running = false; // 한 번에 브리핑 1건만(브리핑 안의 작업은 풀에서 동시에 돈다)
+// 브리핑은 대기열에서 한 번에 1건만 돈다(leaderSession.mjs). 브리핑 안의 작업은 풀에서 동시에 돈다.
+const running = () => isBriefingRunning();
 
 const log = (msg) => console.log(`[office] ${msg}`);
 
@@ -150,7 +157,7 @@ async function idleState() {
 // ── 명단·스킬 ──
 let skillCache = { at: 0, data: null };
 async function skillsByAgent() {
-  if (skillCache.data && Date.now() - skillCache.at < 60000) return skillCache.data;
+  if (skillCache.data && Date.now() - skillCache.at < 60000 && ROSTER.every((a) => skillCache.data[a.id])) return skillCache.data;
   const data = {};
   for (const a of ROSTER) {
     const items = [];
@@ -168,7 +175,7 @@ const STATUS_RANK = { '진행': 3, '검수': 2, '승인대기': 1 };
 
 /** 팀장 + 12인의 현재 상태. 작업 원장에서 유도한다(진행 > 검수 > 승인대기 > 대기). */
 async function rosterView() {
-  const [ledger, usage, skills, state] = await Promise.all([hive.loadTasks(), hive.usageSummary({ qaAgent: QA_AGENT }), skillsByAgent(), readState()]);
+  const [ledger, usage, skills, state, breakers] = await Promise.all([hive.loadTasks(), hive.usageSummary({ qaAgent: QA_AGENT }), skillsByAgent(), readState(), allBreakers(AGENT_IDS)]);
   const now = {};
   const bump = (id, status, task) => {
     if (!now[id] || STATUS_RANK[status] > STATUS_RANK[now[id].status]) now[id] = { status, task };
@@ -179,15 +186,22 @@ async function rosterView() {
     if (t.status === '검수') bump(QA_AGENT, '검수', `QA ${t.id} ${t.title}`);
   }
   const leader = state?.hive?.leader;
+  const q = await loadQueue();
+  const leaderBusy = q.items.some((i) => i.kind === 'message' && i.status === 'running');
   const members = [
-    { id: LEADER.id, name: LEADER.name, dept: '팀장', role: '브리핑 분해·배정·추적·보고', skills: [], stages: [],
-      status: running && leader?.state === 'working' ? '진행' : '대기', task: running ? (leader?.task || '') : '', usd: usage.byAgent[LEADER.id] || 0 },
-    ...ROSTER.map((a) => ({
-      id: a.id, name: a.name, dept: a.dept, role: a.role, stages: a.stages, skills: skills[a.id] || [],
-      status: now[a.id]?.status || '대기', task: now[a.id]?.task || '', usd: usage.byAgent[a.id] || 0,
-    })),
+    { id: LEADER.id, name: LEADER.name, name_en: LEADER.name_en, dept: '팀장', dept_en: 'Lead', role: '브리핑 분해·배정·추적·보고', role_en: 'Splits briefings, assigns, tracks and reports', skills: [], stages: [],
+      status: leaderBusy || (running() && leader?.state === 'working') ? '진행' : '대기', task: leaderBusy ? stateText(await getSettings()).leaderMsg : running() ? (leader?.task || '') : '', usd: usage.byAgent[LEADER.id] || 0, custom: false, breaker: null },
+    ...ROSTER.map((a) => {
+      const b = breakers[a.id];
+      return {
+        id: a.id, name: a.name, name_en: a.name_en, dept: a.dept, dept_en: a.dept_en, role: a.role, role_en: a.role_en, stages: a.stages, skills: skills[a.id] || [],
+        status: now[a.id]?.status || '대기', task: now[a.id]?.task || '', usd: usage.byAgent[a.id] || 0,
+        custom: !a.builtin, template: a.template || '', look: a.look || null,
+        breaker: b ? { level: b.level, reason: b.reason, reason_code: b.reason_code, reason_detail: b.reason_detail, ratio: b.ratio, used_today: b.used_today, budget: b.budget, failures: b.failures } : null,
+      };
+    }),
   ];
-  return { members, running, mode: MODE, concurrency: CONCURRENCY };
+  return { members, running: running(), mode: MODE, concurrency: CONCURRENCY, max_custom: MAX_CUSTOM };
 }
 
 // ── 로그인 상태 — CLI 호출이 1~2초 걸려 1분간 기억한다(화면은 자주 폴링) ──
@@ -221,14 +235,14 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      sendJson(res, 200, { ok: true, mode: MODE, running, concurrency: CONCURRENCY, pending: (await hive.pendingApprovals()).length, desktop: process.env.OFFICE_DESKTOP === '1' });
+      sendJson(res, 200, { ok: true, mode: MODE, running: running(), concurrency: CONCURRENCY, pending: (await hive.pendingApprovals()).length, desktop: process.env.OFFICE_DESKTOP === '1', pty: await ptyAvailable() });
       return;
     }
 
     // hive 스냅샷 — 작업 원장·승인 큐·메일 이벤트·현황판.
     if (req.method === 'GET' && url.pathname === '/api/hive') {
       const snap = await hive.snapshot({ events: 60 });
-      sendJson(res, 200, { ...snap, blackboard: await hive.readBlackboard(), mode: MODE, running });
+      sendJson(res, 200, { ...snap, blackboard: await hive.readBlackboard(), mode: MODE, running: running() });
       return;
     }
 
@@ -272,7 +286,177 @@ const server = http.createServer(async (req, res) => {
 
     // 사용량 합계(에이전트별·일별). CLI 추정 금액이며 청구서가 아니다.
     if (req.method === 'GET' && url.pathname === '/api/usage') {
-      sendJson(res, 200, await hive.usageSummary({ qaAgent: QA_AGENT }));
+      const [u, ledger, st] = await Promise.all([hive.usageSummary({ qaAgent: QA_AGENT }), hive.loadTasks(), getSettings()]);
+      const tasks = ledger.tasks.slice(-40).reverse().map((t) => ({ id: t.id, owner: t.owner, title: t.title, status: t.status, gate: t.gate, cost_usd: t.cost_usd || 0, qa_usd: t.qa?.cost_usd || 0, cap_usd: t.cap_usd || st.max_task_usd, at: t.cost_at || t.updated }));
+      sendJson(res, 200, { ...u, tasks, max_task_usd: st.max_task_usd, agent_daily_usd: st.agent_daily_usd });
+      return;
+    }
+
+    // ── 설정(언어·작업당 상한·하루 예산) ──
+    if (req.method === 'GET' && url.pathname === '/api/settings') {
+      sendJson(res, 200, publicSettings(await getSettings()));
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/settings') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 바꿀 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      const next = await updateSettings(body || {});
+      log(`설정 변경: ${JSON.stringify(publicSettings(next))}`);
+      sendJson(res, 200, publicSettings(next));
+      return;
+    }
+
+    // ── 대기열(Munder Difflin QUEUE) — 팀장에게 보내는 메시지와 브리핑 ──
+    if (req.method === 'GET' && url.pathname === '/api/queue') {
+      const q = await loadQueue();
+      sendJson(res, 200, { items: q.items.slice(-40), leader_terminal: isAgentPtyOpen(LEADER.id), running: running() });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/queue') {
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      const text = String(body?.text || '').trim();
+      if (!text) { sendJson(res, 400, { error: '메시지가 비어 있습니다.' }); return; }
+      const item = await enqueue({ kind: 'message', text, by: OWNER.id });
+      log(`대기열: ${item.id} 팀장에게 메시지`);
+      sendJson(res, 202, { accepted: true, item });
+      return;
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/queue/')) {
+      try { sendJson(res, 200, { ok: true, item: await cancelItem(decodeURIComponent(url.pathname.slice('/api/queue/'.length))) }); } catch (e) { sendJson(res, 400, { error: e.message }); }
+      return;
+    }
+
+    // ── 질문(ask me) ──
+    if (req.method === 'GET' && url.pathname === '/api/questions') {
+      const book = await hive.loadQuestions();
+      sendJson(res, 200, { questions: book.questions.slice(-60).reverse() });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/questions\/[^/]+\/answer$/.test(url.pathname)) {
+      const id = decodeURIComponent(url.pathname.split('/')[3]);
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      try {
+        const q = await hive.answerQuestion(id, { answer: String(body?.answer || '').trim(), by: String(body?.by || '').trim() });
+        // 답은 질문한 쪽 inbox 로 — 역할 에이전트는 다음 작업 때 읽고(hive 규칙), 팀장은 상주 세션 대기열로 받는다.
+        if (q.from === LEADER.id) await enqueue({ kind: 'message', text: `[${q.id} 재하 답변] 질문: ${q.text}\n답: ${q.answer}`, by: OWNER.id, source: q.id });
+        else {
+          await hive.sendMessage({ from: OWNER.id, to: q.from, type: 'answer', task: q.task, body: `${q.id} 답 — 질문: ${q.text}\n\n${q.answer}` });
+          await hive.routeMail();
+        }
+        log(`질문 답변: ${q.id} → ${nameOf(q.from)} (${q.answered_by})`);
+        sendJson(res, 200, { ok: true, question: q });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+      return;
+    }
+
+    // ── 인원 추가(역할 템플릿) ──
+    if (req.method === 'GET' && url.pathname === '/api/agents/templates') {
+      sendJson(res, 200, { templates: templateSummaries(), max_custom: MAX_CUSTOM, custom: ROSTER.filter((a) => !a.builtin).length });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/agents') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 인원을 바꿀 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      try {
+        const a = await addCustomAgent({ template: String(body?.template || ''), name: body?.name, name_en: body?.name_en });
+        await hive.ensureHive(ALL_MAIL_IDS);
+        skillCache.at = 0;
+        await hive.appendEvent({ kind: 'agent', id: a.id, action: 'add', template: a.template });
+        log(`인원 추가: ${a.id} ${a.name} (${a.template})`);
+        sendJson(res, 201, { ok: true, agent: a });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+      return;
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/agents/')) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 인원을 바꿀 수 있습니다.' }); return; }
+      const id = decodeURIComponent(url.pathname.slice('/api/agents/'.length));
+      const active = (await hive.loadTasks()).tasks.some((t) => t.owner === id && ['대기', ...hive.ACTIVE_STATUS].includes(t.status));
+      if (active) { sendJson(res, 409, { error: '진행·대기 중인 작업이 있어 지금은 뺄 수 없습니다.' }); return; }
+      try {
+        await removeCustomAgent(id);
+        await hive.appendEvent({ kind: 'agent', id, action: 'remove' });
+        log(`인원 삭제: ${id}`);
+        sendJson(res, 200, { ok: true });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+      return;
+    }
+
+    // ── 서킷 브레이커 ──
+    if (req.method === 'GET' && url.pathname === '/api/breakers') {
+      sendJson(res, 200, { breakers: await allBreakers(AGENT_IDS) });
+      return;
+    }
+    if (req.method === 'POST' && /^\/api\/breakers\/[^/]+\/reset$/.test(url.pathname)) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 초기화할 수 있습니다.' }); return; }
+      const agent = decodeURIComponent(url.pathname.split('/')[3]);
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { body = {}; }
+      const by = String(body?.by || '').trim();
+      const reason = String(body?.reason || '').trim();
+      if (!by || !reason) { sendJson(res, 400, { error: '초기화에는 행위자(by)와 사유(reason)가 필요합니다.' }); return; }
+      if (!agentById(agent)) { sendJson(res, 404, { error: '없는 에이전트' }); return; }
+      const r = await resetBreaker(agent, `${by}: ${reason}`);
+      log(`서킷 브레이커 초기화: ${agent} (${by}: ${reason})`);
+      sendJson(res, 200, { ok: true, breaker: r });
+      return;
+    }
+
+    // ── 실시간 기록(터미널 탭) ── ?task=T-0001 | ?stream=lead, &after=<줄 번호>
+    if (req.method === 'GET' && url.pathname === '/api/live') {
+      const stream = url.searchParams.get('task') || url.searchParams.get('stream') || '';
+      if (!/^(T-\d{4}|lead)$/.test(stream)) { sendJson(res, 400, { error: 'task 또는 stream 이 필요합니다.' }); return; }
+      sendJson(res, 200, { stream, ...(await hive.readLive(stream, url.searchParams.get('after') || 0)) });
+      return;
+    }
+    // 에이전트의 가장 최근 작업(기록 고를 때)
+    if (req.method === 'GET' && url.pathname === '/api/live/latest') {
+      const agent = url.searchParams.get('agent') || '';
+      const t = (await hive.loadTasks()).tasks.filter((x) => x.owner === agent).at(-1);
+      sendJson(res, 200, { agent, task: t ? { id: t.id, title: t.title, status: t.status } : null });
+      return;
+    }
+
+    // ── 대화형 터미널(node-pty) — 이 PC 화면에서만 ──
+    if (req.method === 'GET' && url.pathname === '/api/pty') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 볼 수 있습니다.' }); return; }
+      sendJson(res, 200, { available: await ptyAvailable(), sessions: listPty() });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/pty') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 터미널을 열 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      const agent = String(body?.agent || '');
+      if (!agentById(agent) || agent === OWNER.id) { sendJson(res, 404, { error: '없는 에이전트' }); return; }
+      const existing = listPty().find((x) => x.agent === agent && x.exited === null);
+      if (existing) { sendJson(res, 200, { ok: true, id: existing.id, title: existing.title, reused: true }); return; }
+      try {
+        let opened;
+        if (agent === LEADER.id) {
+          const st = await getSettings();
+          opened = await openPty({ agent, cwd: HIVE_DIR, title: '팀장 상주 세션', resumeId: st.leader_session_id || '', cols: body.cols, rows: body.rows });
+        } else {
+          const last = (await hive.loadTasks()).tasks.filter((x) => x.owner === agent && x.output).at(-1);
+          const project = last ? String(last.output).split('/')[0] : '';
+          const cwd = (project && absData(project)) || DELIVERABLES_DIR;
+          await import('node:fs').then((m) => m.promises.mkdir(cwd, { recursive: true }));
+          const persona = `${await loadPersona(agent)}\n\n# 지금 위치\n이 폴더는 ${project ? `과제 '${project}' 의 산출물 폴더` : '산출물 폴더'}다. 재하가 직접 대화하며 일을 시킨다. 외부 발송·비용·삭제·범위 변경·수치 확정은 재하에게 먼저 확인한다.`;
+          opened = await openPty({ agent, cwd, title: `${nameOf(agent)} — ${project || '산출물 폴더'}`, persona, cols: body.cols, rows: body.rows });
+        }
+        log(`터미널 열기: ${agent} (${opened.id})`);
+        sendJson(res, 201, { ok: true, ...opened });
+      } catch (e) {
+        sendJson(res, 500, { error: `터미널을 열지 못했습니다: ${e.message}` });
+      }
+      return;
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/pty/')) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 닫을 수 있습니다.' }); return; }
+      sendJson(res, 200, { ok: killPty(decodeURIComponent(url.pathname.slice('/api/pty/'.length))) });
       return;
     }
 
@@ -311,17 +495,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 400, { error: 'title이 필요합니다.' });
         return;
       }
-      if (running) {
-        sendJson(res, 409, { error: '이미 다른 브리핑을 실행 중입니다. 끝난 뒤 보내 주세요.' });
-        return;
-      }
-      running = true;
-      sendJson(res, 202, { accepted: true, title: instruction.title, mode: MODE, concurrency: CONCURRENCY });
-      // 새 브리핑 → 이전 상태 초기화 후 실행.
-      clearState()
-        .then(() => runBriefing(instruction, { setState: writeState, deliverablesRoot: DELIVERABLES_DIR, mode: MODE, log }))
-        .catch((err) => log(`오케스트레이션 오류: ${err?.stack || err}`))
-        .finally(() => { running = false; });
+      // 실행 중이어도 거절하지 않고 대기열에 넣는다(Munder Difflin QUEUE). 앞 브리핑이 끝나면 차례로 돈다.
+      const item = await enqueue({ kind: 'briefing', briefing: instruction, by: OWNER.id });
+      const q = await loadQueue();
+      const position = q.items.filter((i) => i.kind === 'briefing' && i.status === 'queued').findIndex((i) => i.id === item.id) + 1;
+      log(`대기열: ${item.id} 브리핑 "${instruction.title}" (대기 ${position}번째${running() ? ', 앞 브리핑 실행 중' : ''})`);
+      sendJson(res, 202, { accepted: true, queued: item.id, position, running: running(), title: instruction.title, mode: MODE, concurrency: CONCURRENCY });
       return;
     }
 
@@ -379,13 +558,14 @@ function shutdown(why) {
   if (stopping) return;
   stopping = true;
   const n = killAllChildren();
-  log(`종료(${why}) — claude 자식 프로세스 ${n}개 정리`);
+  const t = killAllPty();
+  log(`종료(${why}) — claude 자식 프로세스 ${n}개 · 터미널 ${t}개 정리`);
   server.close();
   setTimeout(() => process.exit(0), 300).unref();
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('exit', () => { killAllChildren(); });
+process.on('exit', () => { killAllChildren(); killAllPty(); });
 // 설치형 앱: 부모(Electron)가 비정상 종료돼 stdin 파이프가 끊기면 같이 내려간다(고아 서버 방지).
 if (process.env.OFFICE_EXIT_ON_STDIN_CLOSE === '1') {
   process.stdin.on('end', () => shutdown('부모 종료'));
@@ -400,11 +580,19 @@ server.on('error', (e) => {
 });
 
 server.listen(PORT, HOST, async () => {
+  await loadCustomAgents();
   await hive.ensureHive(ALL_MAIL_IDS);
   // 지난번에 돌다가 서버와 함께 끊긴 작업은 보류로 닫고, 남은 승인 대기는 이어서 지켜본다.
   const closed = await hive.closeInterrupted('서버 재시작으로 중단됨 — 필요하면 브리핑을 다시 보낼 것');
   if (closed.length) log(`지난 실행에서 끊긴 작업 ${closed.length}건을 보류로 닫음: ${closed.map((t) => t.id).join(', ')}`);
   await watchOrphanApprovals(log);
+  // 대기열 일꾼 — 팀장 상주 세션(메시지)과 브리핑(한 번에 1건). 새 브리핑마다 이전 사무실 상태를 지우고 시작한다.
+  await startQueue({
+    mode: MODE, log,
+    runBriefing: (b) => clearState().then(() => runBriefing(b, { setState: writeState, deliverablesRoot: DELIVERABLES_DIR, mode: MODE, log })),
+    isLeaderPtyOpen: () => isAgentPtyOpen(LEADER.id),
+  });
+  await attachPtySocket(server, { allow: sameOrigin, log });
   const shown = HOST && HOST !== '0.0.0.0' ? HOST : 'localhost';
   log(`가동 — http://${shown}:${PORT}  (모드: ${MODE}, 동시 작업 ${CONCURRENCY}건${HOST ? `, 바인딩 ${HOST}` : ''})`);
   log(`데이터: hive=${HIVE_DIR} · 산출물=${DELIVERABLES_DIR}`);

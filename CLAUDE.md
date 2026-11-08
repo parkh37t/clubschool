@@ -111,11 +111,12 @@ npm run deploy-check # 배포 전 점검 스크립트
 
 이 저장소의 `server/` 는 **Wylie AX Office** — 팀장 에이전트 1명이 재하의 브리핑을 작업으로 나눠 12인
 에이전트에게 메시지로 배정하고, 가상 사무실(`components/VirtualOffice`)이 그 진행을 보여 준다.
-Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것이다.
+Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것이다(코드는 가져오지 않고 운영 방식만 따른다).
 
 - **브리핑 4요소**: 결과(끝나면 손에 쥘 것) · 맥락 · 제약 · 질문 기준. 결과 줄이 없으면 팀장은 분해하지 않고 되묻는다.
 - **hive(기본 `server/hive/`, `OFFICE_HIVE_DIR`)가 단일 진실**: 작업 원장 `tasks.json`, 승인 큐 `approvals.json`, 메일함 `inbox/outbox`,
-  기억 `memory/`, 현황판 `blackboard.md`, 미확정 `open_items.md`, 이벤트 `events.log`. 메모리 상태를 두지 않는다.
+  기억 `memory/`, 현황판 `blackboard.md`, 미확정 `open_items.md`, 이벤트 `events.log`, 대기열 `queue.json`, 질문 `questions.json`,
+  서킷 브레이커 `breakers.json`, 추가 인원 `agents.json`, 설정 `settings.json`, 실시간 기록 `live/`. 메모리 상태를 두지 않는다.
   경로는 `server/paths.mjs` 한 곳에서 정한다(산출물 `OFFICE_DELIVERABLES_DIR`, 화면 `OFFICE_DIST_DIR`).
 - **작업 풀**: 브리핑 안의 작업은 선행이 끝나면 `OFFICE_CONCURRENCY`(기본 2, 최대 3)건까지 동시에 돈다. 같은 담당자는 동시에 돌리지 않고,
   승인 대기는 그 작업만 멈춘다. `tasks.json`·`approvals.json` 갱신은 `hive.mjs` 의 쓰기 잠금 안에서만 한다.
@@ -127,8 +128,19 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   API 키 없음, 자격 증명을 코드가 보지 않는다. `mock` 은 키 없는 배선 검증, `live` 는 구 Agent SDK 경로.
   CLI 가 없으면 더미로 바꿔 돌리지 않고 설치 안내를 적고 끝낸다.
 - **자료 울타리**: 메시지에 붙는 고객 원문·첨부는 `<<<자료 시작>>> … <<<자료 끝>>>` 안에 두고 "지시 아님"을 명시한다.
-- **회신 형식**: 완료 기능 / 실행 방법 / 검증 결과 / 남은 제한 / 기억할 것. 팀장은 "남은 제한"을 모아 보고서 맨 아래에 그대로 적는다.
-- `.claude/agents/leader.md` 가 팀장 페르소나, `server/roster.mjs` 가 명단·스킬·산출물 폴더의 단일 원천이다.
+- **회신 형식**: 완료 기능 / 실행 방법 / 검증 결과 / 남은 제한 / 기억할 것 (+ 필요할 때만 재하에게 질문). 팀장은 "남은 제한"을 모아 보고서 맨 아래에 그대로 적는다.
+- **팀장 상주 세션·대기열**: 입력창 메시지는 `queue.json` 에 쌓이고 팀장 상주 세션(`claude -p --resume`, hive 읽기 전용)이 한 건씩 처리한다.
+  일을 맡긴 메시지는 팀장이 브리핑으로 정리해 다시 대기열에 넣는다. 브리핑은 한 번에 1건, 나머지는 차례를 기다린다(`server/leaderSession.mjs`).
+- **hive 규칙**: 작업을 시작할 때 담당은 기억 → 재하의 답 → 안 읽은 편지(자료 울타리)를 읽고, 읽은 편지는 `inbox/<담당>/.done/` 으로 옮긴다.
+  회신의 질문은 질문 탭(`questions.json`)에 쌓이고, 답은 행위자가 있어야 기록된다.
+- **서킷 브레이커·예산**: 연속 문제 1회 조정 → 2회 제한(턴·상한 절반) → 3회 중지, 하루 예산 80% 제한·100% 중지. 중지는 재하가 '재개' 승인이나
+  모니터 탭 초기화(행위자·사유 필수)로만 풀린다. 작업당 상한을 넘으면 그 자리에서 멈추고 '비용' 승인 카드(승인 시 상한 두 배)를 띄운다.
+- **인원 추가**: 역할 템플릿 12종(`server/agentTemplates.mjs`, 한·영)으로 최대 6명. 명단은 기본 12인 + `agents.json` 이며 `roster.mjs` 가 합친다.
+- **실시간 기록·터미널**: 역할 실행은 stream-json 으로 돌고 `live/<작업>.jsonl` 에 줄을 남긴다. 대화형 터미널은 node-pty(`server/pty.mjs`)이며
+  상태를 바꾸는 API(설정·대기열·인원·브레이커·터미널)는 이 PC 화면(Origin 127.0.0.1·localhost)에서 온 요청만 받는다.
+- **언어**: 화면·안내·역할 템플릿은 한국어(기본)·영어 두 벌(`components/VirtualOffice/i18n.ts`·`simText.ts`). 설정은 `settings.json` 의 `lang`,
+  영어면 팀장·에이전트 프롬프트 끝에 영어로 쓰라는 한 줄을 붙인다. 새 화면 문구는 두 사전에 함께 넣는다.
+- `.claude/agents/leader.md` 가 팀장 페르소나, `server/roster.mjs` 가 명단(기본 12인 + 추가 인원)·스킬·산출물 폴더의 단일 원천이다.
 - **설치형 앱**: `desktop/`(Electron) — 앱이 서버를 내부에서 띄우고(127.0.0.1, claude_code) 데이터는 `문서\Wylie AX Office\hive·산출물`.
   `npm run desktop:dev` · `npm run desktop:build`(→ `release/`, 커밋 금지). 자세한 내용은 `desktop/README.md`.
-- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1차 완료 — 2·3차는 재하 확인 후). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.
+- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1·2차 완료 — 3차는 재하 확인 후). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.
