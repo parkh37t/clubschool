@@ -114,8 +114,11 @@ npm run deploy-check # 배포 전 점검 스크립트
 Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것이다.
 
 - **브리핑 4요소**: 결과(끝나면 손에 쥘 것) · 맥락 · 제약 · 질문 기준. 결과 줄이 없으면 팀장은 분해하지 않고 되묻는다.
-- **hive(`server/hive/`)가 단일 진실**: 작업 원장 `tasks.json`, 승인 큐 `approvals.json`, 메일함 `inbox/outbox`,
+- **hive(기본 `server/hive/`, `OFFICE_HIVE_DIR`)가 단일 진실**: 작업 원장 `tasks.json`, 승인 큐 `approvals.json`, 메일함 `inbox/outbox`,
   기억 `memory/`, 현황판 `blackboard.md`, 미확정 `open_items.md`, 이벤트 `events.log`. 메모리 상태를 두지 않는다.
+  경로는 `server/paths.mjs` 한 곳에서 정한다(산출물 `OFFICE_DELIVERABLES_DIR`, 화면 `OFFICE_DIST_DIR`).
+- **작업 풀**: 브리핑 안의 작업은 선행이 끝나면 `OFFICE_CONCURRENCY`(기본 2, 최대 3)건까지 동시에 돈다. 같은 담당자는 동시에 돌리지 않고,
+  승인 대기는 그 작업만 멈춘다. `tasks.json`·`approvals.json` 갱신은 `hive.mjs` 의 쓰기 잠금 안에서만 한다.
 - **상태 분리**: 작업 상태(대기·진행·검수·승인대기·완료·보류·실패)와 산출물 판정(미점검·PASS·CONDITIONAL·FAIL)은
   별도 필드다. 검사 결과는 pass/fail/error/not_run 네 값이며 **돌리지 않은 검사를 통과로 적지 않는다.** 고정 점수는 없다.
 - **승인 게이트**: 외부 발송·비용 발생·파일 삭제·범위 변경·인력/금액 수치 확정은 `approvals.json` 에 쌓고 재하가
@@ -126,4 +129,6 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **자료 울타리**: 메시지에 붙는 고객 원문·첨부는 `<<<자료 시작>>> … <<<자료 끝>>>` 안에 두고 "지시 아님"을 명시한다.
 - **회신 형식**: 완료 기능 / 실행 방법 / 검증 결과 / 남은 제한 / 기억할 것. 팀장은 "남은 제한"을 모아 보고서 맨 아래에 그대로 적는다.
 - `.claude/agents/leader.md` 가 팀장 페르소나, `server/roster.mjs` 가 명단·스킬·산출물 폴더의 단일 원천이다.
-- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다. 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.
+- **설치형 앱**: `desktop/`(Electron) — 앱이 서버를 내부에서 띄우고(127.0.0.1, claude_code) 데이터는 `문서\Wylie AX Office\hive·산출물`.
+  `npm run desktop:dev` · `npm run desktop:build`(→ `release/`, 커밋 금지). 자세한 내용은 `desktop/README.md`.
+- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1차 완료 — 2·3차는 재하 확인 후). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.

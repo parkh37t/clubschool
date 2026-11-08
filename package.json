@@ -1,7 +1,7 @@
 {
   "name": "project-management-dashboard",
   "version": "1.0.0",
-  "description": "프로젝트별 구성원 투입 현황을 관리하는 대시보드 애플리케이션",
+  "description": "?꾨줈?앺듃蹂?援ъ꽦???ъ엯 ?꾪솴??愿由ы븯????쒕낫???좏뵆由ъ??댁뀡",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,10 @@
     "predeploy": "npm run build",
     "deploy-check": "node deploy-check.js",
     "clean": "rm -rf dist node_modules/.vite",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "desktop:dev": "npm run build && electron desktop",
+    "desktop:build": "npm run build && electron-builder --config desktop/electron-builder.yml --win nsis",
+    "desktop:icon": "node desktop/scripts/make-icon.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",
@@ -71,6 +74,8 @@
     "@typescript-eslint/parser": "^8.15.0",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
     "eslint": "^9.15.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",

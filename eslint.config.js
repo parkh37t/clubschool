@@ -81,6 +81,24 @@ export default [
     },
   },
   {
-    ignores: ['dist', 'node_modules', '*.config.js', '*.config.ts'],
+    // 설치형 앱(desktop/) — Electron main 프로세스(CommonJS)와 빌드 보조 스크립트는 Node 에서 돈다.
+    files: ['desktop/**/*.cjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'commonjs',
+      globals: { process: 'readonly', require: 'readonly', module: 'writable', __dirname: 'readonly', console: 'readonly', setTimeout: 'readonly', Buffer: 'readonly' },
+    },
+  },
+  {
+    files: ['desktop/**/*.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { process: 'readonly', console: 'readonly', Buffer: 'readonly', URL: 'readonly' },
+    },
+  },
+  {
+    // release/ = electron-builder 결과물(설치 파일·풀린 앱)
+    ignores: ['dist', 'release', 'node_modules', '*.config.js', '*.config.ts'],
   },
 ];

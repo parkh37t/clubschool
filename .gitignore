@@ -65,3 +65,5 @@ server/office-state.json.tmp
 # Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)
 release/
 desktop/node_modules/
+# 설치형 앱 아이콘 원본(electron-builder buildResources) — 위의 build/ 무시 규칙에서 뺀다
+!desktop/build/
