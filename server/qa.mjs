@@ -10,8 +10,7 @@ import path from 'node:path';
 import { runStructured } from './claudeCode.mjs';
 import { QA_AGENT } from './roster.mjs';
 import { AGENT_PERSONA } from './gates.mjs';
-
-const REPO_ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+import { AGENTS_DIR, relData } from './paths.mjs';
 
 const QA_SCHEMA = {
   type: 'object',
@@ -42,7 +41,7 @@ async function mechanicalChecks(file) {
   let text = '';
   try {
     text = await fs.readFile(file, 'utf8');
-    checks.push({ id: 'file_exists', status: 'pass', evidence: path.relative(REPO_ROOT, file) });
+    checks.push({ id: 'file_exists', status: 'pass', evidence: relData(file) });
   } catch {
     checks.push({ id: 'file_exists', status: 'fail', evidence: `파일 없음: ${file}` });
     return { checks, text };
@@ -86,7 +85,7 @@ export async function judge({ task, file, briefing, priorFiles = [], mode, model
 
   let persona = '';
   try {
-    persona = (await fs.readFile(path.join(REPO_ROOT, '.claude', 'agents', `${AGENT_PERSONA[QA_AGENT]}.md`), 'utf8')).replace(/^---[\s\S]*?---\s*/, '').trim();
+    persona = (await fs.readFile(path.join(AGENTS_DIR, `${AGENT_PERSONA[QA_AGENT]}.md`), 'utf8')).replace(/^---[\s\S]*?---\s*/, '').trim();
   } catch { /* 페르소나 없이도 판정은 한다 */ }
   const system = [persona, '', '# QA 판정 역할', '당신은 이 과제의 게이트 심사자다. 산출물이 완료 기준·제약을 충족하는지, 근거 없이 지어낸 수치·사실이 없는지, 앞 산출물과 용어·수치가 일치하는지, 미해결을 정직하게 표시했는지 검사한다. 점수를 매기지 않는다. 각 검사에 산출물 인용 근거를 적고, 돌리지 못한 검사는 not_run 으로 둔다.'].join('\n');
   const prompt = [

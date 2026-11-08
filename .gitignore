@@ -57,3 +57,11 @@ server/hive/inbox/
 server/hive/outbox/
 server/hive/memory/
 server/hive/events.log
+server/hive/_archive-*/
+server/hive/office-state.json
+server/hive/office-state.json.tmp
+server/office-state.json.tmp
+
+# Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)
+release/
+desktop/node_modules/

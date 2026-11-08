@@ -8,15 +8,13 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { resolveSkills } from './skills.mjs';
 import { runAgent as runClaudeCodeAgent } from './claudeCode.mjs';
 import { ROSTER } from './roster.mjs';
+import { APP_ROOT, AGENTS_DIR, DELIVERABLES_DIR, relData, absData } from './paths.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, '..');
-const AGENTS_DIR = path.join(REPO_ROOT, '.claude', 'agents');
+const REPO_ROOT = APP_ROOT; // live(SDK) 경로는 저장소 규칙(CLAUDE.md)을 읽으려고 저장소 루트에서 돈다
 
 // 작업 1건당 안전장치 — 에이전트가 헤매도 요금·시간이 무한정 늘지 않게 한다(환경변수로 조정).
 const MAX_TURNS = Number(process.env.OFFICE_MAX_TURNS || 40);
@@ -252,8 +250,9 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
     const ctx = {
       worker: { id: task.owner, task: task.title },
       gate: { g: '', name: task.stage || '' },
-      instruction: { title: briefing.title, goal: briefing.result, brief: briefing.context, attachmentPaths: briefing.attachmentPaths || [] },
-      outDir: stageDir, log, skills, priorFiles,
+      // 원장·첨부 경로는 산출물 폴더 기준이므로 저장소 루트에서 도는 SDK 에게는 절대경로로 넘긴다.
+      instruction: { title: briefing.title, goal: briefing.result, brief: briefing.context, attachmentPaths: (briefing.attachmentPaths || []).map((f) => absData(f) || f) },
+      outDir: stageDir, log, skills, priorFiles: priorFiles.map((f) => absData(f) || f),
     };
     const r = await runLive(ctx);
     return { ...r, reply: r.summary || '', leftovers: [], memory: [] };
@@ -284,9 +283,10 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name 
   return { file, summary: `[목업] ${task.title}`, costUsd: 0, reply, ...parseReply(reply) };
 }
 
-async function runTaskClaudeCode({ task, briefing, stageDir, assignText, skills, priorFiles, log, name }) {
+async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name }) {
   const persona = await loadPersona(task.owner);
-  const rel = path.relative(REPO_ROOT, stageDir) || '.';
+  // 에이전트는 산출물 폴더(DELIVERABLES_DIR)를 작업 폴더로 돈다. 원장·지시문의 경로가 모두 그 기준이다.
+  const rel = relData(stageDir) || '.';
   const applied = skills?.applied || [];
   const prompt = [
     assignText,
@@ -306,21 +306,33 @@ async function runTaskClaudeCode({ task, briefing, stageDir, assignText, skills,
     REPLY_GUIDE,
   ].filter((l) => l !== '').join('\n');
 
-  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: REPO_ROOT, model: process.env.OFFICE_MODEL, maxTurns: MAX_TURNS });
+  const addDirs = [...new Set(applied.map((s) => s.refs).filter(Boolean))];
+  const before = new Set(await listDir(stageDir));
+  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: MAX_TURNS, addDirs });
   const expected = path.join(stageDir, taskFileName(task));
   if (!r.ok) {
     log(`${name}: 실행 실패(${r.code}) — ${r.message}`);
     return { file: null, summary: '', costUsd: 0, reply: '', leftovers: [`실행 실패(${r.code}): ${r.message.slice(0, 160)}`], memory: [], failure: r.code };
   }
   let file = null;
+  const extraLeft = [];
   try { await fs.access(expected); file = expected; } catch { /* 지정 경로에 안 썼을 수 있음 */ }
   if (!file) {
-    // 지정 경로가 아니면 가장 최근 md 를 산출물로 본다. 그것도 없으면 회신 텍스트를 파일로 남긴다(산출물 1개 보장).
-    const files = (await listDir(stageDir)).filter((f) => f.endsWith('.md'));
-    file = files.length ? path.join(stageDir, files.sort().at(-1)) : expected;
-    if (!files.length) await fs.writeFile(expected, (r.text || `# ${task.title}\n(산출 텍스트 없음)`) + '\n', 'utf8');
+    // 지정 경로가 아니면 이번 실행에서 새로 생긴 md 중 이 작업 것만 산출물로 본다. 같은 단계 폴더에서
+    // 다른 담당이 동시에 쓰고 있을 수 있으므로 다른 작업 번호(T-xxxx_)로 시작하는 파일은 고르지 않는다.
+    const fresh = (await listDir(stageDir)).filter((f) => f.endsWith('.md') && !before.has(f));
+    const mine = fresh.filter((f) => f.includes(task.id) || !/^T-\d{4}_/.test(f));
+    if (mine.length === 1) {
+      file = path.join(stageDir, mine[0]);
+      extraLeft.push(`지정 경로가 아닌 ${mine[0]} 에 저장함`);
+    } else {
+      file = expected;
+      await fs.writeFile(expected, (r.text || `# ${task.title}\n(산출 텍스트 없음)`) + '\n', 'utf8');
+      extraLeft.push('지정 경로에 산출물을 저장하지 않아 회신 텍스트를 산출물로 남김');
+    }
   }
   const parsed = parseReply(r.text);
+  parsed.leftovers = [...extraLeft, ...parsed.leftovers];
   const summary = firstLine(r.text) || task.title;
   log(`${name}: ${path.basename(file)} 산출 (예상 비용 $${r.costUsd.toFixed(2)})`);
   return { file, summary, costUsd: r.costUsd, reply: r.text, ...parsed };

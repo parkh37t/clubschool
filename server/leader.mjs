@@ -14,6 +14,7 @@ import path from 'node:path';
 import { runStructured } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
 import { hasSkill } from './skills.mjs';
+import { AGENTS_DIR } from './paths.mjs';
 
 const APPROVAL_PATTERNS = [
   { kind: '외부발송', re: /(고객|발주처|외부)\s*(에게|에)?\s*(발송|전송|제출|공유)|메일 발송|공유 링크/ },
@@ -132,7 +133,8 @@ const DECOMPOSE_SCHEMA = {
 };
 
 async function loadLeaderPersona() {
-  const file = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '.claude', 'agents', 'leader.md');
+  // (예전에는 URL.pathname 으로 경로를 만들어 Windows·한글 경로에서 파일을 못 찾고 기본 문구로 넘어갔다)
+  const file = path.join(AGENTS_DIR, 'leader.md');
   try {
     const raw = await fs.readFile(file, 'utf8');
     return raw.replace(/^---[\s\S]*?---\s*/, '').trim();

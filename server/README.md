@@ -5,7 +5,8 @@
 승인이 필요한 작업은 **재하가 결정할 때까지 멈추고** → 현황판·보고를 남깁니다. 진행은 가상 사무실이 2초마다 그립니다.
 
 > Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것입니다.
-> 상태는 전부 `server/hive/` 의 평문 파일에 있습니다(`hive/README.md`). 서버를 재시작해도 남습니다.
+> 상태는 전부 hive(기본 `server/hive/`)의 평문 파일에 있습니다(`hive/README.md`). 서버를 재시작해도 남습니다.
+> 더블클릭으로 쓰는 설치형 앱은 `desktop/README.md` 를 보세요(앱이 이 서버를 내부에서 띄웁니다).
 
 ## 실행
 
@@ -33,17 +34,41 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 ```
 `.env.example` 의 선택 변수: `OFFICE_MODEL`, `OFFICE_MAX_USD`, `OFFICE_MAX_TURNS`, `CLAUDE_BIN`, `OFFICE_APPROVAL_TIMEOUT_MS`.
 
+### 환경 변수 (위치·동시 작업)
+
+| 변수 | 기본 | 설명 |
+| --- | --- | --- |
+| `PORT` | 8787 | 서버 포트 |
+| `OFFICE_HOST` | (모든 인터페이스) | 바인딩 주소. 설치형 앱은 `127.0.0.1` |
+| `OFFICE_CONCURRENCY` | 2 (최대 3) | 브리핑 안에서 동시에 돌릴 작업 수 |
+| `OFFICE_HIVE_DIR` | `server/hive` | 작업 원장·메일함·기억·이벤트 위치. 지정하면 `office-state.json` 도 그 안에 둔다 |
+| `OFFICE_DELIVERABLES_DIR` | `<저장소>/DELIVERABLES` | 산출물·첨부 위치. 역할 에이전트가 이 폴더를 작업 폴더(cwd)로 돈다 |
+| `OFFICE_DIST_DIR` | `<저장소>/dist` | 함께 내보낼 빌드된 화면 |
+
+경로 계산은 `paths.mjs` 한 곳에 있습니다. 원장(`tasks.json`)의 `output`·`docx`, 첨부 경로는 산출물 폴더 기준 상대경로('/' 구분)입니다.
+
+### 화면도 같은 주소로
+
+`npm run build` 로 만든 `dist/` 를 서버가 함께 내보냅니다. `http://127.0.0.1:8787/?view=virtual-office` 에서 화면과 API 가
+같은 오리진이 됩니다(`&shell=app` 을 붙이면 대시보드 사이드바 없이 사무실만). Vite 개발 서버(3000)도 그대로 쓸 수 있습니다.
+
 ## 동작 계약 (I/O)
 
 | 엔드포인트 | 용도 |
 | --- | --- |
-| `GET /office-state.json` | 가상 사무실이 2초 폴링. `{stage, phase, progress, agents, artifact, hive:{tasks, pending, mail, leader}, question}` |
+| `GET /office-state.json` | 가상 사무실이 2초 폴링. `{stage, phase, progress, agents, artifact, concurrency, hive:{tasks, pending, mail, leader}, question}`. 브리핑 전에는 hive 로 만든 빈 사무실(`idle:true`) |
 | `POST /api/instruct` | 브리핑 `{title, result, context, constraints[], question_policy, deadline, attachments, gates?}` → 202, 백그라운드 실행. 구 지시(`goal`·`brief`·`gates`)도 받는다(gates = 그 단계 전부) |
 | `GET /api/hive` | 작업 원장·승인 큐·메일 이벤트·현황판 |
 | `GET /api/inbox/:agent` | 에이전트 inbox (재하의 보고·승인 요청은 `jaeha`) |
 | `POST /api/approve` | `{id, decision:"approved"|"rejected", by, reason}` — by·reason 없으면 400 |
-| `POST /api/upload` | 파일 첨부(본문=바이트, 헤더 `X-File-Name`). 25MB, `DELIVERABLES/_inbox/` |
-| `GET /api/health` | 모드·실행 중 여부·승인 대기 건수 |
+| `POST /api/upload` | 파일 첨부(본문=바이트, 헤더 `X-File-Name`). 25MB, 산출물 폴더의 `_inbox/` |
+| `GET /api/health` | 모드·실행 중 여부·동시 작업 수·승인 대기 건수 |
+| `GET /api/roster` | 팀장 + 12인의 이름·역할·스킬(이 PC 에서 쓸 수 있는지)·현재 상태(대기·진행·검수·승인대기)·지금 작업·누적 사용량 |
+| `GET /api/memory/:agent` | 에이전트 기억 파일(`memory/<agent>.md`) 내용 |
+| `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
+| `GET /api/auth` | `claude auth status` 중 `loggedIn` 만(계정 메일·조직 정보는 버림). 1분 기억, `?refresh=1` 로 다시 확인 |
+| `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login`. 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
+| `GET /api/usage` | 역할 실행·QA `cost_usd`, 팀장 분해 비용의 합계 — 에이전트별·일별(CLI 추정치, 청구서 아님) |
 
 ## 흐름
 
@@ -53,15 +78,21 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 ```
 
 - 결과 줄이 비어 있으면 팀장은 나누지 않고 `inbox/jaeha` 에 되묻습니다(`question`).
-- 한 번에 작업 1건씩 돕니다(구독 사용량·경합 보호). 선행 작업이 실패·보류면 뒤 작업은 보류로 닫힙니다.
-- 승인 대기는 기본 무한(`OFFICE_APPROVAL_TIMEOUT_MS=0`). 가상 사무실 승인 카드 또는 `/api/approve` 로 풉니다.
+- **작업 풀**: 선행이 끝난 작업을 `OFFICE_CONCURRENCY` 건(기본 2, 최대 3)까지 동시에 돌립니다. 같은 담당자의 작업은 동시에 돌리지 않습니다.
+  `tasks.json`·`approvals.json` 쓰기는 `hive.mjs` 의 프로세스 안 잠금으로 한 줄로 세워 서로 덮어쓰지 않습니다.
+- 승인 대기는 그 작업만 멈추고 풀 자리를 차지하지 않습니다 — 다른 작업은 계속 돕니다. 기본 무한 대기(`OFFICE_APPROVAL_TIMEOUT_MS=0`).
+  커맨드 센터 '승인' 탭 또는 `/api/approve` 로 풉니다.
+- 선행 작업이 실패·보류로 끝나면 뒤 작업은 그 자리에서 보류로 닫힙니다.
+- 브리핑은 한 번에 1건입니다(실행 중에 새 브리핑을 보내면 409).
+- 서버가 다시 켜지면, 지난번에 돌다 끊긴 작업(대기·진행·검수)은 보류로 닫고 남은 승인 대기는 이어서 지켜봅니다(결정되면 작업 상태만 마감, 보고서는 다시 쓰지 않음).
 
 ## 파일 구성
 
 | 파일 | 역할 |
 | --- | --- |
-| `office-server.mjs` | HTTP 서버(상태·브리핑·hive·승인·업로드) |
-| `orchestrator.mjs` | 브리핑 1건의 전체 흐름(분해→배정→실행→QA→승인→보고), office-state 갱신 |
+| `office-server.mjs` | HTTP 서버(상태·브리핑·hive·승인·업로드·명단·기억·이벤트·로그인·사용량) + 화면(dist) 정적 제공 |
+| `orchestrator.mjs` | 브리핑 1건의 전체 흐름(분해→작업 풀(배정→실행→QA→승인)→보고), office-state 갱신 |
+| `paths.mjs` | 코드·데이터 위치(hive·산출물·화면)의 단일 원천 |
 | `leader.mjs` | 팀장 — 브리핑 정규화, 분해(mock 규칙 / claude_code 구조화 출력), assign 본문, 보고서 |
 | `hive.mjs` | hive 파일 입출력 — 작업 원장·메일함·승인 큐·메모리·이벤트 |
 | `qa.mjs` | QA 판정 — 기계 검사 + (claude_code) 고지표 내용 검토, 4값 |
@@ -75,7 +106,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 
 ## 산출물
 
-- `DELIVERABLES/<과제>/<단계>/T-0001_<담당>_<작업>.md` (+ `.docx`), `briefing.json`, `_index.md`(= 보고서).
+- `<산출물 폴더>/<과제>/<단계>/T-0001_<담당>_<작업>.md` (+ `.docx`), `briefing.json`, `_index.md`(= 보고서). 기본 산출물 폴더는 `DELIVERABLES/`.
 - 단계 폴더는 SI Lifecycle 의 번호를 따릅니다: `00_sales 01_rfp 02_requirements 03_proposal 04_rebaseline 05_plan 06_design 07_publish 08_test_scenario 09_test_run 10_growth`.
 - 앞 산출물은 뒤 작업의 assign 메시지에 경로로 붙어 이어집니다.
 

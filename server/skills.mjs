@@ -7,11 +7,9 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { SKILLS_DIR } from './paths.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(HERE, '..');
-const REPO_SKILLS = path.join(REPO_ROOT, '.claude', 'skills');
+const REPO_SKILLS = SKILLS_DIR; // 저장소(설치형 앱은 resources)의 .claude/skills
 const USER_SKILLS = path.join(os.homedir(), '.claude', 'skills');
 
 async function exists(p) {
@@ -37,11 +35,6 @@ async function findSkillDir(name) {
   return null;
 }
 
-function isInside(child, parent) {
-  const rel = path.relative(parent, child);
-  return Boolean(rel) && !rel.startsWith('..') && !path.isAbsolute(rel);
-}
-
 /** 해당 이름의 스킬이 이 PC에서 쓸 수 있는지. */
 export async function hasSkill(name) {
   return (await findSkillDir(name)) !== null;
@@ -50,7 +43,7 @@ export async function hasSkill(name) {
 /**
  * 스펙 목록을 실제 지침으로 바꾼다.
  * @param specs ['rfp-analysis', 'wylie-proposal|proposal-writing']
- * @returns { applied: [{ name, body, refs }], missing: ['원래 스펙'] }
+ * @returns { applied: [{ name, body, refs }], missing: ['원래 스펙'] }   refs = 참고자료 폴더 절대경로(없으면 null)
  */
 export async function resolveSkills(specs) {
   const applied = [];
@@ -71,9 +64,10 @@ export async function resolveSkills(specs) {
     }
     const raw = await fs.readFile(path.join(dir, 'SKILL.md'), 'utf8');
     const body = raw.replace(/^---[\s\S]*?---\s*/, '').trim(); // 프론트매터 제거
-    // 참고자료(references/)는 저장소 안에 있을 때만 경로를 알려준다 — 에이전트의 Read 범위가 저장소 기준.
+    // 참고자료(references/)는 절대경로로 알려 주고, 실행기가 그 폴더를 --add-dir 로 열어 준다.
+    // 에이전트의 작업 폴더(산출물 폴더)와 스킬 폴더가 다른 위치에 있기 때문이다.
     const refDir = path.join(dir, 'references');
-    const refs = (await exists(refDir)) && isInside(refDir, REPO_ROOT) ? path.relative(REPO_ROOT, refDir) : null;
+    const refs = (await exists(refDir)) ? refDir : null;
     applied.push({ name, body, refs });
   }
   return { applied, missing };

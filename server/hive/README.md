@@ -3,6 +3,9 @@
 팀장·역할 에이전트·가상 사무실이 전부 이 폴더의 **평문 파일**로만 대화한다. 사람이 그대로 열어 읽을 수 있고,
 서버를 재시작해도 상태가 남는다. 코드는 `server/hive.mjs` 하나가 읽고 쓴다.
 
+위치는 `OFFICE_HIVE_DIR` 로 바꿀 수 있다(설치형 앱: `문서\Wylie AX Office\hive`). 작업 풀이 여러 작업을 동시에 돌리므로
+`tasks.json`·`approvals.json` 의 갱신은 `hive.mjs` 의 프로세스 안 잠금으로 한 줄로 세운다(같은 hive 를 두 서버가 함께 쓰지 않는다).
+
 ```
 hive/
 ├── briefings/          재하가 보낸 브리핑 원문 (YYYYMMDD-HHmm_<제목>.json)

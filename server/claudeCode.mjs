@@ -7,10 +7,35 @@
 //   - 실패는 코드로 분류해 돌려준다(cli_missing / not_logged_in / timeout / parse / error).
 //     돌지 않은 호출을 성공처럼 꾸미지 않는다.
 
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fsSync, { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+
+// 지금 돌고 있는 claude 자식 프로세스. 서버가 꺼질 때 남기지 않고 정리한다(이름이 아니라 pid 로).
+const ACTIVE = new Set();
+
+/** 프로세스 트리 강제 종료. Windows 는 claude.exe 가 띄운 손자 프로세스까지 taskkill /T 로 함께 닫는다. */
+function killTree(child) {
+  if (!child || child.exitCode !== null || !child.pid) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+  } else {
+    try { child.kill('SIGKILL'); } catch { /* 이미 끝남 */ }
+  }
+}
+
+/** 서버 종료 시 호출 — 돌고 있는 claude 자식 프로세스를 모두 닫는다. 닫은 개수를 돌려준다. */
+export function killAllChildren() {
+  const list = [...ACTIVE];
+  for (const c of list) killTree(c);
+  ACTIVE.clear();
+  return list.length;
+}
+
+export function activeChildCount() {
+  return ACTIVE.size;
+}
 
 // 실행 파일 결정 순서: CLAUDE_BIN → PATH 의 claude → (Windows) Claude 데스크톱 앱이 내장한 claude.exe.
 // 데스크톱 앱(%APPDATA%\Claude\claude-code\<버전>\<해시>\claude.exe)으로만 Claude Code 를 쓰는 PC 가 있어서 그 경로를 찾아 준다.
@@ -56,13 +81,57 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env } = {}) {
       resolve({ code: -1, stdout, stderr, error: e });
       return;
     }
-    const timer = setTimeout(() => { child.kill('SIGKILL'); stderr += '\n[timeout]'; }, timeoutMs);
+    ACTIVE.add(child);
+    const timer = setTimeout(() => { killTree(child); stderr += '\n[timeout]'; }, timeoutMs);
     child.stdout.on('data', (d) => { stdout += d; });
     child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ code: -1, stdout, stderr, error: e }); });
-    child.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr, error: null }); });
+    child.on('error', (e) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code: -1, stdout, stderr, error: e }); });
+    child.on('close', (code) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code, stdout, stderr, error: null }); });
     if (stdin) child.stdin.end(stdin); else child.stdin.end();
   });
+}
+
+/**
+ * 로그인 여부. `claude auth status` 의 JSON 에는 계정 메일·조직 정보도 있으므로 loggedIn 만 꺼내고 나머지는 버린다.
+ * @returns {Promise<{cli:boolean, loggedIn:boolean|null}>}  loggedIn=null 은 판단 불가(시간 초과 등)
+ */
+export async function authStatus() {
+  const r = await run([BIN, 'auth', 'status'], { timeoutMs: 20000 });
+  if (r.error && r.error.code === 'ENOENT') return { cli: false, loggedIn: null };
+  if (r.error) return { cli: false, loggedIn: null };
+  const res = parseResultJson(r.stdout);
+  if (res && typeof res.loggedIn === 'boolean') return { cli: true, loggedIn: res.loggedIn };
+  if (classify(r) === 'not_logged_in') return { cli: true, loggedIn: false };
+  return { cli: true, loggedIn: null };
+}
+
+/**
+ * 새 PowerShell 창에서 `claude auth login` 을 연다. 브라우저 승인 뒤 코드를 같은 창에 붙여 넣는 대화형이라
+ * 서버 안에서 돌리지 않고 창을 따로 띄운다. Windows 전용.
+ */
+export async function openLoginWindow() {
+  if (process.platform !== 'win32') return { ok: false, message: 'Windows 에서만 창을 띄웁니다. 터미널에서 claude auth login 을 실행하세요.' };
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ax-office-login-'));
+  const ps1 = path.join(dir, 'claude-login.ps1');
+  const bin = BIN.replace(/'/g, "''");
+  const script = [
+    '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
+    "$Host.UI.RawUI.WindowTitle = 'Claude 로그인 - Wylie AX Office'",
+    "Write-Host 'Claude 로그인을 시작합니다. 브라우저에서 승인한 뒤, 화면에 나온 코드를 이 창에 붙여 넣으세요.'",
+    "Write-Host ''",
+    `& '${bin}' auth login`,
+    "Write-Host ''",
+    "Write-Host '끝났으면 이 창을 닫아도 됩니다. AX Office 화면의 로그인 배너는 잠시 뒤 사라집니다.'",
+  ].join('\r\n');
+  // PowerShell 5.1 은 BOM 없는 .ps1 을 ANSI(CP949)로 읽어 한글이 깨지므로 BOM 을 붙인다.
+  await fs.writeFile(ps1, '﻿' + script, 'utf8');
+  // detached 만으로는 콘솔 창이 생기지 않으므로 cmd 의 start 로 새 창을 연다. 인용부호를 그대로 넘기려고 verbatim.
+  const child = spawn('cmd.exe', ['/d', '/c', `start "Claude 로그인" powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "${ps1}"`], {
+    windowsVerbatimArguments: true, detached: true, stdio: 'ignore', windowsHide: true,
+  });
+  child.on('error', () => {});
+  child.unref();
+  return { ok: true };
 }
 
 function classify(r) {
