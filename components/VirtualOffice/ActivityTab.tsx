@@ -43,6 +43,12 @@ function describe(e: HiveEvent, t: TFn, lang: Lang, name: (id?: string) => strin
       return { who: name('lead'), text: t('ev.leaderReply', { id: e.id ?? '' }), color: WYLIE_DARK };
     case 'inbox_done':
       return { who: name(e.agent), text: t('ev.inboxDone', { n: e.count ?? 0 }), color: MUTED };
+    case 'trigger': {
+      // 예약 — 추가·켜기·끄기·변경·삭제·실행·놓침. 실행은 예약이 대기열에 넣은 브리핑(item)을 함께 적는다.
+      const action = e.action ?? 'update';
+      const who = action === 'missed' || (action === 'run' && e.why === 'schedule') ? t('ev.triggerWho') : name(e.by || 'jaeha');
+      return { who, text: t(`ev.trigger_${action}`, { id: e.id ?? '', title: e.title ?? '', item: e.item ?? '' }), color: action === 'missed' ? BAD_FG : WYLIE_DARK };
+    }
     default:
       return { who: e.kind, text: e.title || e.id || '', color: MUTED };
   }

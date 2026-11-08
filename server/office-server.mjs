@@ -24,6 +24,7 @@ import { getSettings, updateSettings, publicSettings, stateText } from './settin
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
 import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from './leaderSession.mjs';
+import { listTriggers, addTrigger, updateTrigger, removeTrigger, runTriggerNow, startTriggers, MAX_TRIGGERS } from './triggers.mjs';
 import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
 import { loadPersona } from './agentRunner.mjs';
 
@@ -45,7 +46,7 @@ const log = (msg) => console.log(`[office] ${msg}`);
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-File-Name');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-File-Name, X-Rel-Path, X-Folder-Id');
 }
 
 function sendJson(res, code, obj) {
@@ -406,6 +407,44 @@ const server = http.createServer(async (req, res) => {
     }
 
     // ── 실시간 기록(터미널 탭) ── ?task=T-0001 | ?stream=lead, &after=<줄 번호>
+    // ── 예약(트리거) — 정해진 시각에 브리핑을 대기열에 넣는다. 바꾸는 요청은 이 PC 화면에서만 ──
+    if (req.method === 'GET' && url.pathname === '/api/triggers') {
+      sendJson(res, 200, { triggers: await listTriggers(), now: new Date().toISOString(), max: MAX_TRIGGERS });
+      return;
+    }
+    if (url.pathname === '/api/triggers' || url.pathname.startsWith('/api/triggers/')) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 예약을 바꿀 수 있습니다.' }); return; }
+      const parts = url.pathname.split('/').filter(Boolean); // ['api','triggers', id?, 'run'?]
+      const id = parts[2] ? decodeURIComponent(parts[2]) : '';
+      let body = {};
+      if (req.method === 'POST') { try { body = JSON.parse((await readBody(req)) || '{}'); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; } }
+      const by = String(body?.by || OWNER.id).trim() || OWNER.id;
+      try {
+        if (req.method === 'POST' && !id) {
+          const t = await addTrigger(body, by);
+          log(`예약 추가: ${t.id} ${t.title} — 다음 ${t.next_run || '없음'}`);
+          sendJson(res, 201, { ok: true, trigger: t });
+        } else if (req.method === 'POST' && id && parts[3] === 'run') {
+          const r = await runTriggerNow(id, by);
+          log(`예약 지금 실행: ${id} → 대기열 ${r.item.id}`);
+          sendJson(res, 202, { ok: true, trigger: r.trigger, item: r.item });
+        } else if (req.method === 'POST' && id) {
+          const t = await updateTrigger(id, body, by);
+          log(`예약 변경: ${id} (${t.enabled ? '켜짐' : '꺼짐'}) — 다음 ${t.next_run || '없음'}`);
+          sendJson(res, 200, { ok: true, trigger: t });
+        } else if (req.method === 'DELETE' && id) {
+          const t = await removeTrigger(id, by);
+          log(`예약 삭제: ${id} ${t.title}`);
+          sendJson(res, 200, { ok: true });
+        } else {
+          sendJson(res, 405, { error: '지원하지 않는 요청' });
+        }
+      } catch (e) {
+        sendJson(res, 400, { error: e.message });
+      }
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/live') {
       const stream = url.searchParams.get('task') || url.searchParams.get('stream') || '';
       if (!/^(T-\d{4}|lead)$/.test(stream)) { sendJson(res, 400, { error: 'task 또는 stream 이 필요합니다.' }); return; }
@@ -518,15 +557,27 @@ const server = http.createServer(async (req, res) => {
       let rawName = 'file';
       try { rawName = decodeURIComponent(req.headers['x-file-name'] || 'file'); } catch { /* 헤더 디코드 실패 시 기본명 */ }
       const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-      const stored = `${stamp}__${safeName(rawName)}`;
+      // 폴더 첨부: X-Folder-Id(화면이 폴더 하나에 붙인 묶음 이름) + X-Rel-Path(폴더 안 상대경로) → _inbox/<묶음>/<상대경로>.
+      // 경로 조각마다 safeName 을 거치고 '.'·'..' 은 버린다. 마지막에 _inbox 안인지 한 번 더 확인한다.
+      let dest = path.join(INBOX_DIR, `${stamp}__${safeName(rawName)}`);
+      if (req.headers['x-rel-path']) {
+        let relRaw = '';
+        let folderRaw = '';
+        try { relRaw = decodeURIComponent(req.headers['x-rel-path']); folderRaw = decodeURIComponent(req.headers['x-folder-id'] || ''); } catch { /* 아래에서 거절 */ }
+        const segs = relRaw.replace(/\\/g, '/').split('/').filter((x) => x && x !== '.' && x !== '..').map((x) => safeName(x));
+        const folder = safeName(folderRaw).slice(0, 60);
+        if (!segs.length || segs.length > 8 || !folder) { sendJson(res, 400, { error: '폴더 첨부 경로가 올바르지 않습니다.' }); return; }
+        dest = path.join(INBOX_DIR, folder, ...segs);
+      }
+      if (!isInside(dest, INBOX_DIR)) { sendJson(res, 400, { error: '허용되지 않는 경로입니다.' }); return; }
       try {
-        await fs.mkdir(INBOX_DIR, { recursive: true });
-        await fs.writeFile(path.join(INBOX_DIR, stored), buf); // safeName 보장 → _inbox 밖으로 못 나감
+        await fs.mkdir(path.dirname(dest), { recursive: true });
+        await fs.writeFile(dest, buf);
       } catch (e) {
         sendJson(res, 500, { error: `저장 실패: ${e.message}` });
         return;
       }
-      const rel = relData(path.join(INBOX_DIR, stored));
+      const rel = relData(dest);
       log(`첨부 수신: ${rawName} (${(buf.length / 1024).toFixed(0)}KB) → ${rel}`);
       sendJson(res, 200, { ok: true, name: rawName, path: rel, size: buf.length });
       return;
@@ -592,6 +643,7 @@ server.listen(PORT, HOST, async () => {
     runBriefing: (b) => clearState().then(() => runBriefing(b, { setState: writeState, deliverablesRoot: DELIVERABLES_DIR, mode: MODE, log })),
     isLeaderPtyOpen: () => isAgentPtyOpen(LEADER.id),
   });
+  await startTriggers({ log });
   await attachPtySocket(server, { allow: sameOrigin, log });
   const shown = HOST && HOST !== '0.0.0.0' ? HOST : 'localhost';
   log(`가동 — http://${shown}:${PORT}  (모드: ${MODE}, 동시 작업 ${CONCURRENCY}건${HOST ? `, 바인딩 ${HOST}` : ''})`);

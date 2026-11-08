@@ -73,6 +73,9 @@ server/hive/settings.json
 server/hive/settings.json.tmp
 server/hive/live/
 server/hive/pty/
+# 3차 — 예약
+server/hive/triggers.json
+server/hive/triggers.json.tmp
 server/office-state.json.tmp
 
 # Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)

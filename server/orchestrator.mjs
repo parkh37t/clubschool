@@ -20,7 +20,7 @@ import { runTask } from './agentRunner.mjs';
 import { judge } from './qa.mjs';
 import { exportDocx } from './docxExport.mjs';
 import { nameOf, AGENT_IDS } from './roster.mjs';
-import { DELIVERABLES_DIR, relData, absData } from './paths.mjs';
+import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths.mjs';
 import { effective as breakerEffective, recordOutcome, resetBreaker } from './breaker.mjs';
 import { getSettings, languageLine, stateText } from './settings.mjs';
 import { liveNote } from './live.mjs';
@@ -119,7 +119,12 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   await hive.ensureHive([LEADER.id, OWNER.id, ...AGENT_IDS]);
 
   // 첨부(_inbox 업로드본)를 과제 폴더로 복사한다 — 산출물 폴더 밖을 가리키는 경로는 무시한다.
-  const outDir = path.join(deliverablesRoot, slug(b.title));
+  // 같은 제목의 과제 폴더가 이미 있으면 덮어쓰지 않고 _2, _3 … 을 붙인다(같은 날 예약이 두 번 돌거나 같은 브리핑을 다시 보낼 때).
+  let outDir = path.join(deliverablesRoot, slug(b.title));
+  for (let n = 2; n < 100; n += 1) {
+    try { await fs.access(path.join(outDir, 'briefing.json')); } catch { break; }
+    outDir = path.join(deliverablesRoot, `${slug(b.title)}_${n}`);
+  }
   await fs.mkdir(outDir, { recursive: true });
   const outDirRel = relData(outDir);
   if (Array.isArray(raw.attachments) && raw.attachments.length) {
@@ -130,7 +135,11 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       const src = resolveAttachment(att.path);
       if (!src) { log(`첨부 무시(허용 경로 밖): ${att.path}`); continue; }
       try {
-        const dest = path.join(attachDir, path.basename(src));
+        // _inbox 안의 상대경로를 그대로 살린다 — 폴더 첨부는 <묶음>/<하위 폴더>/<파일> 구조가 과제 폴더에도 남는다.
+        const sub = isInside(src, INBOX_DIR) ? path.relative(INBOX_DIR, src) : path.basename(src);
+        const dest = path.join(attachDir, sub);
+        if (!isInside(dest, attachDir)) { log(`첨부 무시(경로 이상): ${att.path}`); continue; }
+        await fs.mkdir(path.dirname(dest), { recursive: true });
         await fs.copyFile(src, dest);
         b.attachmentPaths.push(relData(dest));
       } catch (e) { log(`첨부 처리 실패: ${att.name || att.path} — ${e.message}`); }

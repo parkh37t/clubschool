@@ -11,7 +11,7 @@
 | `officeSimulator.ts` | 순수 TS 클래스 — 명령형 SVG 씬 빌더·이동 엔진·게이트 시뮬레이터. 프레임워크 비의존 |
 | `virtualOffice.css` | 전역 애니메이션/스프라이트 클래스(`apex-` 접두 키프레임). 엔진이 classList로 토글 |
 | `CommandCenter.tsx` | 오른쪽 커맨드 센터 — 머리·탭 격자·상태 줄·탭 내용·대기열·입력창 |
-| `TasksTab` · `ApprovalsTab` · `QuestionsTab` · `MemoryTab` · `ActivityTab` · `SkillsTab` · `TerminalTab` · `MonitorTab` | 탭 내용(파일 1개 = 탭 1개) |
+| `TasksTab` · `ApprovalsTab` · `QuestionsTab` · `MemoryTab` · `ActivityTab` · `SkillsTab` · `TerminalTab` · `MonitorTab` · `TriggersTab` · `GraphTab` | 탭 내용(파일 1개 = 탭 1개) |
 | `QueueStrip.tsx` | 팀장 대기열(대기·처리 중, 대기 항목 취소) |
 | `BriefingConsole.tsx` | 입력창 — 메시지(대기열 → 팀장 상주 세션) / 브리핑 양식(4요소 + 첨부) |
 | `AgentCards.tsx` | 하단 에이전트 바(팀장 + 12인 + 추가 인원, 서킷 브레이커 표시). 누르면 책상 강조 + 탭 필터 |
@@ -22,13 +22,14 @@
 | `PixelAvatar.tsx` | 12×12 픽셀 초상(사무실 캐릭터와 같은 머리·피부·부서색) |
 | `officeBackend.ts` | 백엔드 주소 결정(?api → localhost 상대경로 → 저장값 → 미연결) |
 
-## 화면 구성 (Wylie AX Office 3단계 1·2차 — Munder Difflin 구조)
+## 화면 구성 (Wylie AX Office 3단계 1~3차 — Munder Difflin 구조)
 창 전체를 고정 배치로 쓴다(페이지 스크롤 없음, 좁은 창에서는 세로로 쌓임 — `virtualOffice.css` 의 `axo-*`).
 - 상단 바: 앱 이름 · hive 연결/모드/동시 작업 수 · 시계 · 애니메이션 일시정지·속도 · 언어(한국어/EN). 그 아래 필요할 때만 Claude 로그인 배너([로그인] → 새 PowerShell 창)·팀장 되물음
 - 왼쪽: 게이트 현황(단계별 작업 집계) + 픽셀 사무실. 책상을 누르면 그 에이전트 선택(점선 테두리 강조)
-- 오른쪽 커맨드 센터: 머리(팀장 아바타·상태·자동 진행) → 탭 격자(작업·승인·질문·기억·활동·스킬·터미널·모니터, 예약·관계도는 3차라 비활성) → 상태 줄 → 탭 내용 → 대기열 → 입력창(메시지 / 브리핑 양식, 파일·폴더(3차)·보내기)
+- 오른쪽 커맨드 센터: 머리(팀장 아바타·상태·자동 진행) → 탭 격자(작업·승인·질문·기억·활동·스킬·터미널·모니터·예약·관계도) → 상태 줄 → 탭 내용 → 대기열 → 입력창(메시지 / 브리핑 양식, 파일·폴더·보내기)
 - 하단 에이전트 바: 팀장 + 12인 + 추가 인원 아바타 카드 가로 한 줄 — 상태·지금 작업·사용량·서킷 브레이커 단계, 끝에 '인원 추가'
 - 추가 인원이 있으면 사무실 아래에 확장 구역(최대 6석)이 생기고 viewBox 높이가 880 → 1080 으로 늘어난다(`officeSimulator.syncCustomAgents`)
+- 관계도는 SVG 노드 위치를 인라인 style 의 transform 으로 준다 — `styles/globals.css` 의 모바일 규칙처럼 CSS transform 이 SVG transform 속성을 덮어쓰는 일을 피하려고(그 규칙은 SVG 를 빼도록 고침)
 - 언어는 서버 설정(`/api/settings` 의 `lang`)을 따르고, 서버가 없으면 이 화면 안에서만 바뀐다. 새 문구는 `i18n.ts` 의 ko·en 사전에 함께 넣는다
 - `?shell=app` 이면 대시보드 사이드바 없이 이 화면만 띄운다(설치형 앱, `desktop/main.cjs`)
 - 색은 와일리 보라(#6A4C9C·#43306B·#EFEAF7)를 유지한다. 사무실 그림은 기존 엔진 그대로이며 Munder Difflin 의 그림·코드는 쓰지 않았다

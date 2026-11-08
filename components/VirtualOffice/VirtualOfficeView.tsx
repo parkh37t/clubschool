@@ -229,7 +229,7 @@ export function VirtualOfficeView({
   const playing = rv.playLabel.includes('⏸');
   const langBtn = (l: Lang, label: string) => (
     <button type="button" onClick={() => changeLang(l)} aria-pressed={lang === l}
-      style={{ font: 'inherit', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', padding: '3px 8px', border: 'none', background: lang === l ? WYLIE : '#fff', color: lang === l ? '#fff' : MUTED }}>
+      style={{ font: 'inherit', fontSize: 11.5, fontWeight: 800, cursor: 'pointer', padding: '3px 8px', border: 'none', whiteSpace: 'nowrap', background: lang === l ? WYLIE : '#fff', color: lang === l ? '#fff' : MUTED }}>
       {label}
     </button>
   );
@@ -265,7 +265,7 @@ export function VirtualOfficeView({
             </label>
           )}
           {!hive && <button type="button" className="axo-iconbtn" onClick={() => sim?.reset()}>{t('top.reset')}</button>}
-          <span role="group" aria-label={t('top.lang')} style={{ display: 'inline-flex', border: `1px solid ${LINE}`, borderRadius: 4, overflow: 'hidden' }}>
+          <span role="group" aria-label={t('top.lang')} style={{ display: 'inline-flex', flexShrink: 0, border: `1px solid ${LINE}`, borderRadius: 4, overflow: 'hidden' }}>
             {langBtn('ko', '한국어')}
             {langBtn('en', 'EN')}
           </span>

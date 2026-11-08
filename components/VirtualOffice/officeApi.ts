@@ -49,12 +49,23 @@ export interface LiveLine {
 
 export interface OfficeSettings { lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; leader_session: boolean; }
 
+/** 예약(트리거) — 시각이 되면 브리핑을 대기열에 넣는다. 요일 0=일 … 6=토. 시각은 PC 현지 시각. */
+export interface TriggerSchedule { kind: 'weekly' | 'daily' | 'once'; time: string; days?: number[]; date?: string; }
+export interface TriggerBriefing { title: string; result: string; context: string; constraints: string[]; question_policy: string; }
+export interface Trigger {
+  id: string; title: string; schedule: TriggerSchedule; briefing: TriggerBriefing; enabled: boolean; by: string;
+  created: string; updated: string; next_run: string | null; last_run: string | null; last_item: string; runs: number; last_missed: string | null;
+}
+export interface TriggersResponse { triggers: Trigger[]; now: string; max: number; }
+/** /api/hive 의 작업 원장 한 줄(관계도용으로 쓰는 필드만). */
+export interface LedgerTask { id: string; title: string; owner: string; status: string; gate: string; briefing: string; depends_on?: string[]; created?: string; }
+
 /** events.log 한 줄. 종류(kind)마다 채워지는 필드가 다르다. */
 export interface HiveEvent {
   ts: string; kind: string; id?: string; title?: string; owner?: string; status?: string; gate?: string;
   from?: string; to?: string; type?: string; task?: string; agent?: string; cost_usd?: number;
   by?: string; approval_kind?: string; note?: string; what?: string;
-  level?: string; reason?: string; reason_code?: string; reason_detail?: string; item_kind?: string; action?: string; count?: number; template?: string;
+  level?: string; reason?: string; reason_code?: string; reason_detail?: string; item_kind?: string; action?: string; count?: number; template?: string; item?: string; why?: string; at?: string;
 }
 
 export interface AuthState { loggedIn: boolean | null; cli: boolean; checked_at?: string; mode?: string; }

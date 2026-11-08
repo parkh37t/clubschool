@@ -80,7 +80,7 @@
 /* ── Wylie AX Office 화면 배치(3단계 1차) — Munder Difflin 구조 ──
    창 전체를 고정 배치로 쓴다: 상단 바 · [왼쪽 사무실 | 오른쪽 커맨드 센터] · 하단 에이전트 바. 페이지 스크롤 없음. */
 .axo-app{display:flex;flex-direction:column;height:100vh;min-height:620px;box-sizing:border-box;overflow:hidden;background:#EFEAE0;color:#24291F;}
-.axo-top{flex-shrink:0;display:flex;align-items:center;gap:12px;padding:7px 14px;border-bottom:1px solid #DDD6C8;background:#F7F2E8;}
+.axo-top{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:7px 14px;border-bottom:1px solid #DDD6C8;background:#F7F2E8;}
 .axo-main{flex:1;min-height:0;display:flex;gap:10px;padding:10px 12px 0;}
 .axo-left{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;gap:6px;}
 .axo-canvas{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;background:#1B1F2E;border:3px solid #2B2340;border-radius:6px;overflow:hidden;}
@@ -100,7 +100,7 @@
 .axo-agent--add{flex:0 0 150px;justify-content:center;border-style:dashed;background:#F7F4EC;color:#9A968A;cursor:not-allowed;}
 .axo-agent--add-on{cursor:pointer;color:#43306B;border-color:#6A4C9C;background:#F7F3FC;}
 .axo-agent--add-on:hover{background:#EFEAF7;}
-.axo-iconbtn{display:inline-flex;align-items:center;gap:4px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:4px 9px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#24291F;}
+.axo-iconbtn{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:4px 9px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#24291F;}
 .axo-iconbtn:hover{background:#F7F4EC;}
 @media (max-width: 1180px){ .axo-cc{width:390px;} }
 @media (max-width: 880px){

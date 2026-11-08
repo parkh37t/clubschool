@@ -15,10 +15,12 @@ import { ActivityTab } from './ActivityTab';
 import { SkillsTab } from './SkillsTab';
 import { TerminalTab } from './TerminalTab';
 import { MonitorTab } from './MonitorTab';
+import { TriggersTab } from './TriggersTab';
+import { GraphTab } from './GraphTab';
 import { statusLabel, useOfficeLang } from './i18n';
 import { INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT } from './officeTheme';
 
-export type CommandTab = 'tasks' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor';
+export type CommandTab = 'tasks' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor' | 'triggers' | 'graph';
 
 interface DemoProps {
   feed: FeedItem[];
@@ -47,8 +49,8 @@ interface CommandCenterProps {
   onSubmitted: (title: string) => void;
 }
 
-// 탭 격자 — Munder Difflin 의 COMMAND CENTER 탭 자리. 예약·관계도는 3차라 자리만 잡아 두고 비활성.
-const TABS: { key: CommandTab | null; label: string; icon: LucideIcon }[] = [
+// 탭 격자 — Munder Difflin 의 COMMAND CENTER 탭 자리(5칸 × 2줄).
+const TABS: { key: CommandTab; label: string; icon: LucideIcon }[] = [
   { key: 'tasks', label: 'tab.tasks', icon: ListChecks },
   { key: 'approvals', label: 'tab.approvals', icon: Stamp },
   { key: 'questions', label: 'tab.questions', icon: MessageCircleQuestion },
@@ -57,8 +59,8 @@ const TABS: { key: CommandTab | null; label: string; icon: LucideIcon }[] = [
   { key: 'skills', label: 'tab.skills', icon: Sparkles },
   { key: 'terminal', label: 'tab.terminal', icon: SquareTerminal },
   { key: 'monitor', label: 'tab.monitor', icon: Gauge },
-  { key: null, label: 'tab.triggers', icon: CalendarClock },
-  { key: null, label: 'tab.graph', icon: Network },
+  { key: 'triggers', label: 'tab.triggers', icon: CalendarClock },
+  { key: 'graph', label: 'tab.graph', icon: Network },
 ];
 
 /**
@@ -79,7 +81,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
   const ls = STATUS_COLOR[leaderStatus] ?? STATUS_COLOR['대기'];
   const stopped = (roster ?? []).filter((m) => m.breaker?.level === 'stop').length;
 
-  const badge = (key: CommandTab | null): { n: number; color: string } => {
+  const badge = (key: CommandTab): { n: number; color: string } => {
     if (key === 'approvals') return { n: connected ? pending.length : demo.showApproval ? 1 : 0, color: '#E8A33D' };
     if (key === 'tasks') return { n: activeCount, color: WYLIE };
     if (key === 'questions') return { n: openQ, color: '#E8A33D' };
@@ -108,7 +110,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
       <div role="tablist" aria-label={t('cc.title')} className="axo-tabs">
         {TABS.map((x) => {
           const Icon = x.icon;
-          const on = x.key !== null && tab === x.key;
+          const on = tab === x.key;
           const b = badge(x.key);
           const label = t(x.label);
           return (
@@ -117,9 +119,8 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
               role="tab"
               type="button"
               aria-selected={on}
-              disabled={x.key === null}
-              title={x.key === null ? t('tab.later', { label, phase: t('tab.phase3') }) : label}
-              onClick={() => { if (x.key) onTab(x.key); }}
+              title={label}
+              onClick={() => onTab(x.key)}
               className="axo-tab"
             >
               <Icon size={13} aria-hidden />
@@ -144,7 +145,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
       </div>
 
       {/* 탭 내용 */}
-      <div role="tabpanel" style={{ flex: 1, minHeight: 90, overflowY: tab === 'terminal' ? 'hidden' : 'auto', padding: '10px 12px 12px' }}>
+      <div role="tabpanel" style={{ flex: 1, minHeight: 90, overflowY: tab === 'terminal' || tab === 'graph' ? 'hidden' : 'auto', padding: '10px 12px 12px' }}>
         {tab === 'tasks' && <TasksTab connected={connected} hive={hive} selected={selected} concurrency={concurrency} />}
         {tab === 'approvals' && <ApprovalsTab connected={connected} apiBase={apiBase} tasks={tasks} pending={pending} approvals={hive?.approvals ?? []} demo={demo} />}
         {tab === 'questions' && <QuestionsTab connected={connected} apiBase={apiBase} selected={selected} />}
@@ -153,6 +154,8 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
         {tab === 'skills' && <SkillsTab connected={connected} roster={roster} selected={selected} />}
         {tab === 'terminal' && <TerminalTab connected={connected} apiBase={apiBase} selected={selected} roster={roster} />}
         {tab === 'monitor' && <MonitorTab connected={connected} apiBase={apiBase} roster={roster} selected={selected} />}
+        {tab === 'triggers' && <TriggersTab connected={connected} apiBase={apiBase} />}
+        {tab === 'graph' && <GraphTab connected={connected} apiBase={apiBase} currentBriefing={hive?.briefing} selected={selected} onSelect={onSelect} />}
       </div>
 
       <QueueStrip apiBase={apiBase} queue={queue.data} onChange={queue.refresh} />

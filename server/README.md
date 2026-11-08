@@ -69,12 +69,13 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산 `{lang, max_task_usd, agent_daily_usd}`. 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만 |
 | `GET /api/agents/templates` · `POST /api/agents` · `DELETE /api/agents/:id` | 역할 템플릿 12종 / 템플릿으로 인원 추가 `{template, name, name_en}`(최대 6명) / 빼기(진행·대기 작업이 있으면 409). POST·DELETE 는 이 PC 화면에서만 |
 | `GET /api/breakers` · `POST /api/breakers/:agent/reset` | 서킷 브레이커 단계 / 재하가 초기화 `{by, reason}`(둘 다 필수) |
+| `GET /api/triggers` · `POST /api/triggers` · `POST /api/triggers/:id` · `POST /api/triggers/:id/run` · `DELETE /api/triggers/:id` | 예약 목록 / 추가 `{title, schedule:{kind:weekly\|daily\|once, time:'HH:MM', days?, date?}, briefing:{result, context?, constraints?}}` / 켜기·끄기 `{enabled}`·내용 변경 / 지금 실행 / 삭제. 결과 줄이 없으면 400. 바꾸는 요청은 이 PC 화면에서만 |
 | `GET /api/live?task=<id>` · `?stream=lead` · `&after=<n>` | 작업별(또는 팀장 세션) 실시간 기록 줄. `GET /api/live/latest?agent=` 는 그 사람의 가장 최근 작업 기록 |
 | `GET·POST /api/pty` · `DELETE /api/pty/:id` · `WS /api/pty/ws?id=` | 대화형 터미널(node-pty) 목록·열기 `{agent}`·닫기, 입출력 WebSocket. 모두 이 PC 화면(Origin 이 127.0.0.1·localhost)에서만 |
 | `GET /api/hive` | 작업 원장·승인 큐·메일 이벤트·현황판 |
 | `GET /api/inbox/:agent` | 에이전트 inbox (재하의 보고·승인 요청은 `jaeha`) |
 | `POST /api/approve` | `{id, decision:"approved"|"rejected", by, reason}` — by·reason 없으면 400 |
-| `POST /api/upload` | 파일 첨부(본문=바이트, 헤더 `X-File-Name`). 25MB, 산출물 폴더의 `_inbox/` |
+| `POST /api/upload` | 파일 첨부(본문=바이트, 헤더 `X-File-Name`). 25MB, 산출물 폴더의 `_inbox/`. 폴더 첨부는 `X-Folder-Id`(묶음)·`X-Rel-Path`(폴더 안 상대경로)를 더 보내 `_inbox/<묶음>/<상대경로>` 에 저장(`..` 조각은 버림) |
 | `GET /api/health` | 모드·실행 중 여부·동시 작업 수·승인 대기 건수 |
 | `GET /api/roster` | 팀장 + 12인의 이름·역할·스킬(이 PC 에서 쓸 수 있는지)·현재 상태(대기·진행·검수·승인대기)·지금 작업·누적 사용량 |
 | `GET /api/memory/:agent` | 에이전트 기억 파일(`memory/<agent>.md`) 내용 |
@@ -115,6 +116,16 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 - 템플릿 12종(일정·품질·문서·리서치·카피·콘텐츠·데이터 엔지니어링·보안·모바일·접근성·모션·고객 지원) — 역할·목표·캐릭터·스킬이 한·영 두 벌입니다(`agentTemplates.mjs`).
 - 추가한 사람은 `agents.json` 에 남고 팀장 명단에 들어가 다음 브리핑부터 배정받습니다. 사무실 아래쪽 확장 구역에 책상이 생깁니다(최대 6명).
 
+### 예약(트리거)
+- 예약 탭에서 매주(요일)·매일·한 번과 시각(PC 현지 시각)을 정하면, 그 시각에 브리핑을 대기열에 넣습니다(`triggers.json`, 최대 20개).
+- **앱(서버)이 켜져 있을 때만** 돕니다. 꺼져 있던 동안 지난 예약은 뒤늦게 돌리지 않고 '놓침'으로 남긴 뒤 다음 시각으로 넘깁니다(몰아서 비용이 나가지 않게).
+  같은 예약의 브리핑이 아직 대기 중이면 또 넣지 않고 놓침으로 남깁니다. 한 번짜리는 실행(또는 놓침) 뒤 꺼집니다.
+- 실행할 때 제목 끝에 날짜를 붙입니다(매주 같은 과제 폴더를 덮어쓰지 않게). 예약을 만든 사람이 브리핑의 요청자(`by`)가 됩니다.
+
+### 폴더 첨부
+- 입력창의 [폴더] 또는 폴더 끌어다 놓기. 문서(PDF·Word·한글·엑셀·CSV·PPT·텍스트·JSON·이미지)만 고르고 숨김 폴더·실행 파일은 건너뜁니다(폴더당 최대 40개·200MB, 파일당 25MB).
+- 과제 폴더로 복사할 때 `_attachments/<묶음>/<하위 폴더>/<파일>` 구조를 유지하고, 에이전트에게는 그 경로들을 Read 하라고 넘깁니다.
+
 ### 실시간 기록과 대화형 터미널
 - 역할 실행은 `--output-format stream-json --verbose` 로 돌고, 사건마다 한 줄씩 `live/<작업>.jsonl` 에 쌓입니다(시작·글·도구·결과·QA·완료).
   터미널 탭이 책상별로 1초마다 이어 받아 xterm 에 그립니다.
@@ -128,6 +139,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
   커맨드 센터 '승인' 탭 또는 `/api/approve` 로 풉니다.
 - 선행 작업이 실패·보류로 끝나면 뒤 작업은 그 자리에서 보류로 닫힙니다.
 - 브리핑은 한 번에 1건이고, 나머지는 대기열에서 차례를 기다립니다.
+- 같은 제목의 과제 폴더가 이미 있으면 덮어쓰지 않고 `_2`, `_3` … 을 붙여 새 폴더를 만듭니다.
 - 서버가 다시 켜지면, 지난번에 돌다 끊긴 작업(대기·진행·검수)은 보류로 닫고 남은 승인 대기는 이어서 지켜봅니다(결정되면 작업 상태만 마감, 보고서는 다시 쓰지 않음).
 
 ## 파일 구성
@@ -153,6 +165,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `agentTemplates.mjs` | 인원 추가용 역할 템플릿 12종(한·영) |
 | `live.mjs` | stream-json 사건 → 실시간 기록 줄(`live/`) |
 | `pty.mjs` | 대화형 터미널(node-pty) 세션과 WebSocket 입출력 |
+| `triggers.mjs` | 예약 — 다음 실행 시각 계산, 20초마다 확인해 브리핑 대기열에 넣기, 꺼져 있던 동안의 놓침 처리(`triggers.json`) |
 
 ## 산출물
 

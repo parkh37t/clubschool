@@ -9,7 +9,7 @@ and opens the virtual office in a window. The layout and the way of working foll
 | --- | --- |
 | Top | App name · mode · parallel tasks · clock · **language (한국어 / EN)** |
 | Left | Pixel office (click a desk to select that agent). Added people sit in the annex at the bottom |
-| Right | Command center — Tasks · Approvals · Ask me · Memory · Activity · Skills · Terminal · Monitor tabs, the queue, the input box |
+| Right | Command center — Tasks · Approvals · Ask me · Memory · Activity · Skills · Terminal · Monitor · Triggers · Graph tabs, the queue, the input box |
 | Bottom | Agent cards — the lead, the 12 roles and added people (status, current task, usage, circuit breaker), **+ Add agent** |
 
 ## Install
@@ -31,6 +31,8 @@ the code shown into that window. The banner disappears once it is confirmed.
 - **Message** (default): type in the input box and press Ctrl+Enter. It joins the queue and the lead's resident session answers one message at a time.
   Ask for status, or hand over work with a "Result: …" line — the lead turns it into a briefing and queues it.
 - **Briefing form**: fill in result, context, constraints and question policy yourself; it goes straight into the queue. Drop files to attach them.
+- **Folder attach**: pick a folder with [Folder] or drop a folder on the box; only the documents inside are uploaded, keeping the folder structure (up to 40). Executables and hidden folders are skipped.
+- **Voice input**: browser speech recognition doesn't work inside the app, so use Windows voice typing (**Win+H**).
 - One briefing runs at a time and the rest wait their turn. Items that have not started can be canceled from the queue.
 
 ## Tabs
@@ -43,6 +45,8 @@ the code shown into that window. The banner disappears once it is confirmed.
 | Memory · Activity · Skills | Each agent's memory file, the event log, available skills |
 | Terminal | A **live log** per desk (start, text, tools, results, QA, done). **[Open terminal]** opens an interactive Claude Code session with that person's persona |
 | Monitor | Usage (total, today, last 7 days, per agent against the daily budget, per task), the per-task cap and daily budget, circuit breaker reset |
+| Triggers | Run a briefing automatically at a set time (weekly on chosen days, daily, or once). Turn on/off, run now, delete. Runs **only while the app is on**; triggers due while it was off are marked missed |
+| Graph | The order of a briefing's tasks and their status as a graph. Earlier briefings can be picked too; click a node to select its owner |
 
 ## Cost safeguards
 

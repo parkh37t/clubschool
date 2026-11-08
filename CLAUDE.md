@@ -138,9 +138,12 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **인원 추가**: 역할 템플릿 12종(`server/agentTemplates.mjs`, 한·영)으로 최대 6명. 명단은 기본 12인 + `agents.json` 이며 `roster.mjs` 가 합친다.
 - **실시간 기록·터미널**: 역할 실행은 stream-json 으로 돌고 `live/<작업>.jsonl` 에 줄을 남긴다. 대화형 터미널은 node-pty(`server/pty.mjs`)이며
   상태를 바꾸는 API(설정·대기열·인원·브레이커·터미널)는 이 PC 화면(Origin 127.0.0.1·localhost)에서 온 요청만 받는다.
+- **예약·관계도·폴더 첨부**: 예약(`server/triggers.mjs`, `triggers.json`)은 앱이 켜져 있을 때만 돌고, 꺼져 있던 동안 지난 예약은 실행하지 않고
+  '놓침'으로 남긴다. 실행할 때 제목에 날짜를 붙이고, 같은 제목의 과제 폴더가 있으면 `_2` 를 붙여 덮어쓰지 않는다. 폴더 첨부는 문서만
+  `_inbox/<묶음>/<상대경로>` 로 받고 과제 폴더 `_attachments/` 에 구조를 유지해 복사한다. 관계도는 작업 원장의 `depends_on` 으로 그린다.
 - **언어**: 화면·안내·역할 템플릿은 한국어(기본)·영어 두 벌(`components/VirtualOffice/i18n.ts`·`simText.ts`). 설정은 `settings.json` 의 `lang`,
   영어면 팀장·에이전트 프롬프트 끝에 영어로 쓰라는 한 줄을 붙인다. 새 화면 문구는 두 사전에 함께 넣는다.
 - `.claude/agents/leader.md` 가 팀장 페르소나, `server/roster.mjs` 가 명단(기본 12인 + 추가 인원)·스킬·산출물 폴더의 단일 원천이다.
 - **설치형 앱**: `desktop/`(Electron) — 앱이 서버를 내부에서 띄우고(127.0.0.1, claude_code) 데이터는 `문서\Wylie AX Office\hive·산출물`.
   `npm run desktop:dev` · `npm run desktop:build`(→ `release/`, 커밋 금지). 자세한 내용은 `desktop/README.md`.
-- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1·2차 완료 — 3차는 재하 확인 후). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.
+- **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1·2·3차 완료). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.

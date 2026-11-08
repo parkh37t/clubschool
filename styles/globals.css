@@ -664,7 +664,8 @@
 
 /* 모바일 성능 최적화 */
 @media (max-width: 768px) {
-  * {
+  /* SVG 요소는 뺀다 — CSS transform 이 SVG 의 transform 속성을 덮어써 가상 사무실 책상·관계도 노드가 한 점에 겹친다 */
+  *:not(svg):not(svg *) {
     transform: translateZ(0);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;

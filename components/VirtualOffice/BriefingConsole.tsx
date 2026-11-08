@@ -6,11 +6,50 @@ import { SIM_TEXT } from './simText';
 
 interface AttachedFile {
   id: number;
-  name: string;
+  name: string; // 파일 이름. 폴더 첨부면 폴더 안 상대경로('자료/RFP.pdf')
   size: number;
   path?: string; // 서버 저장 경로(업로드 완료 시, 산출물 폴더 기준)
   status: 'uploading' | 'done' | 'error';
   error?: string;
+  folder?: string; // 폴더 첨부 묶음 id — 화면에는 폴더 하나당 칩 하나로 보인다
+  folderName?: string;
+}
+
+/** 폴더에서 고르거나 끌어다 놓은 파일 하나. rel 은 맨 위 폴더 이름부터 시작하는 상대경로('자료/하위/파일.pdf'). */
+interface PickedFile { file: File; rel: string; }
+
+// 폴더 첨부는 문서만 올린다 — 실행 파일·압축·숨김 폴더는 건너뛴다. 서버 상한(25MB/파일)과 맞춘다.
+const DOC_EXT = /\.(pdf|docx?|hwpx?|xlsx?|xlsm|csv|pptx?|md|markdown|txt|rtf|json|xml|html?|png|jpe?g|gif|webp|svg)$/i;
+const SKIP_PATH = /(^|\/)(\.[^/]*|node_modules|__MACOSX|\$RECYCLE\.BIN|~\$[^/]*)(\/|$)/i;
+const MAX_FOLDER_FILES = 40;
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
+const MAX_FOLDER_BYTES = 200 * 1024 * 1024;
+const MAX_WALK = 2000; // 끌어다 놓은 폴더를 훑을 때 볼 항목 수 상한(아주 큰 폴더에서 멈추지 않게)
+
+function readDir(dir: FileSystemDirectoryEntry): Promise<FileSystemEntry[]> {
+  const reader = dir.createReader();
+  const all: FileSystemEntry[] = [];
+  return new Promise((resolve) => {
+    const next = () => reader.readEntries((batch) => {
+      if (!batch.length) { resolve(all); return; }
+      all.push(...batch);
+      next();
+    }, () => resolve(all));
+    next();
+  });
+}
+
+/** 끌어다 놓은 폴더를 훑어 파일 목록을 만든다. 숨김·건너뛸 폴더는 들어가지 않는다. */
+async function walkEntry(entry: FileSystemEntry, out: PickedFile[]): Promise<void> {
+  if (out.length >= MAX_WALK) return;
+  const rel = entry.fullPath.replace(/^\/+/, '');
+  if (SKIP_PATH.test(rel)) return;
+  if (entry.isFile) {
+    const file = await new Promise<File | null>((resolve) => (entry as FileSystemFileEntry).file(resolve, () => resolve(null)));
+    if (file) out.push({ file, rel });
+  } else if (entry.isDirectory) {
+    for (const child of await readDir(entry as FileSystemDirectoryEntry)) await walkEntry(child, out);
+  }
 }
 
 interface BriefingConsoleProps {
@@ -69,13 +108,92 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
       setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'error', error: (e as Error).message } : x)));
     }
   };
-  const handleFiles = (files: FileList | null) => {
+  const handleFiles = (files: FileList | File[] | null) => {
     if (!files) return;
     setMode('form');
     Array.from(files).forEach(uploadFile);
   };
 
   const say = (ok: boolean, text: string) => { setFailed(!ok); setStatus(text); };
+
+  // 폴더 첨부 — 문서만 골라 폴더 구조 그대로 올린다(서버: _inbox/<묶음>/<상대경로>). 한 번에 3개씩 보낸다.
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadFolderFile = async (id: number, folder: string, p: PickedFile) => {
+    if (!uploadUrl) return;
+    const inner = p.rel.split('/').slice(1).join('/') || p.file.name; // 맨 위 폴더 이름은 묶음 id 에 이미 들어 있다
+    try {
+      const res = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: { 'X-File-Name': encodeURIComponent(p.file.name), 'X-Rel-Path': encodeURIComponent(inner), 'X-Folder-Id': encodeURIComponent(folder) },
+        body: p.file,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || `${t('bc.uploadFailed')} (${res.status})`);
+      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'done', path: data.path } : x)));
+    } catch (e) {
+      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'error', error: (e as Error).message } : x)));
+    }
+  };
+  const addFolder = async (picked: PickedFile[]) => {
+    if (!uploadUrl || !picked.length) return;
+    setMode('form');
+    // 맨 위 폴더별로 나눠 묶음 하나씩 만든다(폴더 여러 개를 한꺼번에 끌어다 놓을 수 있다).
+    const groups = new Map<string, PickedFile[]>();
+    for (const p of picked) {
+      const top = p.rel.includes('/') ? p.rel.split('/')[0] : '';
+      if (!top) continue;
+      groups.set(top, [...(groups.get(top) ?? []), p]);
+    }
+    const notes: string[] = [];
+    for (const [top, files] of groups) {
+      const docs = files.filter((p) => !SKIP_PATH.test(p.rel) && DOC_EXT.test(p.rel) && p.file.size > 0 && p.file.size <= MAX_FILE_BYTES);
+      const take: PickedFile[] = [];
+      let total = 0;
+      for (const p of docs) {
+        if (take.length >= MAX_FOLDER_FILES || total + p.file.size > MAX_FOLDER_BYTES) break;
+        take.push(p);
+        total += p.file.size;
+      }
+      const skipped = files.length - take.length;
+      if (!take.length) { notes.push(t('bc.folderNone', { name: top })); continue; }
+      const folder = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}__${top}`;
+      const jobs = take.map((p) => ({ id: ++attachIdRef.current, p }));
+      setAttachments((a) => [...a, ...jobs.map(({ id, p }) => ({ id, name: p.rel, size: p.file.size, status: 'uploading' as const, folder, folderName: top }))]);
+      notes.push(t('bc.folderAdded', { name: top, n: take.length, skipped }));
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < jobs.length) {
+          const job = jobs[cursor++];
+          await uploadFolderFile(job.id, folder, job.p);
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
+    }
+    if (notes.length) say(true, notes.join(' · '));
+  };
+  const onFolderPicked = (files: FileList | null) => {
+    if (!files?.length) return;
+    // webkitRelativePath = '맨위폴더/하위/파일'
+    addFolder(Array.from(files).map((file) => ({ file, rel: file.webkitRelativePath || file.name })));
+  };
+  const onDrop = (dt: DataTransfer) => {
+    // 항목은 drop 순간에만 읽을 수 있으므로 먼저 모두 꺼내 둔다.
+    const entries = Array.from(dt.items ?? []).map((it) => (it.kind === 'file' ? it.webkitGetAsEntry() : null)).filter((x): x is FileSystemEntry => Boolean(x));
+    const dirs = entries.filter((x) => x.isDirectory);
+    if (!dirs.length) { handleFiles(dt.files); return; }
+    const plain = entries.filter((x) => x.isFile);
+    (async () => {
+      const picked: PickedFile[] = [];
+      for (const d of dirs) await walkEntry(d, picked);
+      const loose: File[] = [];
+      for (const f of plain) {
+        const file = await new Promise<File | null>((resolve) => (f as FileSystemFileEntry).file(resolve, () => resolve(null)));
+        if (file) loose.push(file);
+      }
+      if (loose.length) handleFiles(loose);
+      await addFolder(picked);
+    })();
+  };
 
   const sendMessage = async () => {
     const text = message.trim();
@@ -147,7 +265,7 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
       aria-label={t('bc.title')}
       onDragOver={(e) => { if (uploadUrl) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
-      onDrop={(e) => { if (uploadUrl) { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); } }}
+      onDrop={(e) => { if (uploadUrl) { e.preventDefault(); setDragOver(false); onDrop(e.dataTransfer); } }}
       style={{ borderTop: `1px solid ${LINE}`, padding: '8px 10px 10px', background: dragOver ? WYLIE_TINT : 'transparent', transition: 'background .15s ease' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
@@ -190,7 +308,25 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
       )}
       {attachments.length > 0 && (
         <ul style={{ listStyle: 'none', margin: '5px 0 0', padding: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {attachments.map((a) => (
+          {/* 폴더 첨부는 폴더 하나당 칩 하나(올린 수/전체·실패 수) */}
+          {[...new Set(attachments.filter((a) => a.folder).map((a) => a.folder as string))].map((folder) => {
+            const items = attachments.filter((a) => a.folder === folder);
+            const done = items.filter((a) => a.status === 'done').length;
+            const bad = items.filter((a) => a.status === 'error').length;
+            const label = items[0]?.folderName ?? folder;
+            return (
+              <li key={folder} title={items.map((a) => `${a.name}${a.status === 'error' ? ` — ${a.error ?? ''}` : ''}`).join('\n')}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: '#fff', border: `1px solid ${LINE_SOFT}`, borderRadius: 4, padding: '2px 6px', maxWidth: '100%' }}>
+                <FolderOpen size={12} aria-hidden />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140, fontWeight: 600 }}>{label}</span>
+                <span style={{ color: bad ? BAD_FG : done === items.length ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
+                  {t('bc.folderFiles', { done, n: items.length })}{bad ? ` · ${t('bc.folderBad', { n: bad })}` : ''}
+                </span>
+                <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.folder !== folder))} aria-label={`${label} ${t('bc.remove')}`} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+              </li>
+            );
+          })}
+          {attachments.filter((a) => !a.folder).map((a) => (
             <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: '#fff', border: `1px solid ${LINE_SOFT}`, borderRadius: 4, padding: '2px 6px', maxWidth: '100%' }}>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150, fontWeight: 600 }}>{a.name}</span>
               <span style={{ color: a.status === 'error' ? BAD_FG : a.status === 'done' ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
@@ -202,12 +338,17 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
         </ul>
       )}
       <input ref={fileInputRef} type="file" multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
+      {/* webkitdirectory 는 React 속성 타입에 없어 ref 로 붙인다 — Electron·크롬에서 폴더 선택 창이 뜬다 */}
+      <input
+        ref={(el) => { folderInputRef.current = el; if (el) { el.setAttribute('webkitdirectory', ''); el.setAttribute('directory', ''); } }}
+        type="file" multiple onChange={(e) => { onFolderPicked(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} aria-hidden tabIndex={-1}
+      />
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
         {mode === 'form' && <button type="button" style={smallBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? t('bc.less') : t('bc.more')}</button>}
         <button type="button" style={{ ...smallBtn, opacity: uploadUrl ? 1 : 0.5 }} disabled={!uploadUrl} onClick={() => fileInputRef.current?.click()} title={uploadUrl ? t('bc.fileTitle') : t('bc.fileOff')}>
           <Paperclip size={13} aria-hidden />{t('bc.file')}
         </button>
-        <button type="button" style={{ ...smallBtn, opacity: 0.5, cursor: 'not-allowed' }} disabled title={t('bc.folderTitle')}>
+        <button type="button" style={{ ...smallBtn, opacity: uploadUrl ? 1 : 0.5 }} disabled={!uploadUrl} onClick={() => folderInputRef.current?.click()} title={uploadUrl ? t('bc.folderTitle') : t('bc.fileOff')}>
           <FolderOpen size={13} aria-hidden />{t('bc.folder')}
         </button>
         <span style={{ fontSize: 10.5, color: MUTED }} title={t('bc.voiceTitle')}>{t('bc.voice')}</span>
