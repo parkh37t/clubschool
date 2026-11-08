@@ -5,6 +5,8 @@ import { useAppHandlers } from './hooks/useAppHandlers';
 import { useDataStore } from './hooks/useDataStore';
 import { Project } from './types';
 import { VIEW_NAMES } from './constants/views';
+import { VirtualOfficeView } from './components/VirtualOffice/VirtualOfficeView';
+import { resolveOfficeBackend } from './components/VirtualOffice/officeBackend';
 
 // URL 딥링크: ?view=<뷰키>로 접속 시 해당 화면으로 바로 진입(예: ?view=virtual-office).
 // 잘못된/없는 값이면 대시보드. 배포(정적 호스팅)에서도 그대로 동작.
@@ -16,6 +18,15 @@ function initialView(): string {
     // URL 파싱 불가 환경 방어 → 기본값
   }
   return VIEW_NAMES.DASHBOARD;
+}
+
+// 설치형 앱(?shell=app): 대시보드 사이드바 없이 가상 사무실만 창 전체로 띄운다(desktop/main.cjs 가 이 주소로 연다).
+function isAppShell(): boolean {
+  try {
+    return new URLSearchParams(window.location.search).get('shell') === 'app';
+  } catch {
+    return false;
+  }
 }
 
 export default function App() {
@@ -59,6 +70,11 @@ export default function App() {
     setSelectedMemberId,
     setSelectedMonth,
   });
+
+  if (isAppShell()) {
+    const backend = resolveOfficeBackend();
+    return <VirtualOfficeView stateUrl={backend.stateUrl} instructUrl={backend.instructUrl} backendBase={backend.base} backendSource={backend.source} />;
+  }
 
   return (
     <AppLayout

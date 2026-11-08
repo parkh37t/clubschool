@@ -1,7 +1,17 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pause, Play } from 'lucide-react';
 import { OfficeSimulator } from './officeSimulator';
-import type { RenderVals, HiveState } from './officeSimulator';
+import type { RenderVals, HiveState, OfficeState } from './officeSimulator';
 import { normalizeBase, saveOfficeBackend } from './officeBackend';
+import { CommandCenter } from './CommandCenter';
+import type { CommandTab } from './CommandCenter';
+import { AgentCards } from './AgentCards';
+import type { AgentCardData } from './AgentCards';
+import { postJson, useEventStream, usePolling } from './officeApi';
+import type { AgentStatus, AuthState, RosterResponse } from './officeApi';
+import {
+  AGENT_NAMES, AGENT_ORDER, AGENT_ROLES, BAD_FG, FONT, GATE_NAMES, INK, LINE, MONO, MUTED, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle,
+} from './officeTheme';
 import './virtualOffice.css';
 
 interface VirtualOfficeViewProps {
@@ -21,40 +31,12 @@ interface VirtualOfficeViewProps {
   backendSource?: 'query' | 'saved' | 'local' | 'none';
 }
 
-interface AttachedFile {
-  id: number;
-  name: string;
-  size: number;
-  path?: string; // 서버 저장 상대경로(업로드 완료 시)
-  status: 'uploading' | 'done' | 'error';
-  error?: string;
-}
-
-const GATE_NAMES = ['영업/평가', '기획', '디자인', '구현', '검증/배포', '그로스'];
-const AGENT_NAMES: Record<string, string> = {
-  han: '한도전', kim: '김영업', jeong: '정우선', na: '나기획', cha: '차도안', oh: '오색감',
-  pyo: '표준수', lee: '이풍뎅', baek: '백연동', gu: '구동민', go: '고지표', hong: '홍보라', lead: '팀장', jaeha: '재하',
-};
-// 와일리 문서 포인트 컬러(보라). 가상 사무실의 기존 초록 계열은 상태색(작업 중)으로만 남긴다.
-const WYLIE = '#6A4C9C';
-const WYLIE_DARK = '#43306B';
-const WYLIE_TINT = '#EFEAF7';
-
-const FONT = "'Pretendard','Apple SD Gothic Neo','Malgun Gothic',system-ui,sans-serif";
-const MONO = "ui-monospace,'SF Mono',Consolas,monospace";
-
-const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
-  '대기': { bg: '#F2EFE7', fg: '#8B877B' }, '진행': { bg: '#DFF2E6', fg: '#1F6B3A' }, '검수': { bg: '#E6EEF8', fg: '#2F5A8C' },
-  '승인대기': { bg: '#FBEED6', fg: '#A96F15' }, '완료': { bg: WYLIE_TINT, fg: WYLIE_DARK }, '보류': { bg: '#F2EFE7', fg: '#8B877B' }, '실패': { bg: '#F8E3DF', fg: '#B24A3A' },
-};
-const GATE_COLOR: Record<string, string> = { PASS: '#1F6B3A', CONDITIONAL: '#A96F15', FAIL: '#B24A3A', '미점검': '#8B877B' };
-
 function fallbackVals(teamLabel: string, initialSpeed: number, autoApprove: boolean): RenderVals {
   const gates = GATE_NAMES.map((name, i) => ({
     num: 'G' + (i + 1), name, label: '대기', pct: '0%',
-    bg: 'transparent', fg: '#8B877B', barColor: '#2D8C4E',
+    bg: 'transparent', fg: MUTED, barColor: '#2D8C4E',
     opacity: i === 0 ? 1 : 0.55, anim: 'none', showMini: false,
-    showLink: i > 0, linkColor: '#DDD6C8',
+    showLink: i > 0, linkColor: LINE,
   }));
   return {
     teamLabel, clock: 'DAY 1 · 09:00', playLabel: '⏸ 일시정지', speedLabel: `속도 ${initialSpeed}×`,
@@ -64,9 +46,16 @@ function fallbackVals(teamLabel: string, initialSpeed: number, autoApprove: bool
   };
 }
 
-const inputStyle = { width: '100%', boxSizing: 'border-box' as const, font: 'inherit', fontSize: 13, padding: '8px 10px', border: '1px solid #DDD6C8', borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical' as const, lineHeight: 1.5 };
+const SIM_TO_STATUS: Record<string, AgentStatus> = { working: '진행', waiting: '승인대기', idle: '대기' };
 
-/** Wylie AX Office — 팀장이 브리핑을 나눠 12 AI 에이전트에게 배정하고, hive 상태를 픽셀 사무실로 보여 주는 대시보드. */
+const chip = { fontWeight: 700, fontSize: 11.5, padding: '1px 8px', borderRadius: 4, whiteSpace: 'nowrap' } as const;
+const bar = { margin: '8px 12px 0', borderRadius: 6, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5 } as const;
+
+/**
+ * Wylie AX Office — 팀장이 브리핑을 나눠 12 AI 에이전트에게 배정하고, hive 상태를 픽셀 사무실로 보여 주는 화면.
+ * 배치는 Munder Difflin 과 같다: 상단 바 · [왼쪽 사무실 | 오른쪽 커맨드 센터(탭·대기열·브리핑 입력)] · 하단 에이전트 바.
+ * 창 전체를 고정 배치로 쓰고(페이지 스크롤 없음), 좁은 창에서는 세로로 쌓는다(virtualOffice.css).
+ */
 export function VirtualOfficeView({
   teamLabel = '와일리 컨버전스 · AX Office',
   autoApprove = false,
@@ -77,6 +66,9 @@ export function VirtualOfficeView({
   backendBase,
   backendSource = 'none',
 }: VirtualOfficeViewProps) {
+  // API 기준 주소: '/api/instruct' → ''(같은 오리진), 'https://x/api/instruct' → 'https://x', 미연결 → undefined
+  const apiBase = instructUrl !== undefined ? instructUrl.replace(/\/api\/instruct$/, '') : undefined;
+
   // 공개 사이트(GitHub Pages)에서 PC 서버에 붙기 위한 주소 입력 — 저장 후 새로고침하면 officeBackend 가 읽는다.
   const [serverInput, setServerInput] = useState(backendBase || '');
   const [serverMsg, setServerMsg] = useState('');
@@ -94,67 +86,37 @@ export function VirtualOfficeView({
     url.searchParams.delete('api');
     window.location.href = url.toString();
   };
+
   const svgRef = useRef<SVGSVGElement>(null);
   const simRef = useRef<OfficeSimulator | null>(null);
   const [, setVersion] = useState(0);
+  const [ext, setExt] = useState<OfficeState | null>(null);
+  const [tab, setTab] = useState<CommandTab>('tasks');
+  const [selected, setSelected] = useState<string | null>(null);
 
-  // 브리핑 콘솔 — 4요소(결과·맥락·제약·질문 기준). 팀장이 이걸 읽고 작업을 나눈다.
-  const [instrTitle, setInstrTitle] = useState('');
-  const [instrResult, setInstrResult] = useState('');
-  const [instrBrief, setInstrBrief] = useState(''); // 맥락 + RFP·자료 전문(선택)
-  const [instrConstraints, setInstrConstraints] = useState('');
-  const [instrPolicy, setInstrPolicy] = useState('내 결정이 꼭 필요할 때만 물어볼 것');
-  const [instrGates, setInstrGates] = useState<boolean[]>([false, false, false, false, false, false]);
-  const [instrStatus, setInstrStatus] = useState('');
-  const [instrBusy, setInstrBusy] = useState(false);
-
-  // 승인 카드 — 행위자·사유가 없으면 서버가 거부한다.
-  const [approveBy, setApproveBy] = useState('재하');
-  const [approveReason, setApproveReason] = useState('');
-  const [approveStatus, setApproveStatus] = useState('');
-
-  // 파일 첨부 상태 — 백엔드(instructUrl) 연결 시에만 업로드 가능.
-  const [attachments, setAttachments] = useState<AttachedFile[]>([]);
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachIdRef = useRef(0);
-  // 업로드·승인 엔드포인트는 브리핑 엔드포인트와 같은 오리진(/api/instruct → /api/upload · /api/approve).
-  const uploadUrl = instructUrl ? instructUrl.replace(/\/instruct$/, '/upload') : undefined;
-  const approveUrl = instructUrl ? instructUrl.replace(/\/instruct$/, '/approve') : undefined;
-
-  const uploadFile = async (file: File) => {
-    if (!uploadUrl) return;
-    const id = ++attachIdRef.current;
-    setAttachments((a) => [...a, { id, name: file.name, size: file.size, status: 'uploading' }]);
-    try {
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: { 'X-File-Name': encodeURIComponent(file.name) },
-        body: file,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.ok) throw new Error(data.error || `업로드 실패 (${res.status})`);
-      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'done', path: data.path } : x)));
-    } catch (e) {
-      setAttachments((a) => a.map((x) => (x.id === id ? { ...x, status: 'error', error: (e as Error).message } : x)));
-    }
-  };
-  const handleFiles = (files: FileList | null) => {
-    if (files) Array.from(files).forEach(uploadFile);
-  };
-  const removeAttachment = (id: number) => setAttachments((a) => a.filter((x) => x.id !== id));
+  // 카드·책상 선택. 작업/승인 탭을 보고 있었다면 그 사람의 활동 탭으로 넘긴다.
+  const handleSelect = useCallback((id: string | null) => {
+    setSelected(id);
+    if (id) setTab((t) => (t === 'tasks' || t === 'approvals' ? 'activity' : t));
+  }, []);
+  // 시뮬레이터는 한 번만 만들어지므로, 책상 클릭 콜백은 최신 선택값을 ref 로 읽는다.
+  const selectedRef = useRef<string | null>(null);
+  selectedRef.current = selected;
 
   useEffect(() => {
     if (!svgRef.current) return;
     const sim = new OfficeSimulator(svgRef.current, {
       teamLabel, autoApprove, initialSpeed,
       onRender: () => setVersion(v => v + 1),
+      onSelectAgent: (id) => handleSelect(selectedRef.current === id ? null : id),
     });
     simRef.current = sim;
     return () => { sim.destroy(); simRef.current = null; };
     // 프로퍼티는 초기 설정값(디자인의 constructor props와 동일 의미) — 1회만 구성.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => { simRef.current?.highlightAgent(selected); }, [selected]);
 
   // 실전 연동: stateUrl 지정 시 상태 JSON을 폴링해 applyOfficeState로 주입.
   useEffect(() => {
@@ -164,8 +126,10 @@ export function VirtualOfficeView({
       try {
         const res = await fetch(stateUrl, { cache: 'no-store' });
         if (!res.ok) return;
-        const data = await res.json();
-        if (alive) simRef.current?.applyOfficeState(data);
+        const data = (await res.json()) as OfficeState;
+        if (!alive) return;
+        simRef.current?.applyOfficeState(data);
+        setExt(data);
       } catch {
         // 폴링 실패는 무시하고 다음 주기에 재시도(네트워크 일시 오류 내성).
       }
@@ -175,382 +139,190 @@ export function VirtualOfficeView({
     return () => { alive = false; clearInterval(iv); };
   }, [stateUrl, pollMs]);
 
-  const toggleGate = (i: number) => setInstrGates(g => g.map((v, j) => (j === i ? !v : v)));
+  // 서버 API — 명단(상태·사용량·스킬), 로그인 여부, 이벤트 증분
+  const roster = usePolling<RosterResponse>(apiBase !== undefined ? `${apiBase}/api/roster` : undefined, 3000);
+  const auth = usePolling<AuthState>(apiBase !== undefined ? `${apiBase}/api/auth` : undefined, 60000);
+  const events = useEventStream(apiBase, 3000);
 
-  const submitInstruction = async () => {
-    const title = instrTitle.trim();
-    if (!title) { setInstrStatus('과제명을 입력하세요.'); return; }
-    if (!instrResult.trim()) { setInstrStatus('"결과" 줄이 비어 있습니다 — 끝났을 때 손에 쥘 것 한 가지를 적어 주세요.'); return; }
-    const gates = instrGates.map((on, i) => (on ? 'G' + (i + 1) : null)).filter(Boolean);
-    const files = attachments.filter((a) => a.status === 'done' && a.path).map((a) => ({ name: a.name, path: a.path }));
-    const constraints = instrConstraints.split('\n').map((s) => s.trim()).filter(Boolean);
-    const briefing = {
-      title,
-      result: instrResult.trim(),
-      goal: instrResult.trim(), // 구 지시 형식 호환
-      context: instrBrief.trim(),
-      brief: instrBrief.trim(),
-      constraints,
-      question_policy: instrPolicy.trim(),
-      attachments: files,
-      gates,
-      ts: new Date().toISOString(),
-    };
-    const json = JSON.stringify(briefing, null, 2);
-    setInstrBusy(true); setInstrStatus('');
-    try {
-      if (instructUrl) {
-        const res = await fetch(instructUrl, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json,
-        });
-        const data = await res.json().catch(() => ({}));
-        setInstrStatus(res.ok ? '브리핑을 팀장에게 전달했습니다.' : `전송 실패 (${res.status}) ${data.error || ''}`);
-      } else {
-        let copied = false;
-        try { await navigator.clipboard.writeText(json); copied = true; } catch { /* clipboard 권한/https 아님 → 다운로드로 대체 */ }
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'briefing.json'; a.click();
-        URL.revokeObjectURL(url);
-        setInstrStatus((copied ? '브리핑을 복사·다운로드했습니다' : '브리핑을 다운로드했습니다') + ' — 오케스트레이터 세션에 전달하세요.');
-      }
-      simRef.current?.noteInstruction(title);
-    } catch {
-      setInstrStatus('오류: 브리핑 전송에 실패했습니다.');
-    } finally {
-      setInstrBusy(false);
-    }
+  // [로그인] — 새 PowerShell 창을 띄우고, 로그인이 확인될 때까지 5초마다 다시 묻는다(최대 3분).
+  const [loginMsg, setLoginMsg] = useState('');
+  const [loginWatch, setLoginWatch] = useState(false);
+  const startLogin = async () => {
+    if (apiBase === undefined) return;
+    setLoginMsg('로그인 창을 여는 중…');
+    const r = await postJson(`${apiBase}/api/auth/login`, {});
+    if (!r.ok) { setLoginMsg(`로그인 창을 열지 못했습니다: ${r.error}`); return; }
+    setLoginMsg('PowerShell 창이 열렸습니다. 브라우저에서 승인한 뒤 화면의 코드를 그 창에 붙여 넣으세요. 끝나면 이 배너가 사라집니다.');
+    setLoginWatch(true);
   };
+  const refreshAuth = auth.refresh;
+  useEffect(() => {
+    if (!loginWatch || apiBase === undefined) return;
+    const started = Date.now();
+    const iv = setInterval(async () => {
+      try { await fetch(`${apiBase}/api/auth?refresh=1`, { cache: 'no-store' }); } catch { /* 다음 주기 */ }
+      refreshAuth();
+      if (Date.now() - started > 180000) setLoginWatch(false);
+    }, 5000);
+    return () => clearInterval(iv);
+  }, [loginWatch, apiBase, refreshAuth]);
+  useEffect(() => { if (auth.data?.loggedIn) { setLoginWatch(false); setLoginMsg(''); } }, [auth.data?.loggedIn]);
 
-  const decide = async (id: string, decision: 'approved' | 'rejected') => {
-    if (!approveUrl) return;
-    if (!approveReason.trim()) { setApproveStatus('사유를 적어야 기록됩니다.'); return; }
-    try {
-      const res = await fetch(approveUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, decision, by: approveBy.trim() || '재하', reason: approveReason.trim() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      setApproveStatus(res.ok ? `${id} ${decision === 'approved' ? '승인' : '반려'} 기록됨` : `실패: ${data.error || res.status}`);
-      if (res.ok) setApproveReason('');
-    } catch {
-      setApproveStatus('오류: 서버에 연결하지 못했습니다.');
-    }
-  };
+  const onSubmitted = useCallback((title: string) => simRef.current?.noteInstruction(title), []);
 
   const sim = simRef.current;
   const rv: RenderVals = sim ? sim.getRenderVals() : fallbackVals(teamLabel, initialSpeed, autoApprove);
   const hive: HiveState | null = sim ? sim.getHive() : null;
   const question = sim ? sim.getQuestion() : '';
-  const pending = hive?.pending ?? [];
-  const taskOf = (id: string) => hive?.tasks.find((t) => t.id === id);
+  const connected = Boolean(hive) && apiBase !== undefined;
+
+  // 서버 연결 시 명단 API, 데모일 때는 시뮬레이터 자리 상태로 카드를 만든다(13장이라 매번 계산해도 가볍다).
+  const demoStates = sim && !connected ? sim.getAgentStates() : null;
+  const cards: AgentCardData[] = connected && roster.data
+    ? roster.data.members.map((m) => ({ id: m.id, name: m.name, role: AGENT_ROLES[m.id] ?? m.dept, status: m.status, task: m.task, usd: m.usd }))
+    : AGENT_ORDER.map((id) => {
+      const s = demoStates?.[id];
+      return { id, name: AGENT_NAMES[id], role: AGENT_ROLES[id], status: SIM_TO_STATUS[s?.state ?? 'idle'], task: s?.state === 'idle' ? '' : (s?.task ?? ''), usd: 0 };
+    });
+
+  const demo = useMemo(() => ({
+    feed: rv.feed, showApproval: rv.showApprovalCard, approvalDesc: rv.approvalDesc, approvalFile: rv.approvalFile, approvalScore: rv.approvalScore,
+    onApprove: () => simRef.current?.approveManual(),
+  }), [rv.feed, rv.showApprovalCard, rv.approvalDesc, rv.approvalFile, rv.approvalScore]);
+
+  const a = auth.data;
+  const mode = roster.data?.mode ?? a?.mode;
+  const showLoginBanner = Boolean(a && a.loggedIn === false);
+  const showCliBanner = Boolean(a && !a.cli && mode === 'claude_code');
+  const playing = !rv.playLabel.startsWith('▶');
 
   return (
-    <div style={{ padding: '18px clamp(12px,3vw,32px) 40px', minHeight: '100%', boxSizing: 'border-box', fontFamily: FONT, color: '#24291F', background: '#EFEAE0', fontSize: 15, lineHeight: 1.6 }}>
-      {/* 상단 바 */}
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', padding: '10px 4px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontWeight: 800, fontSize: 19, letterSpacing: '-0.01em' }}>
-          <span style={{ width: 12, height: 12, background: WYLIE, boxShadow: 'inset -3px -3px 0 rgba(0,0,0,.18)', display: 'inline-block', flexShrink: 0 }} />
-          <span>Wylie AX Office</span>
-          <span style={{ fontWeight: 600, fontSize: 12.5, color: '#8B877B', background: '#FFFFFF', border: '1px solid #DDD6C8', padding: '3px 9px', borderRadius: 999 }}>{rv.teamLabel}</span>
-          {hive && <span style={{ fontWeight: 700, fontSize: 11.5, color: WYLIE_DARK, background: WYLIE_TINT, border: `1px solid ${WYLIE}`, padding: '2px 8px', borderRadius: 999 }}>hive 연결{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>}
-          {!hive && stateUrl && <span style={{ fontWeight: 700, fontSize: 11.5, color: '#A14A2A', background: '#FBEFE9', border: '1px solid #E3B39F', padding: '2px 8px', borderRadius: 999 }}>서버 응답 없음{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>}
-        </div>
-        <div style={{ fontSize: 13, color: '#8B877B', fontWeight: 600, fontFamily: MONO, letterSpacing: '.06em' }}>{rv.clock}</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button className="apex-btn apex-btn--primary" onClick={() => sim?.togglePlay()}>{rv.playLabel}</button>
-          <button className="apex-btn apex-btn--ghost" onClick={() => sim?.cycleSpeed()}>{rv.speedLabel}</button>
-          {!hive && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#8B877B', cursor: 'pointer', userSelect: 'none' }}>
-              <input type="checkbox" checked={rv.auto} onChange={(e) => sim?.setAuto(e.target.checked)} style={{ accentColor: '#2D8C4E', width: 15, height: 15, cursor: 'pointer' }} />
-              <span>자동 결재(데모)</span>
-            </label>
-          )}
-          <button className="apex-btn apex-btn--ghost" onClick={() => sim?.reset()}>리셋</button>
-        </div>
+    <div className="axo-app" style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.5 }}>
+      {/* 상단 바 — 앱 이름 · 모드 · 자동 진행 · 시계 · 재생 제어 */}
+      <header className="axo-top">
+        <span aria-hidden style={{ width: 14, height: 14, background: WYLIE, boxShadow: 'inset -3px -3px 0 rgba(0,0,0,.2)', flexShrink: 0 }} />
+        <strong style={{ fontSize: 15, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>Wylie AX Office</strong>
+        <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>{rv.teamLabel}</span>
+        {hive ? (
+          <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>
+            <span style={{ ...chip, color: WYLIE_DARK, background: WYLIE_TINT, border: `1px solid ${WYLIE}` }}>hive 연결{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>
+            {mode && <span style={{ ...chip, color: INK, background: '#fff', border: `1px solid ${LINE}`, fontFamily: MONO }}>{mode}</span>}
+            {ext?.concurrency && <span style={{ ...chip, color: INK, background: '#fff', border: `1px solid ${LINE}` }}>동시 {ext.concurrency.running}/{ext.concurrency.limit}</span>}
+          </span>
+        ) : (
+          stateUrl
+            ? <span style={{ ...chip, color: '#A14A2A', background: '#FBEFE9', border: '1px solid #E3B39F' }}>서버 응답 없음{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>
+            : <span style={{ ...chip, color: MUTED, background: '#fff', border: `1px solid ${LINE}` }}>데모</span>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, fontWeight: 600, fontFamily: MONO, letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{rv.clock}</span>
+        <button type="button" className="axo-iconbtn" onClick={() => sim?.togglePlay()} title="사무실 애니메이션 일시정지·재생(작업 진행과는 무관)">
+          {playing ? <Pause size={13} aria-hidden /> : <Play size={13} aria-hidden />}{playing ? '일시정지' : '재생'}
+        </button>
+        <button type="button" className="axo-iconbtn" onClick={() => sim?.cycleSpeed()}>{rv.speedLabel}</button>
+        {!hive && (
+          <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 600, color: MUTED, cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={rv.auto} onChange={(e) => sim?.setAuto(e.target.checked)} style={{ accentColor: '#2D8C4E', width: 14, height: 14, cursor: 'pointer' }} />
+            자동 결재(데모)
+          </label>
+        )}
+        {!hive && <button type="button" className="axo-iconbtn" onClick={() => sim?.reset()}>리셋</button>}
       </header>
 
-      {/* 서버 주소 — 공개 사이트에서 PC 에 띄운 서버(터널 주소)에 붙인다. 로컬 개발(같은 오리진)에서는 숨김 */}
+      {/* Claude 로그인 배너 — 풀려 있으면 에이전트 실행이 '로그인 필요'로 실패한다 */}
+      {showLoginBanner && (
+        <section role="alert" style={{ ...bar, background: '#FBEFE9', border: '1px solid #E3B39F' }}>
+          <strong style={{ color: BAD_FG }}>Claude 로그인이 풀려 있습니다</strong>
+          <span style={{ flex: '1 1 320px', color: INK }}>{loginMsg || '이 상태에서는 팀장 분해·역할 실행·QA가 "로그인 필요"로 실패합니다. [로그인]을 누르면 새 PowerShell 창에서 로그인을 진행합니다.'}</span>
+          <button type="button" onClick={startLogin} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', padding: '5px 14px', borderRadius: 4, border: `1px solid ${WYLIE_DARK}`, background: WYLIE, color: '#fff' }}>로그인</button>
+        </section>
+      )}
+      {showCliBanner && (
+        <section role="alert" style={{ ...bar, background: '#FBEFE9', border: '1px solid #E3B39F' }}>
+          <strong style={{ color: BAD_FG }}>Claude Code CLI를 찾지 못했습니다.</strong>
+          <span>Claude 데스크톱 앱이 설치·로그인돼 있는지 확인하세요. CLI 없이 더미로 바꿔 돌리지 않습니다.</span>
+        </section>
+      )}
+      {/* 팀장 되물음 */}
+      {question && (
+        <section role="alert" style={{ ...bar, background: '#F8E3DF', border: '1px solid #D0684A' }}>
+          <strong style={{ color: BAD_FG }}>팀장이 되물었습니다</strong>
+          <span style={{ flex: '1 1 320px' }}>{question}</span>
+          <span style={{ fontSize: 11.5, color: MUTED }}>결과 줄을 고쳐 다시 보내 주세요.</span>
+        </section>
+      )}
+      {/* 서버 주소 — 공개 사이트에서 PC 에 띄운 서버(터널 주소)에 붙인다. 로컬(같은 오리진·설치형 앱)에서는 숨김 */}
       {backendSource !== 'local' && (
-        <section aria-label="서버 연결" style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '10px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: WYLIE_DARK, whiteSpace: 'nowrap' }}>PC 서버 주소</span>
+        <section aria-label="서버 연결" style={{ ...bar, background: '#FFFDF8', border: `1px solid ${LINE}` }}>
+          <strong style={{ fontSize: 12, color: WYLIE_DARK, whiteSpace: 'nowrap' }}>PC 서버 주소</strong>
           <input
             value={serverInput}
             onChange={(e) => setServerInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') connectServer(); }}
             placeholder="https://xxxx.trycloudflare.com  (PC 에서 start-ax-office.ps1 이 출력한 주소)"
-            style={{ ...inputStyle, marginTop: 0, flex: '1 1 320px', fontFamily: MONO, fontSize: 12.5 }}
+            style={{ ...inputStyle, marginTop: 0, flex: '1 1 300px', fontFamily: MONO, fontSize: 12, padding: '5px 9px' }}
           />
-          <button className="apex-btn apex-btn--primary" onClick={connectServer}>연결</button>
-          {backendBase && <button className="apex-btn apex-btn--ghost" onClick={disconnectServer}>연결 해제</button>}
-          <span style={{ fontSize: 11.5, color: '#8B877B', flexBasis: '100%' }}>
-            {serverMsg || (backendSource === 'saved' ? '이 브라우저에 저장된 주소로 연결 중입니다. 주소가 바뀌면 다시 넣어 주세요(터널을 새로 켤 때마다 바뀝니다).' : '미연결이면 내부 데모만 돕니다. PC 에서 서버와 터널을 켠 뒤 그 주소를 넣으면 실제 작업을 여기서 봅니다.')}
+          <button type="button" className="axo-iconbtn" onClick={connectServer}>연결</button>
+          {backendBase && <button type="button" className="axo-iconbtn" onClick={disconnectServer}>연결 해제</button>}
+          <span style={{ fontSize: 11, color: MUTED, flexBasis: '100%' }}>
+            {serverMsg || (backendSource === 'saved' ? '이 브라우저에 저장된 주소로 연결 중입니다. 터널을 새로 켜면 주소가 바뀝니다.' : '미연결이면 내부 데모만 돕니다. PC 에서 서버와 터널을 켠 뒤 그 주소를 넣으면 실제 작업을 여기서 봅니다.')}
           </span>
         </section>
       )}
 
-      {/* 게이트 보드 */}
-      <section aria-label="파이프라인 게이트 현황" style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '14px 18px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 0, overflowX: 'auto' }}>
-        {rv.gates.map((g, i) => (
-          <div key={i} style={{ display: 'contents' }}>
-            {g.showLink && <div style={{ width: 26, minWidth: 26, height: 2, background: g.linkColor }} />}
-            <div style={{ minWidth: 110, flex: 1, position: 'relative', padding: '6px 8px 8px', borderRadius: 10, textAlign: 'center', background: g.bg, opacity: g.opacity, animation: g.anim }}>
-              <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: '.12em', color: g.fg, fontFamily: MONO }}>{g.num}</div>
-              <div style={{ fontSize: 14, fontWeight: 800, marginTop: 1 }}>{g.name}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 700, marginTop: 3, color: g.fg, minHeight: 17 }}>{g.label}</div>
-              <div style={{ height: 5, background: '#EAE5D8', borderRadius: 99, marginTop: 7, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: g.pct, background: g.barColor, borderRadius: 99, transition: 'width .25s linear' }} />
+      <main className="axo-main">
+        {/* 왼쪽 — 게이트 현황 + 사무실 */}
+        <section className="axo-left" aria-label="사무실">
+          <div className="axo-gates" aria-label="파이프라인 게이트 현황">
+            {rv.gates.map((g) => (
+              <div key={g.num} className="axo-gate" title={`${g.num} ${g.name} — ${g.label}`} style={{ background: g.bg === 'transparent' ? '#FFFDF8' : g.bg, opacity: g.opacity, animation: g.anim }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, minWidth: 0 }}>
+                  <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 800, color: g.fg }}>{g.num}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>{g.name}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: g.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.label}</span>
+                </div>
+                <div style={{ height: 3, background: '#EAE5D8', borderRadius: 2, marginTop: 3, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: g.pct, background: g.barColor, transition: 'width .25s linear' }} />
+                </div>
+                {g.showMini && !hive && <button type="button" className="apex-btn--mini" style={{ marginTop: 3, padding: '1px 8px', fontSize: 11 }} onClick={() => sim?.approveManual()}>결재</button>}
               </div>
-              {g.showMini && !hive && <button className="apex-btn--mini" onClick={() => sim?.approveManual()}>결재</button>}
-            </div>
+            ))}
           </div>
-        ))}
-      </section>
-
-      <main style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexWrap: 'wrap' }}>
-        {/* 사무실 평면도 */}
-        <section style={{ flex: '1 1 640px', minWidth: 0, padding: 14, display: 'flex', flexDirection: 'column', background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14 }}>
-          <svg id="office" ref={svgRef} viewBox="0 0 760 880" role="img" aria-label="팀장과 12명의 AI 에이전트가 메시지를 주고받으며 일하는 픽셀 사무실 평면도" style={{ width: '100%', height: 'auto', display: 'block', shapeRendering: 'crispEdges', borderRadius: 10, background: '#1B1F2E' }} />
-          <div style={{ display: 'flex', gap: 18, marginTop: 12, padding: '0 4px', fontSize: 12.5, fontWeight: 600, color: '#8B877B', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span><b style={{ display: 'inline-block', width: 10, height: 10, marginRight: 6, background: '#2D8C4E', boxShadow: 'inset -2px -2px 0 rgba(0,0,0,.15)' }} />작업 중</span>
-            <span><b style={{ display: 'inline-block', width: 10, height: 10, marginRight: 6, background: '#E8A33D', boxShadow: 'inset -2px -2px 0 rgba(0,0,0,.15)' }} />승인·QA 대기</span>
-            <span><b style={{ display: 'inline-block', width: 10, height: 10, marginRight: 6, background: '#6B7288', boxShadow: 'inset -2px -2px 0 rgba(0,0,0,.15)' }} />대기</span>
-            <span><b style={{ display: 'inline-block', width: 10, height: 10, marginRight: 6, background: WYLIE, boxShadow: 'inset -2px -2px 0 rgba(0,0,0,.15)' }} />팀장</span>
-            <span style={{ marginLeft: 'auto', fontWeight: 500 }}>{hive ? '봉투 = 메시지(배정·회신·승인 요청). 사장실 서류가 깜빡이면 승인 대기입니다' : '게이트 시작 시 담당자들이 회의실로 모여 킥오프를 합니다'}</span>
+          <div className="axo-canvas">
+            <svg id="office" ref={svgRef} viewBox="0 0 760 880" role="img" aria-label="팀장과 12명의 AI 에이전트가 메시지를 주고받으며 일하는 픽셀 사무실 평면도. 책상을 누르면 그 에이전트를 선택합니다." style={{ shapeRendering: 'crispEdges' }} />
           </div>
-
-          {/* 작업판 — hive 연결 시 작업 원장을 그대로 */}
-          {hive && hive.tasks.length > 0 && (
-            <div style={{ marginTop: 14, borderTop: '1px solid #EEE9DD', paddingTop: 12 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#8B877B', margin: '0 0 8px' }}>작업판 · {hive.briefing}</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
-                {hive.tasks.map((t) => {
-                  const sc = STATUS_COLOR[t.status] ?? STATUS_COLOR['대기'];
-                  return (
-                    <div key={t.id} style={{ border: '1px solid #DDD6C8', borderRadius: 9, padding: '8px 11px', background: '#FCFAF5', fontSize: 12.5 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, color: WYLIE_DARK }}>{t.id}</span>
-                        <span style={{ fontWeight: 700, color: '#24291F' }}>{AGENT_NAMES[t.owner] ?? t.owner}</span>
-                        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, padding: '1px 7px', borderRadius: 999, background: sc.bg, color: sc.fg }}>{t.status}</span>
-                      </div>
-                      <div style={{ fontWeight: 600, lineHeight: 1.4 }}>{t.title}</div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 4, fontSize: 11, color: '#8B877B', alignItems: 'center', minWidth: 0 }}>
-                        <span style={{ fontWeight: 800, color: GATE_COLOR[t.gate] ?? '#8B877B', whiteSpace: 'nowrap' }}>게이트 {t.gate}</span>
-                        {t.needs_approval && <span style={{ whiteSpace: 'nowrap' }}>승인 필요</span>}
-                        {t.output && <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.output}>{t.output.split('/').pop()}</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 14, padding: '0 2px', fontSize: 11.5, fontWeight: 600, color: MUTED, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
+            <span><b style={{ display: 'inline-block', width: 9, height: 9, marginRight: 5, background: '#2D8C4E' }} />작업 중</span>
+            <span><b style={{ display: 'inline-block', width: 9, height: 9, marginRight: 5, background: '#E8A33D' }} />승인·QA 대기</span>
+            <span><b style={{ display: 'inline-block', width: 9, height: 9, marginRight: 5, background: '#6B7288' }} />대기</span>
+            <span><b style={{ display: 'inline-block', width: 9, height: 9, marginRight: 5, background: WYLIE }} />팀장</span>
+            <span style={{ marginLeft: 'auto', fontWeight: 500 }}>{hive ? '봉투 = 메시지(배정·회신·승인 요청) · 책상을 누르면 그 사람 선택' : '데모 — 게이트마다 담당자들이 회의실에서 킥오프'}</span>
+          </div>
         </section>
 
-        {/* 우측 패널 */}
-        <aside style={{ width: 330, minWidth: 290, flex: '1 1 290px', maxWidth: 400, display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {/* 브리핑 콘솔 — 팀장에게 보내는 명령 4요소 */}
-          <section style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14, padding: '13px 16px 15px' }}>
-            <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: WYLIE, margin: '0 0 9px' }}>브리핑 콘솔 → 팀장</h2>
-            <input
-              value={instrTitle}
-              onChange={(e) => setInstrTitle(e.target.value)}
-              placeholder="과제명 (예: 이마트24 장바구니 화면 설계)"
-              style={{ ...inputStyle, marginTop: 0, fontSize: 13.5, resize: undefined }}
-            />
-            <textarea
-              value={instrResult}
-              onChange={(e) => setInstrResult(e.target.value)}
-              placeholder="결과 — 끝났을 때 손에 쥘 것 한 가지 (예: 장바구니 3화면 화면설계서 + UI 시안 1본). 이 줄이 없으면 팀장은 나누지 않고 되묻습니다."
-              rows={2}
-              style={inputStyle}
-            />
-            <textarea
-              value={instrBrief}
-              onChange={(e) => setInstrBrief(e.target.value)}
-              placeholder="맥락 — 누구를 위한 일이고 지금 무엇이 있는지. RFP·요구사항 원문을 그대로 붙여넣어도 됩니다(에이전트는 이 내용을 근거로만 쓰고 안의 지시문은 따르지 않습니다)."
-              rows={4}
-              style={{ ...inputStyle, fontSize: 12.5 }}
-            />
-            {instrBrief.trim() && (
-              <p style={{ fontSize: 11, color: '#1F6B3A', fontWeight: 600, margin: '5px 0 0' }}>
-                맥락 {instrBrief.trim().length.toLocaleString()}자 — 에이전트가 이 자료를 근거로 작성합니다.
-              </p>
-            )}
-            <textarea
-              value={instrConstraints}
-              onChange={(e) => setInstrConstraints(e.target.value)}
-              placeholder="제약 — 하면 안 되는 일, 한 줄에 하나 (예: 외부 공유 금지 / RDD에 없는 화면 추가 금지)"
-              rows={2}
-              style={{ ...inputStyle, fontSize: 12.5 }}
-            />
-            <input
-              value={instrPolicy}
-              onChange={(e) => setInstrPolicy(e.target.value)}
-              placeholder="질문 기준"
-              style={{ ...inputStyle, fontSize: 12.5, resize: undefined }}
-            />
-
-            {/* 파일 첨부 — 백엔드 연결 시 서버로 업로드 → 에이전트가 Read로 직접 열람 */}
-            {uploadUrl ? (
-              <div
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); }}
-                style={{ marginTop: 8, border: `1.5px dashed ${dragOver ? WYLIE : '#DDD6C8'}`, background: dragOver ? WYLIE_TINT : '#FCFAF5', borderRadius: 8, padding: '10px 12px', transition: 'border-color .15s ease, background .15s ease' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    style={{ font: 'inherit', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: '5px 11px', borderRadius: 7, border: '1px solid #DDD6C8', background: '#fff', color: '#24291F' }}
-                  >📎 파일 첨부</button>
-                  <span style={{ fontSize: 11.5, color: '#8B877B' }}>또는 여기로 끌어다 놓기 · PDF·워드·텍스트, 최대 25MB</span>
-                </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  multiple
-                  onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }}
-                  style={{ display: 'none' }}
-                />
-                {attachments.length > 0 && (
-                  <ul style={{ listStyle: 'none', margin: '9px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
-                    {attachments.map((a) => (
-                      <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, background: '#fff', border: '1px solid #EEE9DD', borderRadius: 7, padding: '6px 9px' }}>
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{a.name}</span>
-                        <span style={{ fontSize: 11, color: a.status === 'error' ? '#B24A3A' : a.status === 'done' ? '#1F6B3A' : '#8B877B', whiteSpace: 'nowrap' }}>
-                          {a.status === 'uploading' ? '업로드 중…' : a.status === 'error' ? (a.error || '실패') : `${Math.max(1, Math.round(a.size / 1024)).toLocaleString()}KB`}
-                        </span>
-                        <button type="button" onClick={() => removeAttachment(a.id)} title="제거" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#8B877B', fontSize: 15, lineHeight: 1, padding: 0 }}>×</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <p style={{ fontSize: 11, color: '#8B877B', margin: '7px 0 0', lineHeight: 1.5 }}>
-                파일 첨부는 백엔드 연결 시 가능합니다. 지금은 맥락 칸에 자료를 텍스트로 붙여넣어 주세요.
-              </p>
-            )}
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', margin: '9px 0 2px', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: '#8B877B', marginRight: 2 }}>단계 지정(선택)</span>
-              {GATE_NAMES.map((n, i) => (
-                <button
-                  key={i}
-                  onClick={() => toggleGate(i)}
-                  title={n}
-                  style={{
-                    font: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
-                    padding: '3px 8px', borderRadius: 999,
-                    background: instrGates[i] ? WYLIE_TINT : '#F2EFE7',
-                    color: instrGates[i] ? WYLIE_DARK : '#9A968A',
-                    border: '1px solid ' + (instrGates[i] ? WYLIE : '#DDD6C8'),
-                  }}
-                >{'G' + (i + 1)}</button>
-              ))}
-            </div>
-            <p style={{ fontSize: 11, color: '#8B877B', margin: '0 0 9px', lineHeight: 1.5 }}>비워 두면 팀장이 결과 줄을 읽고 필요한 역할만 고릅니다.</p>
-            <button
-              className="apex-btn--approve"
-              onClick={submitInstruction}
-              disabled={instrBusy}
-              style={{ opacity: instrBusy ? 0.6 : 1, background: WYLIE, borderColor: WYLIE_DARK }}
-            >{instrBusy ? '전송 중…' : '팀장에게 브리핑 보내기'}</button>
-            {instrStatus && <p style={{ fontSize: 12, color: '#1F6B3A', fontWeight: 600, margin: '9px 0 0' }}>{instrStatus}</p>}
-            <p style={{ fontSize: 11, color: '#8B877B', margin: '7px 0 0', lineHeight: 1.5 }}>
-              {instructUrl
-                ? '백엔드 연결됨 — 팀장이 작업을 나눠 자동 실행합니다.'
-                : '백엔드 미연결 — 브리핑(briefing.json)을 오케스트레이터 세션이 실행합니다.'}
-            </p>
-          </section>
-
-          {/* 팀장 되물음 */}
-          {question && (
-            <section style={{ background: '#F8E3DF', border: '1px solid #D0684A', borderRadius: 14, padding: '13px 16px 14px' }}>
-              <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#B24A3A', margin: '0 0 6px' }}>팀장이 되물었습니다</h2>
-              <p style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>{question}</p>
-              <p style={{ fontSize: 11.5, color: '#8B877B', margin: '6px 0 0' }}>결과 줄을 고쳐 다시 보내 주세요.</p>
-            </section>
-          )}
-
-          {/* 승인 카드 — hive 연결: 승인 큐 그대로 / 데모: 기존 결재 */}
-          {hive ? (pending.length > 0 && (
-            <section style={{ background: '#FBEED6', border: '1px solid #E8A33D', borderRadius: 14 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#A96F15', padding: '13px 16px 0', margin: 0 }}>승인 대기 {pending.length}건 — 재하 결정 전까지 멈춤</h2>
-              <div style={{ padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {pending.map((a) => {
-                  const t = taskOf(a.task);
-                  return (
-                    <div key={a.id} style={{ background: '#fff', border: '1px solid #DDD6C8', borderRadius: 9, padding: '9px 12px', fontSize: 13 }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 800, color: '#A96F15' }}>{a.id}</span>
-                        <span style={{ fontWeight: 700 }}>{a.kind}</span>
-                        {a.payload?.gate && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: GATE_COLOR[a.payload.gate] ?? '#8B877B' }}>QA {a.payload.gate}</span>}
-                      </div>
-                      <div style={{ fontSize: 12.5, marginTop: 3 }}>{t ? `${t.id} ${AGENT_NAMES[t.owner] ?? t.owner} · ${t.title}` : a.task}</div>
-                      {a.payload?.output && <div style={{ fontSize: 11.5, color: '#8B877B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={a.payload.output}>{a.payload.output}</div>}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        <button className="apex-btn--approve" style={{ flex: 1 }} onClick={() => decide(a.id, 'approved')}>승인</button>
-                        <button className="apex-btn apex-btn--ghost" style={{ flex: 1, color: '#B24A3A' }} onClick={() => decide(a.id, 'rejected')}>반려</button>
-                      </div>
-                    </div>
-                  );
-                })}
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input value={approveBy} onChange={(e) => setApproveBy(e.target.value)} placeholder="행위자" style={{ ...inputStyle, marginTop: 0, width: 90, fontSize: 12.5, resize: undefined }} />
-                  <input value={approveReason} onChange={(e) => setApproveReason(e.target.value)} placeholder="사유 (필수 — 없으면 기록되지 않음)" style={{ ...inputStyle, marginTop: 0, flex: 1, fontSize: 12.5, resize: undefined }} />
-                </div>
-                {approveStatus && <p style={{ fontSize: 12, color: approveStatus.startsWith('실패') || approveStatus.startsWith('오류') || approveStatus.startsWith('사유') ? '#B24A3A' : '#1F6B3A', fontWeight: 600, margin: 0 }}>{approveStatus}</p>}
-                {!approveUrl && <p style={{ fontSize: 11.5, color: '#8B877B', margin: 0 }}>백엔드 미연결 — 승인은 POST /api/approve 로만 가능합니다.</p>}
-              </div>
-            </section>
-          )) : (rv.showApprovalCard && (
-            <section style={{ background: '#FBEED6', border: '1px solid #E8A33D', borderRadius: 14 }}>
-              <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#A96F15', padding: '13px 16px 0', margin: 0 }}>결재 요청</h2>
-              <div style={{ padding: '10px 16px 14px' }}>
-                <p style={{ fontSize: 13, color: '#A96F15', fontWeight: 600, margin: 0 }}>{rv.approvalDesc}</p>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, background: '#fff', border: '1px solid #DDD6C8', borderRadius: 9, padding: '9px 12px', margin: '8px 0 12px', fontSize: 13.5, fontWeight: 700 }}>
-                  <span>{rv.approvalFile}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: '#1F6B3A', background: '#DFF2E6', padding: '2px 9px', borderRadius: 999 }}>{rv.approvalScore}</span>
-                </div>
-                <button className="apex-btn--approve" onClick={() => sim?.approveManual()}>결재하기</button>
-              </div>
-            </section>
-          ))}
-
-          <section style={{ flex: 1, minHeight: 180, display: 'flex', flexDirection: 'column', background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14 }}>
-            <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#8B877B', padding: '13px 16px 0', margin: 0 }}>라이브 피드</h2>
-            <ul style={{ listStyle: 'none', margin: 0, padding: '8px 16px 14px', overflowY: 'auto', maxHeight: 300, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {rv.feedEmpty && <li style={{ color: '#8B877B', fontSize: 13, padding: '5px 0' }}>브리핑을 보내면 활동이 기록됩니다.</li>}
-              {rv.feed.map((f, i) => (
-                <li key={f.t + f.who + i} style={{ fontSize: 13, padding: '5px 0', borderBottom: '1px dashed #EEE9DD', display: 'flex', gap: 9, alignItems: 'baseline' }}>
-                  <span style={{ fontSize: 11.5, color: '#8B877B', fontWeight: 700, whiteSpace: 'nowrap', fontFamily: MONO, letterSpacing: '.06em' }}>{f.t}</span>
-                  <span style={{ fontWeight: 800, color: f.whoColor }}>{f.who}</span>
-                  <span>{f.msg}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section style={{ background: '#FFFFFF', border: '1px solid #DDD6C8', borderRadius: 14 }}>
-            <h2 style={{ fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: '#8B877B', padding: '13px 16px 0', margin: 0 }}>산출물</h2>
-            <div style={{ padding: '10px 16px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {rv.artifactsEmpty && <span style={{ color: '#8B877B', fontSize: 13 }}>게이트를 통과한 산출물이 여기 쌓입니다.</span>}
-              {rv.artifacts.map((a, i) => (
-                <div key={a.g + i} style={{ display: 'flex', alignItems: 'center', gap: 10, border: '1px solid #DDD6C8', borderRadius: 9, padding: '8px 12px', fontSize: 13, background: '#FCFAF5', animation: 'apex-slidein .4s ease' }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#fff', background: hive ? WYLIE : '#2D8C4E', padding: '2px 7px', borderRadius: 6, fontFamily: MONO }}>{a.g}</span>
-                  <span style={{ fontWeight: 700, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.f}</span>
-                  <span style={{ fontSize: 12, fontWeight: 800, color: GATE_COLOR[a.s] ?? '#1F6B3A' }}>{a.s}</span>
-                </div>
-              ))}
-            </div>
-          </section>
-        </aside>
+        {/* 오른쪽 — 커맨드 센터(탭·대기열·브리핑 입력) */}
+        <CommandCenter
+          tab={tab}
+          onTab={setTab}
+          hive={hive}
+          apiBase={apiBase}
+          selected={selected}
+          onSelect={handleSelect}
+          roster={roster.data?.members ?? null}
+          events={events}
+          concurrency={ext?.concurrency}
+          mode={mode}
+          demo={demo}
+          instructUrl={instructUrl}
+          onSubmitted={onSubmitted}
+        />
       </main>
 
-      <div role="status" style={{ position: 'fixed', left: '50%', bottom: 26, background: '#24291F', color: '#fff', fontSize: 13.5, fontWeight: 700, padding: '10px 18px', borderRadius: 10, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease', opacity: rv.toastOpacity, transform: rv.toastTransform }}>{rv.toastMsg}</div>
+      {/* 하단 — 에이전트 바 */}
+      <footer className="axo-bottom">
+        <AgentCards members={cards} selected={selected} onSelect={handleSelect} connected={connected} />
+      </footer>
+
+      <div role="status" style={{ position: 'fixed', left: '50%', bottom: 26, background: INK, color: '#fff', fontSize: 13.5, fontWeight: 700, padding: '10px 18px', borderRadius: 8, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease', opacity: rv.toastOpacity, transform: rv.toastTransform }}>{rv.toastMsg}</div>
     </div>
   );
 }

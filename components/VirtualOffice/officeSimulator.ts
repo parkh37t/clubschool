@@ -29,6 +29,8 @@ export interface OfficeSimulatorOptions {
   autoApprove: boolean;
   initialSpeed: number;
   onRender: () => void;
+  /** 책상을 누르면 그 에이전트 id 로 호출(에이전트 카드 선택과 같은 동작) */
+  onSelectAgent?: (id: string) => void;
 }
 
 /** 실전 연동용 외부 상태 스키마 (오케스트레이터가 쓰는 office-state.json 형태).
@@ -36,8 +38,14 @@ export interface OfficeSimulatorOptions {
 export interface OfficeAgentState { state: AgentState; task?: string; }
 
 /** hive(server/hive) 요약 — 작업 원장·승인 큐·메일 이벤트. 서버 orchestrator.officeState()가 만든다. */
-export interface HiveTask { id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean; }
-export interface HiveApproval { id: string; task: string; kind: string; reason: string; status: string; payload?: { output?: string; gate?: string } | null; }
+export interface HiveTask {
+  id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean;
+  stage?: string; depends_on?: string[]; cost_usd?: number; qa_summary?: string;
+}
+export interface HiveApproval {
+  id: string; task: string; kind: string; reason: string; status: string; payload?: { output?: string; gate?: string } | null;
+  requested_at?: string; decided_by?: string | null; decided_at?: string | null; decision_reason?: string | null;
+}
 export interface HiveMail { id: string; from: string; to: string; type: string; task?: string; ts?: string; }
 export interface HiveState {
   briefing?: string;
@@ -55,6 +63,10 @@ export interface OfficeState {
   artifact?: { file: string; score: number; gate?: string };
   hive?: HiveState;
   question?: string; // 팀장이 되물은 질문(분해 실패 시)
+  concurrency?: { limit: number; running: number }; // 작업 풀: 동시 실행 상한·현재 실행 수
+  /** 게이트 보드 G1~G6 별 작업 집계(hive). 있으면 stage 하나 대신 이 값으로 보드를 그린다. */
+  boards?: { total: number; done: number; active: number; awaiting: number; closed: number }[];
+  idle?: boolean; // 브리핑 전 대기 상태(서버가 hive 에서 만든 빈 사무실)
 }
 
 interface DeptDef { label: string; c: string; }
@@ -121,6 +133,10 @@ export class OfficeSimulator {
   private seenTaskState = new Map<string, string>();
   private hive: HiveState | null = null;
   private question = '';
+  private agentStates: Record<string, OfficeAgentState> = {}; // 자리별 현재 상태(카드·라운지 나들이 판단용)
+  private idle = false; // 서버 연결됨 · 브리핑 전(게이트 보드를 전부 '대기'로)
+  private boards: OfficeState['boards'] = undefined;
+  private selectedId: string | null = null;
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private raf = 0;
@@ -325,6 +341,8 @@ export class OfficeSimulator {
   private buildDesk(a: AgentDef, x: number, y: number, idx: number): void {
     const el = this.el.bind(this);
     const g = el('g', { class: 'desk-sprite', id: 'sp-' + a.id, transform: `translate(${x},${y})` }) as SVGGElement;
+    // 선택 강조 테두리(에이전트 카드·책상 클릭). 기본은 숨김, .selected 일 때 보인다.
+    el('rect', { x: -10, y: -8, width: 76, height: 88, rx: 6, class: 'deskhl', fill: 'rgba(183,156,232,.10)', stroke: '#B79CE8', 'stroke-width': 2.5, 'stroke-dasharray': '6 4' }, g);
     el('rect', { x: 12, y: 6, width: 32, height: 24, rx: 3, fill: '#3A3F52' }, g);
     el('rect', { x: 12, y: 6, width: 32, height: 3, rx: 1.5, fill: '#4A5068' }, g);
     const av = el('g', { class: 'avatar' }, g) as SVGGElement;
@@ -350,6 +368,7 @@ export class OfficeSimulator {
     el('polygon', { points: '23,-11 33,-11 28,-4', fill: '#FFFFFF', stroke: '#24291F', 'stroke-width': 1.2 }, b);
     el('rect', { x: 24, y: -12, width: 8, height: 3, fill: '#FFFFFF' }, b);
     el('text', { x: 28, y: -15, class: 'btask', 'text-anchor': 'middle', id: 'task-' + a.id, text: '' }, b);
+    g.addEventListener('click', () => this.opts.onSelectAgent?.(a.id));
     this.M[a.id] = { mode: 'seated', node: ch, av, seatAbs: { x: x + 18, y: y }, pos: { x: x + 18, y: y }, path: [], cb: null, awayPath: null, wander: null, spd: 0.88 + (idx % 5) * 0.06, face: 1 };
   }
 
@@ -646,6 +665,7 @@ export class OfficeSimulator {
 
   /* ── 상태/피드 ── */
   private setAgent(id: string, state: AgentState, task?: string): void {
+    this.agentStates[id] = { state, task: task !== undefined ? task : this.agentStates[id]?.task };
     const sp = this.svg.querySelector('#sp-' + id);
     if (!sp) return;
     sp.classList.remove('working', 'waiting');
@@ -801,7 +821,10 @@ export class OfficeSimulator {
     this.wanderClk += dt * st.speed;
     if (this.wanderClk < this.wanderNext) return;
     this.wanderClk = 0; this.wanderNext = 6 + Math.random() * 6;
-    const busy = new Set(this.SCENARIO[Math.min(st.stage, 5)].workers.map(w => w.id));
+    // 외부(hive) 상태에서는 실제로 일하거나 기다리는 사람을 자리에 둔다. 데모에서는 현재 게이트 담당.
+    const busy = this.externalMode
+      ? new Set(Object.keys(this.agentStates).filter(id => this.agentStates[id].state !== 'idle'))
+      : new Set(this.SCENARIO[Math.min(st.stage, 5)].workers.map(w => w.id));
     const wandering = Object.keys(this.M).filter(id => this.M[id].wander).length;
     if (wandering >= 3) return;
     const cands = this.AGENTS.filter(a => !busy.has(a.id) && this.M[a.id].mode === 'seated');
@@ -841,7 +864,8 @@ export class OfficeSimulator {
 
   /* ── 컨트롤 (React 핸들러가 호출) ── */
   togglePlay(): void {
-    if (this.st.phase === 'done-all') { this.reset(); return; }
+    // 데모가 끝났을 때만 처음부터 다시 돈다. 실제(hive) 상태에서는 데모로 되돌리지 않고 애니메이션만 멈춘다/잇는다.
+    if (this.st.phase === 'done-all' && !this.externalMode) { this.reset(); return; }
     this.st.playing = !this.st.playing; this.opts.onRender();
   }
   cycleSpeed(): void {
@@ -863,6 +887,12 @@ export class OfficeSimulator {
    * 최초 호출 시 externalMode 진입 → 내부 자동 시나리오 정지, 이후 이 상태가 SSOT.
    * 단계/페이즈 전이 시에만 이동 안무를 구동하고, agents 맵으로 자리 상태를 덮어쓴다. */
   applyOfficeState(ext: OfficeState): void {
+    if (!this.externalMode) {
+      // 데모 → 실제 상태로 처음 넘어갈 때: 데모 안무(회의실로 걷던 사람)와 데모 피드를 걷어 낸다.
+      this.AGENTS.forEach(a => { this.M[a.id].wander = null; this.seatInstant(a.id); this.setAgent(a.id, 'idle', ''); });
+      this.feed = []; this.artifacts = [];
+      this.setBossDoc(false);
+    }
     this.externalMode = true;
     const st = this.st;
     const stageClamped = Math.max(0, Math.min(ext.stage | 0, this.SCENARIO.length - 1));
@@ -876,6 +906,8 @@ export class OfficeSimulator {
     this.lastExtStage = ext.stage;
     st.stage = stageClamped;
     this.question = ext.question || '';
+    this.idle = Boolean(ext.idle);
+    this.boards = ext.boards;
     if (ext.hive) this.applyHive(ext.hive);
     if (typeof ext.progress === 'number') st.progress = Math.max(0, Math.min(1, ext.progress));
     if (phaseChanged || stageChanged) {
@@ -920,6 +952,16 @@ export class OfficeSimulator {
   /** 마지막 hive 스냅샷(React 패널이 작업판·승인 카드를 그린다). */
   getHive(): HiveState | null { return this.hive; }
   getQuestion(): string { return this.question; }
+  /** 자리별 현재 상태 — 서버 미연결(데모)일 때 에이전트 카드가 읽는다. */
+  getAgentStates(): Record<string, OfficeAgentState> { return this.agentStates; }
+
+  /** 책상 강조. null 이면 해제. 에이전트 카드·책상 클릭으로 바뀐다. */
+  highlightAgent(id: string | null): void {
+    if (this.selectedId === id) return;
+    if (this.selectedId) this.svg.querySelector('#sp-' + this.selectedId)?.classList.remove('selected');
+    this.selectedId = id;
+    if (id) this.svg.querySelector('#sp-' + id)?.classList.add('selected');
+  }
 
   private driveExternalPhase(phase: Phase, workers: Worker[]): void {
     if (phase === 'meeting') {
@@ -953,8 +995,9 @@ export class OfficeSimulator {
   }
 
   private driveDoneAll(): void {
-    this.feedAdd('오케스트레이터', '전 게이트 통과 — 브리핑 룸 총회 소집', 'sys');
-    this.toast('전 게이트 통과 — 파이프라인 완료');
+    // hive 상태에서는 모든 작업이 끝났다는 뜻(PASS 여부와 무관)이므로 '통과'라고 쓰지 않는다.
+    this.feedAdd('팀장', this.hive ? '브리핑 작업 마감 — 보고서를 현황판·재하 inbox 에 남김' : '전 게이트 통과 — 브리핑 룸 총회 소집', 'sys');
+    this.toast(this.hive ? '브리핑 완료 — 팀장 보고서 작성됨' : '전 게이트 통과 — 파이프라인 완료');
     this.AGENTS.forEach((a, i) => {
       if (this.M[a.id].mode !== 'seated') this.seatInstant(a.id);
       const spot = this.BRIEF_SPOTS[i];
@@ -969,7 +1012,18 @@ export class OfficeSimulator {
     const sc = this.SCENARIO[Math.min(st.stage, this.SCENARIO.length - 1)];
     const gates: GateVals[] = this.GATES.map((name, i) => {
       let cls = 'pending', label = '대기', pct = 0;
-      if (i < st.stage) { cls = 'done'; label = '완료'; pct = 100; }
+      const b = this.externalMode && !this.idle ? this.boards?.[i] : undefined;
+      if (this.idle) { /* 브리핑 전 — 모든 게이트 대기 */ }
+      else if (b) {
+        // hive 집계 — 단계마다 따로: 진행 > 결재 대기 > 완료 > 대기, 작업 없는 단계는 '해당 없음'
+        pct = b.total ? Math.round((b.done / b.total) * 100) : 0;
+        if (!b.total) label = '해당 없음';
+        else if (b.active) { cls = 'active'; label = `진행 중 ${b.done}/${b.total}`; }
+        else if (b.awaiting) { cls = 'awaiting'; label = `결재 대기 ${b.awaiting}건`; pct = 100; }
+        else if (b.done + b.closed === b.total) { cls = 'done'; label = b.closed ? `완료 ${b.done}/${b.total}` : '완료'; }
+        else label = `대기 ${b.done}/${b.total}`;
+      }
+      else if (i < st.stage) { cls = 'done'; label = '완료'; pct = 100; }
       else if (i === st.stage && st.phase === 'meeting') { cls = 'active'; label = '킥오프 회의'; pct = 0; }
       else if (i === st.stage && st.phase === 'returning') { cls = 'active'; label = '자리 복귀'; pct = 0; }
       else if (i === st.stage && st.phase === 'working') { cls = 'active'; label = '진행 중 ' + Math.round(st.progress * 100) + '%'; pct = Math.round(st.progress * 100); }
@@ -984,13 +1038,13 @@ export class OfficeSimulator {
         anim: cls === 'awaiting' ? 'apex-pulse 1.4s ease-in-out infinite' : 'none',
         showMini: cls === 'awaiting',
         showLink: i > 0,
-        linkColor: i <= st.stage ? '#2D8C4E' : '#DDD6C8',
+        linkColor: this.boards && this.externalMode ? '#DDD6C8' : (i <= st.stage && !this.idle ? '#2D8C4E' : '#DDD6C8'),
       };
     });
     return {
       teamLabel: this.opts.teamLabel ?? '와일리 컨버전스 · AX Office',
       clock: this.clockStr(),
-      playLabel: st.phase === 'done-all' ? '▶ 재생' : (st.playing ? '⏸ 일시정지' : '▶ 재생'),
+      playLabel: st.phase === 'done-all' && !this.externalMode ? '▶ 재생' : (st.playing ? '⏸ 일시정지' : '▶ 재생'),
       speedLabel: `속도 ${st.speed}×`,
       auto: st.auto,
       gates,
