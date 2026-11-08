@@ -341,7 +341,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     const verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log });
     costUsd += verdict.costUsd || 0;
     await hive.updateTask(task.id, { gate: verdict.gate, qa: { summary: verdict.summary, checks: verdict.checks, issues: verdict.issues, via: verdict.via, cost_usd: Number((verdict.costUsd || 0).toFixed(4)), at: hive.nowIso() } });
-    log(`QA ${task.id}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}`).join(' ')} (QA 비용 $${(verdict.costUsd || 0).toFixed(2)})`);
+    log(`QA ${task.id}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}${c.required === false ? '(참고)' : ''}`).join(' ')} (QA 비용 $${(verdict.costUsd || 0).toFixed(2)})`);
     liveNote(task.id, { ...meta, gate: verdict.gate }, verdict.summary || '', 'qa');
     if (verdict.gate === 'FAIL') {
       await hive.updateTask(task.id, { status: '실패' });
