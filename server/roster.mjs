@@ -21,12 +21,12 @@ const NAME_EN = {
 
 // 'a|b' = a 가 있으면 a, 없으면 b (사내 스킬이 없는 PC 에서는 공용 스킬로 대체 — skills.mjs 규칙)
 const BUILTIN = [
-  { id: 'kim', dept: '영업', dept_en: 'Sales', role: '고객·시장·경쟁 조사, 페인포인트 정리', role_en: 'Customer, market and competitor research', skills: ['competitor-benchmark'], stages: ['00_sales', '01_rfp'] },
-  { id: 'han', dept: '영업', dept_en: 'Sales', role: 'RFP 분석·수주 판단(Go/No-Go 5축)·제안 전략·제안서 작성·제안 품질 검수', role_en: 'RFP analysis, go/no-go, proposal strategy and writing', skills: ['rfp-analysis', 'wylie-proposal|proposal-writing', 'wylie-proposal-visual', 'wylie-proposal-review'], stages: ['01_rfp', '03_proposal'] },
+  { id: 'kim', dept: '영업', dept_en: 'Sales', role: '고객·시장·경쟁 조사, 페인포인트 정리', role_en: 'Customer, market and competitor research', skills: ['competitor-benchmark', 'strategy-proposal-analyzer'], stages: ['00_sales', '01_rfp'] },
+  { id: 'han', dept: '영업', dept_en: 'Sales', role: 'RFP 분석·수주 판단(Go/No-Go 5축)·제안 전략·제안서 작성·제안 품질 검수', role_en: 'RFP analysis, go/no-go, proposal strategy and writing', skills: ['rfp-analysis', 'wylie-proposal|proposal-writing', 'wylie-proposal-visual', 'wylie-proposal-review|proposal-review', 'proposal-maker'], stages: ['01_rfp', '03_proposal'] },
   { id: 'jeong', dept: '기획', dept_en: 'Planning', role: '제품 전략·PRD·MVP 범위·기능 우선순위·요구사항 정의', role_en: 'Product strategy, PRD, MVP scope and priorities', skills: ['product-strategy', 'ba-agent'], stages: ['02_requirements', '04_rebaseline'] },
   { id: 'na', dept: '기획', dept_en: 'Planning', role: 'IA·사용자 플로우·화면설계서·정책·예외 케이스', role_en: 'IA, user flows, screen specs and policies', skills: ['ia-flow-design', 'service-planning'], stages: ['05_plan'] },
   { id: 'oh', dept: '디자인', dept_en: 'Design', role: '브랜드 콘셉트·키비주얼·컬러·톤앤매너', role_en: 'Brand concept, key visual, color and tone', skills: ['brand-guideline'], stages: ['06_design'] },
-  { id: 'cha', dept: '디자인', dept_en: 'Design', role: '제품 UI 시안·디자인 시스템·컴포넌트', role_en: 'Product UI, design system and components', skills: ['design-system-build', 'ui-review'], stages: ['06_design'] },
+  { id: 'cha', dept: '디자인', dept_en: 'Design', role: '제품 UI 시안·디자인 시스템·컴포넌트', role_en: 'Product UI, design system and components', skills: ['design-system-build', 'ui-review', 'proposal-skills'], stages: ['06_design', '03_proposal'] },
   { id: 'pyo', dept: '퍼블리싱', dept_en: 'Publishing', role: '시맨틱 마크업·반응형·기본 접근성', role_en: 'Semantic markup, responsive layout, basic a11y', skills: [], stages: ['07_publish'] },
   { id: 'lee', dept: '퍼블리싱', dept_en: 'Publishing', role: '모션·인터랙션·접근성 심화', role_en: 'Motion, interaction and advanced a11y', skills: ['accessibility-audit'], stages: ['07_publish'] },
   { id: 'baek', dept: '개발', dept_en: 'Engineering', role: 'API·DB·인증·보안 설계', role_en: 'API, DB, auth and security design', skills: ['db-modeling', 'api-design'], stages: ['07_publish'] },

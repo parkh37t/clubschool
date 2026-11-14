@@ -35,6 +35,49 @@ async function findSkillDir(name) {
   return null;
 }
 
+// 여러 고객에 두루 쓰는 제안 스킬 — 단계별 스펙에 이미 들어 있으므로 '고객사 전용'으로 다시 붙이지 않는다.
+const SHARED_PROPOSAL_SKILLS = new Set(['wylie-proposal', 'proposal-writing', 'proposal-review', 'proposal-maker', 'proposal-skills', 'strategy-proposal-analyzer']);
+
+/**
+ * 고객사 전용 제안 스킬 — 사용자 스킬 폴더(②·③)의 '<고객>-…-proposal' 가운데 브리핑에 그 고객사가 나오는 것.
+ * 고객사 이름은 폴더 이름의 첫 토큰(영문)이나 설명의 첫 단어(한글이면 앞 3글자까지)로 맞춘다.
+ * 저장소(①)는 보지 않는다 — 고객사 스킬은 공개 저장소에 두지 않는다.
+ * @returns 스킬 이름 목록(없으면 빈 배열)
+ */
+export async function findClientProposalSkills(text) {
+  const hay = String(text || '').toLowerCase();
+  const roots = [USER_SKILLS];
+  try {
+    for (const d of await fs.readdir(path.join(USER_SKILLS, 'synced'))) roots.push(path.join(USER_SKILLS, 'synced', d));
+  } catch {
+    // 동기화 폴더가 없으면 건너뜀
+  }
+  const found = new Set();
+  for (const root of roots) {
+    let names = [];
+    try {
+      names = await fs.readdir(root);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (!/-proposal$/i.test(name) || SHARED_PROPOSAL_SKILLS.has(name) || found.has(name)) continue;
+      let raw = '';
+      try {
+        raw = await fs.readFile(path.join(root, name, 'SKILL.md'), 'utf8');
+      } catch {
+        continue;
+      }
+      const desc = (/^description:\s*["']?(.+?)["']?\s*$/m.exec(raw)?.[1] || '').trim();
+      const first = desc.split(/[\s,·()"'「」]/)[0] || '';
+      const keys = [name.split('-')[0], first];
+      if (/[가-힣]/.test(first) && first.length > 3) keys.push(first.slice(0, 3));
+      if (keys.some((k) => k && k.length >= 2 && hay.includes(k.toLowerCase()))) found.add(name);
+    }
+  }
+  return [...found];
+}
+
 /** 해당 이름의 스킬이 이 PC에서 쓸 수 있는지. */
 export async function hasSkill(name) {
   return (await findSkillDir(name)) !== null;

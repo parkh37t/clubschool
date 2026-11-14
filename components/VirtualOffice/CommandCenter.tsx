@@ -1,9 +1,9 @@
-import { memo } from 'react';
+import { memo, useCallback, useState } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Activity, Brain, CalendarClock, Gauge, ListChecks, MessageCircleQuestion, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
+import { Activity, Brain, CalendarClock, Gauge, LayoutTemplate, ListChecks, MessageCircleQuestion, MessagesSquare, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
 import type { FeedItem, HiveState } from './officeSimulator';
 import { usePolling } from './officeApi';
-import type { AgentStatus, HiveEvent, Question, QueueResponse, RosterMember } from './officeApi';
+import type { AgentStatus, BriefingPrefill, BriefingTemplate, HiveEvent, Question, QueueResponse, RosterMember } from './officeApi';
 import { BriefingConsole } from './BriefingConsole';
 import { PixelAvatar } from './PixelAvatar';
 import { QueueStrip } from './QueueStrip';
@@ -17,10 +17,12 @@ import { TerminalTab } from './TerminalTab';
 import { MonitorTab } from './MonitorTab';
 import { TriggersTab } from './TriggersTab';
 import { GraphTab } from './GraphTab';
+import { TalkTab } from './TalkTab';
+import { TemplatesTab } from './TemplatesTab';
 import { statusLabel, useOfficeLang } from './i18n';
 import { INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT } from './officeTheme';
 
-export type CommandTab = 'tasks' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor' | 'triggers' | 'graph';
+export type CommandTab = 'tasks' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor' | 'triggers' | 'graph' | 'talk' | 'templates';
 
 interface DemoProps {
   feed: FeedItem[];
@@ -49,18 +51,20 @@ interface CommandCenterProps {
   onSubmitted: (title: string) => void;
 }
 
-// 탭 격자 — Munder Difflin 의 COMMAND CENTER 탭 자리(5칸 × 2줄).
+// 탭 격자 — Munder Difflin 의 COMMAND CENTER 탭 자리(4칸 × 3줄, 열 수는 virtualOffice.css 의 .axo-tabs).
 const TABS: { key: CommandTab; label: string; icon: LucideIcon }[] = [
-  { key: 'tasks', label: 'tab.tasks', icon: ListChecks },
-  { key: 'approvals', label: 'tab.approvals', icon: Stamp },
-  { key: 'questions', label: 'tab.questions', icon: MessageCircleQuestion },
-  { key: 'memory', label: 'tab.memory', icon: Brain },
-  { key: 'activity', label: 'tab.activity', icon: Activity },
-  { key: 'skills', label: 'tab.skills', icon: Sparkles },
   { key: 'terminal', label: 'tab.terminal', icon: SquareTerminal },
   { key: 'monitor', label: 'tab.monitor', icon: Gauge },
+  { key: 'tasks', label: 'tab.tasks', icon: ListChecks },
+  { key: 'questions', label: 'tab.questions', icon: MessageCircleQuestion },
+  { key: 'talk', label: 'tab.talk', icon: MessagesSquare },
+  { key: 'approvals', label: 'tab.approvals', icon: Stamp },
+  { key: 'templates', label: 'tab.templates', icon: LayoutTemplate },
   { key: 'triggers', label: 'tab.triggers', icon: CalendarClock },
+  { key: 'memory', label: 'tab.memory', icon: Brain },
+  { key: 'activity', label: 'tab.activity', icon: Activity },
   { key: 'graph', label: 'tab.graph', icon: Network },
+  { key: 'skills', label: 'tab.skills', icon: Sparkles },
 ];
 
 /**
@@ -80,6 +84,11 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
   const leaderStatus: AgentStatus = leader?.status ?? '대기';
   const ls = STATUS_COLOR[leaderStatus] ?? STATUS_COLOR['대기'];
   const stopped = (roster ?? []).filter((m) => m.breaker?.level === 'stop').length;
+  // 템플릿 탭 → 입력창 채우기. 고를 때마다 nonce 가 바뀌어 같은 템플릿을 다시 골라도 다시 채운다.
+  const [prefill, setPrefill] = useState<BriefingPrefill | null>(null);
+  const applyTemplate = useCallback((tpl: BriefingTemplate) => {
+    setPrefill({ nonce: Date.now(), title: tpl.title, result: tpl.result, context: tpl.context, constraints: [...tpl.constraints] });
+  }, []);
 
   const badge = (key: CommandTab): { n: number; color: string } => {
     if (key === 'approvals') return { n: connected ? pending.length : demo.showApproval ? 1 : 0, color: '#E8A33D' };
@@ -156,10 +165,12 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
         {tab === 'monitor' && <MonitorTab connected={connected} apiBase={apiBase} roster={roster} selected={selected} />}
         {tab === 'triggers' && <TriggersTab connected={connected} apiBase={apiBase} />}
         {tab === 'graph' && <GraphTab connected={connected} apiBase={apiBase} currentBriefing={hive?.briefing} selected={selected} onSelect={onSelect} />}
+        {tab === 'talk' && <TalkTab connected={connected} apiBase={apiBase} selected={selected} roster={roster} />}
+        {tab === 'templates' && <TemplatesTab connected={connected} apiBase={apiBase} onUse={applyTemplate} />}
       </div>
 
       <QueueStrip apiBase={apiBase} queue={queue.data} onChange={queue.refresh} />
-      <BriefingConsole instructUrl={instructUrl} onSubmitted={onSubmitted} onQueued={queue.refresh} />
+      <BriefingConsole instructUrl={instructUrl} onSubmitted={onSubmitted} onQueued={queue.refresh} prefill={prefill} />
     </section>
   );
 });

@@ -1,6 +1,7 @@
 import type { AgentLookLite, AgentStatus, BreakerLevel } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
 import { statusLabel, useOfficeLang } from './i18n';
+import { SIM_TEXT } from './simText';
 import { BREAKER_COLOR, FONT, INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT, usd } from './officeTheme';
 
 export interface AgentCardData {
@@ -25,16 +26,52 @@ interface AgentCardsProps {
   /** 인원 추가 창 열기. 없으면 버튼을 끈다(서버 미연결). */
   onAdd?: () => void;
   canAdd: boolean;
+  /** 한 줄 칩으로 줄여 사무실을 크게 보는 모드 */
+  compact: boolean;
+  onToggleCompact: () => void;
 }
 
 const BAR: Record<AgentStatus, string> = { '대기': '#C9C2B0', '진행': '#2D8C4E', '검수': '#4A7DBF', '승인대기': '#E8A33D' };
 
 /**
  * 하단 에이전트 바 — 팀장 + 역할 에이전트(추가 인원 포함) 카드를 가로 한 줄로(Munder Difflin 의 하단 카드 자리).
+ * '간단히'는 아바타·이름·상태 점만 있는 칩이라 사무실이 그만큼 커진다. '자세히'는 지금 작업·사용량·서킷 브레이커까지.
  * 누르면 사무실 책상 강조 + 커맨드 센터의 기억·활동·터미널이 그 사람으로 좁혀진다. 사용량은 CLI 추정 금액(청구서 아님).
  */
-export function AgentCards({ members, selected, onSelect, connected, onAdd, canAdd }: AgentCardsProps) {
+export function AgentCards({ members, selected, onSelect, connected, onAdd, canAdd, compact, onToggleCompact }: AgentCardsProps) {
   const { t, lang } = useOfficeLang();
+  const B = SIM_TEXT[lang].bar;
+  const titleOf = (m: AgentCardData, lv: string | null) =>
+    `${m.name} · ${m.role}${m.task ? `\n${m.task}` : ''}${lv ? `\n${t(`lv.${lv}`)}: ${m.levelReason ?? ''}` : ''}${connected ? `\n${t('ag.usage', { v: usd(m.usd) })}` : ''}`;
+  const toggle = (
+    <button type="button" className="axo-iconbtn axo-bar-toggle" onClick={onToggleCompact} aria-pressed={compact} title={compact ? B.fullTitle : B.compactTitle}>
+      {compact ? B.full : B.compact}
+    </button>
+  );
+
+  if (compact) {
+    return (
+      <section aria-label={t('ag.aria')} className="axo-agents axo-agents--compact">
+        {members.map((m) => {
+          const on = selected === m.id;
+          const lv = m.level && m.level !== 'normal' ? m.level : null;
+          return (
+            <button key={m.id} type="button" aria-pressed={on} onClick={() => onSelect(on ? null : m.id)} title={titleOf(m, lv)}
+              className="axo-chip" style={{ fontFamily: FONT, borderColor: on ? WYLIE : lv === 'stop' ? '#D9A49A' : LINE, background: on ? WYLIE_TINT : '#FFFDF8', boxShadow: on ? `0 0 0 2px ${WYLIE}` : 'none' }}>
+              <PixelAvatar id={m.id} look={m.look} size={22} />
+              <span style={{ fontWeight: 800, color: m.id === 'lead' ? WYLIE_DARK : INK, whiteSpace: 'nowrap' }}>{m.name}</span>
+              <span aria-label={statusLabel(lang, m.status)} style={{ width: 8, height: 8, borderRadius: 2, flexShrink: 0, background: m.status === '대기' ? '#C9C2B0' : BAR[m.status], boxShadow: lv ? `0 0 0 2px ${BREAKER_COLOR[lv].fg}` : 'none' }} />
+            </button>
+          );
+        })}
+        <button type="button" className={`axo-chip axo-chip--add${canAdd && onAdd ? ' axo-agent--add-on' : ''}`} disabled={!canAdd || !onAdd} onClick={onAdd} title={canAdd ? t('ag.addHint') : t('ag.full')}>
+          ＋ {t('ag.add')}
+        </button>
+        {toggle}
+      </section>
+    );
+  }
+
   return (
     <section aria-label={t('ag.aria')} className="axo-agents">
       {members.map((m) => {
@@ -49,7 +86,7 @@ export function AgentCards({ members, selected, onSelect, connected, onAdd, canA
             type="button"
             aria-pressed={on}
             onClick={() => onSelect(on ? null : m.id)}
-            title={`${m.name} · ${m.role}${m.task ? `\n${m.task}` : ''}${lv ? `\n${t(`lv.${lv}`)}: ${m.levelReason ?? ''}` : ''}${connected ? `\n${t('ag.usage', { v: usd(m.usd) })}` : ''}`}
+            title={titleOf(m, lv)}
             className="axo-agent"
             style={{
               fontFamily: FONT,
@@ -88,6 +125,7 @@ export function AgentCards({ members, selected, onSelect, connected, onAdd, canA
           <span style={{ fontSize: 10.5 }}>{canAdd ? t('ag.addHint') : t('ag.full')}</span>
         </span>
       </button>
+      {toggle}
     </section>
   );
 }

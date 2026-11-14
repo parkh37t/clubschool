@@ -42,6 +42,10 @@ dist-standalone/
 .claude/skills/wylie-*/
 .claude/skills/ba-agent/
 .claude/skills/proposal-maker/
+# 고객사 전용 제안 스킬('<고객>-…-proposal')과 사용자 스킬 폴더의 제안 스킬은 공개 저장소에 두지 않는다
+.claude/skills/*-proposal/
+.claude/skills/proposal-skills/
+.claude/skills/strategy-proposal-analyzer/
 
 # 고객 첨부 원본(RFP 등) — 업로드 임시함과 과제별 첨부 사본은 커밋하지 않는다
 DELIVERABLES/_inbox/
@@ -76,6 +80,9 @@ server/hive/pty/
 # 3차 — 예약
 server/hive/triggers.json
 server/hive/triggers.json.tmp
+# 4차 — 사용자 브리핑 템플릿
+server/hive/templates.json
+server/hive/templates.json.tmp
 server/office-state.json.tmp
 
 # Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)

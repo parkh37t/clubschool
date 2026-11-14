@@ -10,6 +10,7 @@
 //     inbox/<agent>/.done/ 처리한 메시지(Munder Difflin hive 규칙 — 작업이 끝나면 읽은 편지를 여기로 옮긴다)
 //     memory/<agent>.md    에이전트별 장기 기억(결정·배운 것·고객 선호), 작업 끝날 때 3줄 이내 추가, 작업 시작 때 읽는다
 //     questions.json       에이전트가 재하에게 묻는 질문(ask me)과 답
+//     templates.json       사용자 브리핑 템플릿(templates.mjs, 최대 30개)
 //     live/<task>.jsonl    역할 실행 실시간 기록(stream-json 요약). live/lead.jsonl = 팀장 상주 세션
 //     blackboard.md        팀장이 갱신하는 공유 현황판
 //     open_items.md        확정하지 못한 것(추측하지 않고 여기에 남긴다)
@@ -194,6 +195,9 @@ export async function addTasks(briefingId, drafts) {
         _dep_refs: d.depends_on || [],
         input: d.input || '',
         done_when: d.done_when || '',
+        // 작업별 스킬(있으면 담당의 기본 스킬 대신 쓴다)·표준 절차 표시(제안 프로세스의 어느 단계인지)
+        ...(Array.isArray(d.skills) && d.skills.length ? { skills: d.skills.map(String) } : {}),
+        ...(d.process ? { process: String(d.process), step: String(d.step || '') } : {}),
         output: '',
         qa: null,
         created: nowIso(),
@@ -371,6 +375,68 @@ export function markInboxDone(agent, ids) {
     if (n) await appendEvent({ kind: 'inbox_done', agent, count: n });
     return n;
   });
+}
+
+// ── 메시지 목록(대화 탭) — 받은 편지함·처리한 편지(.done)·아직 옮기지 않은 outbox 를 모아 최근순으로 ──
+// 메시지 파일은 한 번 쓰면 내용이 바뀌지 않고 자리만 옮겨지므로(outbox → inbox → .done) id 로 파싱 결과를 기억해 둔다.
+const mailCache = new Map(); // id → parseMessage 결과
+const MAIL_CACHE_MAX = 4000;
+const MAIL_SCAN_MAX = 3000; // 담당 필터로 찾을 때 최대로 열어 볼 파일 수(아주 큰 hive 에서 멈추지 않게)
+const MAIL_FILE = /^(M-(\d{8})-(\d+))_[a-z]+\.md$/;
+
+async function mailFiles() {
+  const out = [];
+  for (const [root, withDone] of [['inbox', true], ['outbox', false]]) {
+    let owners = [];
+    try { owners = await fs.readdir(p(root)); } catch { continue; }
+    for (const o of owners) {
+      const dirs = withDone ? [p(root, o), p(root, o, '.done')] : [p(root, o)];
+      for (const dir of dirs) {
+        let files = [];
+        try { files = await fs.readdir(dir); } catch { continue; }
+        for (const f of files) {
+          const m = MAIL_FILE.exec(f);
+          // 정렬 키 = 날짜 × 1e6 + 번호. 번호(msgSeq)는 날짜가 바뀌어도 이어지지만, hive 를 보관 처리하면 1부터 다시 시작하므로 날짜를 앞에 둔다.
+          if (m) out.push({ id: m[1], key: Number(m[2]) * 1e6 + Number(m[3]), file: path.join(dir, f) });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 최근 메시지 limit 건(최신순). agent 가 있으면 그 사람이 보내거나 받은 것만. 같은 id 는 한 번만.
+ * 파일을 읽는 사이에 라우터가 옮겼으면(읽기 실패) 다른 자리의 같은 id 를 대신 읽는다.
+ */
+export async function listMail({ limit = 80, agent = '' } = {}) {
+  const files = (await mailFiles()).sort((a, b) => b.key - a.key);
+  const seen = new Set();
+  const out = [];
+  let scanned = 0;
+  for (const f of files) {
+    if (out.length >= limit || scanned >= MAIL_SCAN_MAX) break;
+    if (seen.has(f.id)) continue;
+    let m = mailCache.get(f.id);
+    if (!m) {
+      try { m = parseMessage(await fs.readFile(f.file, 'utf8')); } catch { m = null; }
+      if (!m) continue;
+      mailCache.set(f.id, m);
+      if (mailCache.size > MAIL_CACHE_MAX) mailCache.delete(mailCache.keys().next().value);
+    }
+    seen.add(f.id);
+    scanned += 1;
+    if (agent && m.from !== agent && m.to !== agent) continue;
+    out.push(m);
+  }
+  return out;
+}
+
+/** 대화 탭에 보일 본문 — 자료 울타리 안(고객 원문·기억·받은 편지)은 줄이고 앞 max 자만. 닫히지 않은 울타리는 끝까지 줄인다. */
+export function mailPreview(body, max = 600) {
+  const s = String(body || '').replace(/<<<자료 시작[^\n>]*>>>[\s\S]*?(?:<<<자료 끝>>>|$)/g, '(첨부 자료 생략)').trim();
+  const cut = s.length > max;
+  return { text: cut ? s.slice(0, max) + '…' : s, truncated: cut };
 }
 
 // ── 질문(ask me) — 에이전트가 재하에게 묻는 것. 작업을 멈추지 않는다(답은 다음 작업 때 inbox 로 읽힌다) ──

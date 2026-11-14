@@ -1,5 +1,7 @@
-import { useRef, useState } from 'react';
-import { FolderOpen, Paperclip, Send } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { BookmarkPlus, FolderOpen, Paperclip, Send } from 'lucide-react';
+import { postJson } from './officeApi';
+import type { BriefingPrefill } from './officeApi';
 import { useOfficeLang } from './i18n';
 import { BAD_FG, GATE_NAMES, LINE, LINE_SOFT, MONO, MUTED, OK_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle } from './officeTheme';
 import { SIM_TEXT } from './simText';
@@ -59,6 +61,8 @@ interface BriefingConsoleProps {
   onSubmitted: (title: string) => void;
   /** 대기열이 바뀌었을 때(띠를 바로 다시 읽게) */
   onQueued?: () => void;
+  /** 템플릿 탭의 [이 템플릿으로 쓰기] — nonce 가 바뀌면 브리핑 양식에 한 번 채운다(보내기는 사람이 누른다) */
+  prefill?: BriefingPrefill | null;
 }
 
 const field = { ...inputStyle, marginTop: 5, fontSize: 12.5, padding: '6px 9px' };
@@ -71,8 +75,9 @@ const smallBtn = {
  * 커맨드 센터 맨 아래 입력창(Munder Difflin 의 메시지 입력 자리). 두 가지 쓰임:
  *   메시지      팀장에게 보내는 말 — 대기열에 쌓여 팀장 상주 세션이 한 건씩 답한다. 일을 맡기는 말이면 팀장이 브리핑으로 정리한다
  *   브리핑 양식  4요소(과제명·결과·맥락·제약)를 직접 적어 바로 브리핑 대기열에 넣는다. 결과 줄이 없으면 팀장은 나누지 않고 되묻는다
+ *               템플릿 탭에서 고르면 채워지고(prefill), 지금 양식은 [템플릿으로 저장]으로 남긴다
  */
-export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: BriefingConsoleProps) {
+export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill }: BriefingConsoleProps) {
   const { t, lang } = useOfficeLang();
   const apiBase = instructUrl !== undefined ? instructUrl.replace(/\/api\/instruct$/, '') : undefined;
   const [mode, setMode] = useState<'message' | 'form'>(instructUrl ? 'message' : 'form');
@@ -87,6 +92,21 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
   const [status, setStatus] = useState('');
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // 템플릿 채우기 — 같은 nonce 는 한 번만(언어를 바꿔 t 가 바뀌어도 사람이 고친 내용을 덮지 않게).
+  const filledNonce = useRef(0);
+  useEffect(() => {
+    if (!prefill || prefill.nonce === filledNonce.current) return;
+    filledNonce.current = prefill.nonce;
+    setMode('form');
+    setTitle(prefill.title);
+    setResult(prefill.result);
+    setContext(prefill.context);
+    setConstraints(prefill.constraints.join('\n'));
+    setOpen(Boolean(prefill.context || prefill.constraints.length));
+    setFailed(false);
+    setStatus(t('bc.prefilled'));
+  }, [prefill, t]);
 
   // 파일 첨부 — 백엔드(instructUrl) 연결 시에만 업로드 가능. 상자 전체에 끌어다 놓아도 된다.
   const [attachments, setAttachments] = useState<AttachedFile[]>([]);
@@ -252,6 +272,19 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
     }
   };
 
+  // 지금 양식을 템플릿으로 저장(hive/templates.json). 첨부는 과제마다 다르므로 저장하지 않는다.
+  const saveTemplate = async () => {
+    if (apiBase === undefined) return; // ''(같은 오리진)도 연결된 것이다
+    if (!title.trim()) { say(false, t('bc.needTitle')); return; }
+    if (!result.trim()) { say(false, t('bc.needResult')); return; }
+    const r = await postJson(`${apiBase}/api/templates`, {
+      title: title.trim(), result: result.trim(), context: context.trim(),
+      constraints: constraints.split('\n').map((x) => x.trim()).filter(Boolean),
+    });
+    const tpl = (r.data?.template ?? null) as { id?: string } | null;
+    say(r.ok, r.ok ? t('bc.tplSaved', { id: tpl?.id ?? '' }) : String(r.error));
+  };
+
   const submit = () => (mode === 'message' ? sendMessage() : sendBriefing());
   const tabBtn = (m: 'message' | 'form', label: string) => (
     <button type="button" onClick={() => { setMode(m); setStatus(''); }} disabled={m === 'message' && !instructUrl} aria-pressed={mode === m}
@@ -345,6 +378,11 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued }: Briefing
       />
       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
         {mode === 'form' && <button type="button" style={smallBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? t('bc.less') : t('bc.more')}</button>}
+        {mode === 'form' && (
+          <button type="button" style={{ ...smallBtn, opacity: apiBase !== undefined ? 1 : 0.5 }} disabled={apiBase === undefined} onClick={saveTemplate} title={apiBase !== undefined ? t('bc.tplSaveTitle') : t('bc.tplOff')}>
+            <BookmarkPlus size={13} aria-hidden />{t('bc.tplSave')}
+          </button>
+        )}
         <button type="button" style={{ ...smallBtn, opacity: uploadUrl ? 1 : 0.5 }} disabled={!uploadUrl} onClick={() => fileInputRef.current?.click()} title={uploadUrl ? t('bc.fileTitle') : t('bc.fileOff')}>
           <Paperclip size={13} aria-hidden />{t('bc.file')}
         </button>

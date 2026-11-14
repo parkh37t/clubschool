@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { postJson, usePolling } from './officeApi';
-import type { RosterMember, UsageResponse } from './officeApi';
+import type { OfficeSettings, RosterMember, UsageResponse } from './officeApi';
+import { EnvCard } from './EnvCard';
 import { breakerReason, statusLabel, useOfficeLang } from './i18n';
 import { BAD_FG, BREAKER_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, PAPER, WYLIE, WYLIE_DARK, h2Style, inputStyle, smallMuted, usd } from './officeTheme';
 
@@ -17,12 +18,16 @@ function localDay(d: Date): string {
 }
 
 /**
- * 모니터 탭 — 사용량(CLI 추정 금액) 에이전트별·일별, 작업별 비용과 상한, 작업당 상한·하루 예산 설정,
- * 서킷 브레이커 단계(조정·제한·중지)와 초기화. 중지된 에이전트의 재개는 승인 탭 카드로 한다.
+ * 모니터 탭 — 맨 위 환경 점검(CLI·로그인), 사용량(CLI 추정 금액) 에이전트별·일별, 작업별 비용과 상한,
+ * 작업당 상한·하루 예산·QA 반려 시 자동 보완 설정, 서킷 브레이커 단계(조정·제한·중지)와 초기화.
+ * 중지된 에이전트의 재개는 승인 탭 카드로 한다.
  */
 export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabProps) {
   const { t, lang, name } = useOfficeLang();
   const { data, refresh } = usePolling<UsageResponse>(connected ? `${apiBase}/api/usage` : undefined, 5000);
+  const settings = usePolling<OfficeSettings>(connected ? `${apiBase}/api/settings` : undefined, 10000);
+  const [revise, setRevise] = useState<boolean | null>(null); // 방금 바꾼 값(서버 값을 다시 읽기 전까지 화면에 먼저 보인다)
+  const [reviseMsg, setReviseMsg] = useState('');
   const [cap, setCap] = useState('');
   const [budget, setBudget] = useState('');
   const [saved, setSaved] = useState('');
@@ -35,7 +40,8 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
   }, [data, cap, budget]);
 
   if (!connected) return <p style={smallMuted}>{t('mo.offline')}</p>;
-  if (!data) return <p style={smallMuted}>…</p>;
+  if (!data) return <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}><EnvCard apiBase={apiBase} /><p style={smallMuted}>…</p></div>;
+  const autoRevise = revise ?? settings.data?.auto_revise ?? true;
 
   const today = localDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return localDay(d); });
@@ -47,6 +53,13 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
     setSaved(r.ok ? t('mo.saved') : String(r.error));
     if (r.ok) { setCap(String(r.data?.max_task_usd ?? cap)); setBudget(String(r.data?.agent_daily_usd ?? budget)); refresh(); }
   };
+  const toggleRevise = async (next: boolean) => {
+    setRevise(next);
+    setReviseMsg('');
+    const r = await postJson(`${apiBase}/api/settings`, { auto_revise: next });
+    if (r.ok) { setReviseMsg(t('mo.saved')); settings.refresh(); }
+    else { setRevise(!next); setReviseMsg(String(r.error)); }
+  };
   const doReset = async (agent: string) => {
     if (!resetReason.trim()) { setResetMsg(t('mo.needReason')); return; }
     const r = await postJson(`${apiBase}/api/breakers/${encodeURIComponent(agent)}/reset`, { by: lang === 'en' ? 'Jaeha' : '재하', reason: resetReason.trim() });
@@ -56,6 +69,7 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <EnvCard apiBase={apiBase} />
       <div>
         <h2 style={h2Style}>{t('mo.title')}</h2>
         <div style={{ display: 'flex', gap: 14, marginTop: 6, fontFamily: MONO, fontSize: 13 }}>
@@ -129,6 +143,15 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
         </label>
         <button type="button" className="axo-iconbtn" onClick={save}>{t('mo.save')}</button>
         {saved && <span style={{ fontSize: 11.5, color: saved === t('mo.saved') ? OK_FG : BAD_FG }}>{saved}</span>}
+        {/* QA 반려 시 1회 자동 보완 — 바꾸면 바로 저장된다(settings.json 의 auto_revise) */}
+        <div style={{ flexBasis: '100%', display: 'flex', alignItems: 'center', gap: 8, borderTop: `1px dashed ${LINE}`, paddingTop: 6 }}>
+          <label title={t('mo.autoReviseHint')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: INK, cursor: 'pointer' }}>
+            <input type="checkbox" checked={autoRevise} onChange={(e) => toggleRevise(e.target.checked)} />
+            {t('mo.autoRevise')}
+          </label>
+          {reviseMsg && <span style={{ fontSize: 11.5, color: reviseMsg === t('mo.saved') ? OK_FG : BAD_FG }}>{reviseMsg}</span>}
+        </div>
+        <p style={{ ...smallMuted, fontSize: 11, flexBasis: '100%' }}>{t('mo.autoReviseHint')}</p>
       </div>
 
       {/* 작업별 비용 */}

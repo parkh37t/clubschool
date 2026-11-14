@@ -49,6 +49,11 @@ function describe(e: HiveEvent, t: TFn, lang: Lang, name: (id?: string) => strin
       const who = action === 'missed' || (action === 'run' && e.why === 'schedule') ? t('ev.triggerWho') : name(e.by || 'jaeha');
       return { who, text: t(`ev.trigger_${action}`, { id: e.id ?? '', title: e.title ?? '', item: e.item ?? '' }), color: action === 'missed' ? BAD_FG : WYLIE_DARK };
     }
+    case 'revise':
+      // QA 반려 뒤 1회 자동 보완(orchestrator) — 같은 담당이 지적을 받아 다시 쓴다
+      return { who: name(e.owner), text: t('ev.revise', { id: e.id ?? '', title: e.title ?? '', n: e.count ?? 0 }), color: WARN_FG };
+    case 'template':
+      return { who: name(e.by || 'jaeha'), text: t(e.action === 'remove' ? 'ev.template_remove' : 'ev.template_add', { id: e.id ?? '', title: e.title ?? '' }), color: WYLIE_DARK };
     default:
       return { who: e.kind, text: e.title || e.id || '', color: MUTED };
   }

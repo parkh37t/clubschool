@@ -3,6 +3,7 @@ import { Pause, Play } from 'lucide-react';
 import { OfficeSimulator } from './officeSimulator';
 import type { RenderVals, HiveState, OfficeState } from './officeSimulator';
 import { normalizeBase, saveOfficeBackend } from './officeBackend';
+import { loadPref, savePref } from './uiPrefs';
 import { CommandCenter } from './CommandCenter';
 import type { CommandTab } from './CommandCenter';
 import { AgentCards } from './AgentCards';
@@ -107,6 +108,14 @@ export function VirtualOfficeView({
   const [tab, setTab] = useState<CommandTab>('tasks');
   const [selected, setSelected] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // 하단 에이전트 바 '간단히'(한 줄 칩) — 사무실을 크게 보는 기본값. 보는 사람마다의 편의 설정이라 브라우저에만 기억한다.
+  const [barCompact, setBarCompact] = useState<boolean>(() => loadPref('agentBar', 'compact') !== 'full');
+  const toggleBar = useCallback(() => {
+    setBarCompact((v) => {
+      savePref('agentBar', v ? 'full' : 'compact');
+      return !v;
+    });
+  }, []);
 
   // 카드·책상 선택. 작업/승인 탭을 보고 있었다면 그 사람의 활동 탭으로 넘긴다.
   const handleSelect = useCallback((id: string | null) => {
@@ -329,7 +338,7 @@ export function VirtualOfficeView({
               ))}
             </div>
             <div className="axo-canvas">
-              <svg id="office" ref={svgRef} viewBox="0 0 760 880" role="img" aria-label={t('office.aria')} style={{ shapeRendering: 'crispEdges' }} />
+              <svg id="office" ref={svgRef} viewBox="0 0 1440 860" role="img" aria-label={t('office.aria')} style={{ shapeRendering: 'crispEdges' }} />
             </div>
             <div style={{ display: 'flex', gap: 14, padding: '0 2px', fontSize: 11.5, fontWeight: 600, color: MUTED, flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
               <span><b style={{ display: 'inline-block', width: 9, height: 9, marginRight: 5, background: '#2D8C4E' }} />{t('legend.working')}</span>
@@ -359,8 +368,8 @@ export function VirtualOfficeView({
         </main>
 
         {/* 하단 — 에이전트 바 */}
-        <footer className="axo-bottom">
-          <AgentCards members={cards} selected={selected} onSelect={handleSelect} connected={connected} onAdd={connected ? () => setAdding(true) : undefined} canAdd={canAdd} />
+        <footer className={`axo-bottom${barCompact ? ' axo-bottom--compact' : ''}`}>
+          <AgentCards members={cards} selected={selected} onSelect={handleSelect} connected={connected} onAdd={connected ? () => setAdding(true) : undefined} canAdd={canAdd} compact={barCompact} onToggleCompact={toggleBar} />
         </footer>
 
         {adding && <AddAgentDialog apiBase={apiBase} roster={members} onClose={() => setAdding(false)} onChanged={roster.refresh} />}

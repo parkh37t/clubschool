@@ -116,13 +116,15 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **브리핑 4요소**: 결과(끝나면 손에 쥘 것) · 맥락 · 제약 · 질문 기준. 결과 줄이 없으면 팀장은 분해하지 않고 되묻는다.
 - **hive(기본 `server/hive/`, `OFFICE_HIVE_DIR`)가 단일 진실**: 작업 원장 `tasks.json`, 승인 큐 `approvals.json`, 메일함 `inbox/outbox`,
   기억 `memory/`, 현황판 `blackboard.md`, 미확정 `open_items.md`, 이벤트 `events.log`, 대기열 `queue.json`, 질문 `questions.json`,
-  서킷 브레이커 `breakers.json`, 추가 인원 `agents.json`, 설정 `settings.json`, 실시간 기록 `live/`. 메모리 상태를 두지 않는다.
+  서킷 브레이커 `breakers.json`, 추가 인원 `agents.json`, 설정 `settings.json`, 실시간 기록 `live/`, 예약 `triggers.json`, 사용자 템플릿 `templates.json`. 메모리 상태를 두지 않는다.
   경로는 `server/paths.mjs` 한 곳에서 정한다(산출물 `OFFICE_DELIVERABLES_DIR`, 화면 `OFFICE_DIST_DIR`).
 - **작업 풀**: 브리핑 안의 작업은 선행이 끝나면 `OFFICE_CONCURRENCY`(기본 2, 최대 3)건까지 동시에 돈다. 같은 담당자는 동시에 돌리지 않고,
   승인 대기는 그 작업만 멈춘다. `tasks.json`·`approvals.json` 갱신은 `hive.mjs` 의 쓰기 잠금 안에서만 한다.
 - **상태 분리**: 작업 상태(대기·진행·검수·승인대기·완료·보류·실패)와 산출물 판정(미점검·PASS·CONDITIONAL·FAIL)은
   별도 필드다. 검사 결과는 pass/fail/error/not_run 네 값이며 **돌리지 않은 검사를 통과로 적지 않는다.** 고정 점수는 없다.
   짧은 형식 요청('3줄' 등) 산출물은 분량 하한·제목 기계 검사를 결과만 남기고 판정에서 뺀다(`server/qa.mjs`).
+- **QA 반려 시 1회 자동 보완**: QA FAIL 이면 같은 담당에게 지적을 붙여 한 번만 다시 실행·판정한다(`settings.json` 의 `auto_revise`, 기본 켜짐). 상한은 원래 그대로,
+  서킷 브레이커 `qa_fail` 은 최종 결과에서만 센다. CLI 없음·로그인 풀림·QA 검토 오류는 보완하지 않는다. 작업 레코드 `revised: 1`.
 - **승인 게이트**: 외부 발송·비용 발생·파일 삭제·범위 변경·인력/금액 수치 확정은 `approvals.json` 에 쌓고 재하가
   결정할 때까지 멈춘다. 승인·반려는 행위자·사유가 없으면 기록되지 않는다.
 - **모델 호출**: 실사용은 `OFFICE_MODE=claude_code` — 이 PC 에 로그인된 Claude Code CLI(`claude -p`)를 부른다(값을 주지 않으면 서버는 `mock` 으로 뜬다).
@@ -138,6 +140,9 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   회신의 질문은 질문 탭(`questions.json`)에 쌓이고, 답은 행위자가 있어야 기록된다.
 - **서킷 브레이커·예산**: 연속 문제 1회 조정 → 2회 제한(턴·상한 절반) → 3회 중지, 하루 예산 80% 제한·100% 중지. 중지는 재하가 '재개' 승인이나
   모니터 탭 초기화(행위자·사유 필수)로만 풀린다. 작업당 상한을 넘으면 그 자리에서 멈추고 '비용' 승인 카드(승인 시 상한 두 배)를 띄운다.
+- **제안서 작성 프로세스**: 결과 줄이 제안서인 브리핑은 팀장 분해 대신 `server/proposal.mjs` 의 8단계(조사 → RFP 분석·Go/No-Go(승인) → 전략·목차 →
+  [UX 섹션] [KPI] → 장표 구성안·근거표 → 본문(수치 걸리면 승인) → 검수)로 나눈다. 단계별 스킬은 `tasks.json` 의 `skills` 에 남고 실행기가 우선 쓴다.
+  사내(`wylie-*` 등)·고객사 전용(`<고객>-…-proposal`) 제안 스킬은 사용자 스킬 폴더에만 두고 이름으로 찾는다(공개 저장소에 두지 않음).
 - **인원 추가**: 역할 템플릿 12종(`server/agentTemplates.mjs`, 한·영)으로 최대 6명. 명단은 기본 12인 + `agents.json` 이며 `roster.mjs` 가 합친다.
 - **실시간 기록·터미널**: 역할 실행은 stream-json 으로 돌고 `live/<작업>.jsonl` 에 줄을 남긴다. 대화형 터미널은 node-pty(`server/pty.mjs`)이며
   상태를 바꾸는 API(설정·대기열·인원·브레이커·터미널)는 이 PC 화면(Origin 127.0.0.1·localhost)에서 온 요청만 받는다.

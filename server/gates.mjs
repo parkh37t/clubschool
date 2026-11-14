@@ -39,14 +39,15 @@ export const GATES = [
   {
     g: 1, stage: 0, name: '영업/평가',
     workers: [
-      { id: 'kim', task: '고객·경쟁 조사', skills: ['competitor-benchmark'] },
+      { id: 'kim', task: '고객·경쟁 조사', skills: ['competitor-benchmark', 'strategy-proposal-analyzer'] },
       {
         id: 'han',
         task: 'RFP 분석·제안 전략',
         // 와일리 시각 스킬은 장표별 마스터·도식 선택에만 쓴다(PPTX 제작은 이 파이프라인에서 하지 않음).
         skills: ['rfp-analysis', 'wylie-proposal|proposal-writing', 'wylie-proposal-visual'],
       },
-      { id: 'han', task: '제안 품질 검수', skills: ['wylie-proposal-review'], requires: 'wylie-proposal-review' },
+      // 사내 검수 스킬이 없으면 저장소의 공용 검수 스킬(proposal-review)로 — 이제 항상 검수한다
+      { id: 'han', task: '제안 품질 검수', skills: ['wylie-proposal-review|proposal-review'] },
     ],
     artifact: { file: '수주평가서.md', score: 92 },
   },

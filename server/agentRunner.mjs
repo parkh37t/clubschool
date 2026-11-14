@@ -247,12 +247,15 @@ export function parseReply(text) {
  * 작업 1건 실행.
  *   capUsd    작업 비용 상한(달러 환산). 넘으면 멈추고 { budgetExceeded:true } — 오케스트레이터가 승인 카드로 올린다
  *   maxTurns  최대 턴(서킷 브레이커 '제한' 단계면 절반)
- *   context   hive 규칙으로 덧붙이는 글(기억·안 읽은 편지·조정 지시·이어 하기 안내)
+ *   context   hive 규칙으로 덧붙이는 글(기억·안 읽은 편지·조정 지시·이어 하기 안내·QA 보완 요청)
+ *   revision  QA 반려 뒤 1회 보완 재작업인지. claude_code 는 context 의 'QA 보완 요청'으로 알고, mock 은 시험 동작에만 쓴다
  */
-export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capUsd, maxTurns, context = '' }) {
+export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capUsd, maxTurns, context = '', revision = false }) {
   const name = nameOf(task.owner);
   const agent = ROSTER.find((a) => a.id === task.owner);
-  const skills = await resolveSkills(agent ? agent.skills : []);
+  // 표준 절차(제안 프로세스 등)가 단계별 스킬을 정해 둔 작업은 그 스킬을, 아니면 담당의 기본 스킬을 붙인다.
+  const specs = Array.isArray(task.skills) && task.skills.length ? task.skills : (agent ? agent.skills : []);
+  const skills = await resolveSkills(specs);
   const used = skills.applied.map((s) => s.name);
   const stageDir = path.join(outDir, task.stage || '00_sales');
   await fs.mkdir(stageDir, { recursive: true });
@@ -272,13 +275,14 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
     const r = await runLive(ctx);
     return { ...r, reply: r.summary || '', leftovers: [], memory: [], questions: [] };
   }
-  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd });
+  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd, revision });
 }
 
 // mock — 모델 호출 없이 실시간 기록·비용 상한·질문 흐름까지 흉내 낸다.
 //   OFFICE_MOCK_COST_USD  작업 1건이 쓴 것처럼 볼 비용. 상한보다 크면 '상한 초과'로 멈춘다(사용량 합계에는 넣지 않는다)
 //   OFFICE_MOCK_QUESTION=1  회신에 '재하에게 질문'을 하나 넣는다
-async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd }) {
+//   OFFICE_MOCK_QA_FAIL     once = 첫 실행만 본문이 빈 산출물(QA FAIL) → 보완 재작업은 정상 / always = 보완 뒤에도 FAIL
+async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd, revision = false }) {
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
   const file = path.join(stageDir, taskFileName(task));
   sink({ type: 'system', subtype: 'init', cwd: DELIVERABLES_DIR });
@@ -290,7 +294,10 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   }
   sink({ type: 'assistant', message: { content: [{ type: 'text', text: `[목업] ${task.title} — 완료 기준을 확인하고 초안을 씁니다.` }] } });
   await delay(400 + Math.floor(Math.random() * 500));
-  const md = [
+  const qaFail = process.env.OFFICE_MOCK_QA_FAIL;
+  // 시험용 — 제목도 본문도 없는 산출물(기계 검사 non_empty 가 항상 판정에 들어가므로 짧은 형식 요청이어도 FAIL)
+  const broken = (qaFail === 'once' && !revision) || qaFail === 'always';
+  const md = broken ? `[목업] ${revision ? '보완본' : '초안'}\n` : [
     `# [목업] ${task.title}`,
     '',
     `- 담당: ${name} (${task.owner}) · 작업 ${task.id} · 단계 ${task.stage}`,
@@ -300,6 +307,7 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
     `- 적용 스킬: ${skills.applied.length ? skills.applied.map((s) => s.name).join(', ') : '없음'}`,
     ...(skills.missing.length ? [`- 이 PC에 없어 건너뛴 스킬: ${skills.missing.join(', ')}`] : []),
     `- 이어받은 앞 산출물: ${priorFiles.length ? priorFiles.join(', ') : '없음'}`,
+    ...(revision ? ['- 보완 재작업: QA 반려 지적을 받아 1회 고쳐 씀'] : []),
     '',
     '> 이 파일은 **목업 산출물**입니다. `OFFICE_MODE=claude_code` 로 실행하면',
     `> 실제 ${name} 에이전트가 위 스킬 지침대로 진짜 산출물을 작성합니다.`,
@@ -315,7 +323,7 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   }
   sink({ type: 'result', subtype: 'success', total_cost_usd: 0, num_turns: 3 });
   const q = process.env.OFFICE_MOCK_QUESTION === '1' ? `[목업] ${task.title} 의 기준일을 언제로 잡을까요?` : '없음';
-  const reply = ['## 완료 기능', `[목업] ${task.title}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음', '## 재하에게 질문', q].join('\n');
+  const reply = ['## 완료 기능', `[목업] ${task.title}${revision ? ' (QA 보완 재작업)' : ''}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음', '## 재하에게 질문', q].join('\n');
   return { file, summary: `[목업] ${task.title}`, costUsd: 0, reply, ...parseReply(reply) };
 }
 

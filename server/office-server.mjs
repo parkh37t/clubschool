@@ -11,6 +11,7 @@
 //        OFFICE_HIVE_DIR · OFFICE_DELIVERABLES_DIR · OFFICE_DIST_DIR — 데이터·화면 위치(paths.mjs)
 
 import http from 'node:http';
+import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { readState, writeState, clearState } from './state.mjs';
@@ -25,6 +26,7 @@ import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
 import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from './leaderSession.mjs';
 import { listTriggers, addTrigger, updateTrigger, removeTrigger, runTriggerNow, startTriggers, MAX_TRIGGERS } from './triggers.mjs';
+import { listTemplates, addTemplate, removeTemplate, MAX_TEMPLATES } from './templates.mjs';
 import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
 import { loadPersona } from './agentRunner.mjs';
 
@@ -216,6 +218,39 @@ async function cachedAuth(force) {
       .catch(() => { authCache.inflight = null; return { cli: false, loggedIn: null, checked_at: hive.nowIso() }; });
   }
   return authCache.inflight;
+}
+
+// ── 환경 점검(모니터 탭 맨 위) — CLI 유무·버전·실행 파일·로그인 여부. 계정 메일·조직 정보는 내보내지 않는다 ──
+// CLI 를 두 번(--version, auth status) 부르므로 30초 기억하고, ?refresh=1 은 3초에 한 번까지만 다시 묻는다.
+let envCache = { at: 0, data: null, inflight: null };
+/** 터널(공개 주소)로 열릴 수 있으므로 실행 파일 경로의 사용자 폴더 부분은 ~ 로 줄인다. */
+function maskHome(p) {
+  const home = os.homedir();
+  const s = String(p || '');
+  return home && s.toLowerCase().startsWith(home.toLowerCase()) ? '~' + s.slice(home.length) : s;
+}
+async function envStatus(force) {
+  const age = Date.now() - envCache.at;
+  if (envCache.data && (age < 30000 && !(force && age > 3000))) return envCache.data;
+  if (!envCache.inflight) {
+    envCache.inflight = (async () => {
+      const [version, auth] = await Promise.all([claudeAvailable().catch(() => false), authStatus().catch(() => ({ cli: false, loggedIn: null }))]);
+      const data = {
+        mode: MODE,
+        cli: { found: Boolean(version), version: version || null, path: maskHome(claudeBinPath()) },
+        loggedIn: version ? auth.loggedIn : null,
+        checked_at: hive.nowIso(),
+      };
+      envCache = { at: Date.now(), data, inflight: null };
+      // 로그인 배너(/api/auth)도 방금 확인한 값으로 맞춘다 — [다시 확인] 뒤 배너가 1분 동안 옛 상태로 남지 않게.
+      authCache = { at: Date.now(), data: { cli: data.cli.found, loggedIn: data.loggedIn, checked_at: data.checked_at }, inflight: authCache.inflight };
+      return data;
+    })().catch((e) => {
+      envCache.inflight = null;
+      throw e;
+    });
+  }
+  return envCache.inflight;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -496,6 +531,58 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'DELETE' && url.pathname.startsWith('/api/pty/')) {
       if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 닫을 수 있습니다.' }); return; }
       sendJson(res, 200, { ok: killPty(decodeURIComponent(url.pathname.slice('/api/pty/'.length))) });
+      return;
+    }
+
+    // ── 대화 탭 — 에이전트끼리 주고받은 메시지(받은 편지함 + 처리한 편지 .done). 읽기 전용 ──
+    // ?limit=80(최대 200) &agent=<id> 면 그 사람이 보내거나 받은 것만. 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'.
+    if (req.method === 'GET' && url.pathname === '/api/mail') {
+      const limit = Math.max(1, Math.min(200, Math.floor(Number(url.searchParams.get('limit') || 80)) || 80));
+      const agent = String(url.searchParams.get('agent') || '').trim();
+      if (agent && !ALL_MAIL_IDS.includes(agent)) { sendJson(res, 404, { error: '없는 에이전트' }); return; }
+      const list = await hive.listMail({ limit, agent });
+      const messages = list.map((m) => {
+        const pv = hive.mailPreview(m.body, 600);
+        return { id: m.id, from: m.from || '', to: m.to || '', type: m.type || '', task: m.task || '', ts: m.at || '', body: pv.text, truncated: pv.truncated };
+      });
+      sendJson(res, 200, { messages, agent, limit });
+      return;
+    }
+
+    // ── 브리핑 템플릿 — 기본 6개(코드, 한·영) + 사용자 저장(hive/templates.json). 바꾸는 요청은 이 PC 화면에서만 ──
+    if (req.method === 'GET' && url.pathname === '/api/templates') {
+      const q = url.searchParams.get('lang');
+      const lang = q === 'ko' || q === 'en' ? q : (await getSettings()).lang;
+      sendJson(res, 200, { templates: await listTemplates(lang), max: MAX_TEMPLATES, lang });
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/templates') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 템플릿을 저장할 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      try {
+        const t = await addTemplate(body || {}, String(body?.by || OWNER.id).trim() || OWNER.id);
+        log(`템플릿 저장: ${t.id} ${t.title}`);
+        sendJson(res, 201, { ok: true, template: t });
+      } catch (e) { sendJson(res, 400, { error: e.message }); }
+      return;
+    }
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/templates/')) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 템플릿을 지울 수 있습니다.' }); return; }
+      const id = decodeURIComponent(url.pathname.slice('/api/templates/'.length));
+      try {
+        const t = await removeTemplate(id, OWNER.id);
+        log(`템플릿 삭제: ${t.id} ${t.title}`);
+        sendJson(res, 200, { ok: true });
+      } catch (e) { sendJson(res, e.status || 400, { error: e.message }); }
+      return;
+    }
+
+    // ── 환경 점검 — {mode, cli:{found, version, path}, loggedIn, checked_at}. ?refresh=1 이면 다시 확인 ──
+    if (req.method === 'GET' && url.pathname === '/api/env') {
+      try {
+        sendJson(res, 200, await envStatus(url.searchParams.get('refresh') === '1'));
+      } catch (e) { sendJson(res, 500, { error: `환경을 확인하지 못했습니다: ${e.message}` }); }
       return;
     }
 

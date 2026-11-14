@@ -11,9 +11,9 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runStructured, failureHint } from './claudeCode.mjs';
+import { runStructured, failureHint, claudeAvailable, authStatus } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
-import { hasSkill } from './skills.mjs';
+import { proposalPlan } from './proposal.mjs';
 import { AGENTS_DIR } from './paths.mjs';
 import { getSettings, languageLine } from './settings.mjs';
 
@@ -40,6 +40,8 @@ export function normalizeBriefing(raw) {
     gates: Array.isArray(b.gates) ? b.gates.map((g) => String(g).toUpperCase()) : [],
     attachmentPaths: Array.isArray(b.attachmentPaths) ? b.attachmentPaths : [],
     deliverables: Array.isArray(b.deliverables) ? b.deliverables : [],
+    // 'proposal' = 표준 제안 절차를 쓴다 · 'free' = 쓰지 않는다 · '' = 결과 줄로 판단(server/proposal.mjs)
+    process: b.process === 'proposal' || b.process === 'free' ? b.process : '',
   };
 }
 
@@ -62,7 +64,7 @@ async function decomposeByRules(b) {
     if (b.gates.includes('G1')) {
       const a = push({ owner: 'kim', title: '고객·경쟁 조사', stage: '00_sales' });
       const c = push({ owner: 'han', title: 'RFP 분석·제안 전략', stage: '01_rfp', depends_on: [a] }); prev = c;
-      if (await hasSkill('wylie-proposal-review')) link(push({ owner: 'han', title: '제안 품질 검수', stage: '03_proposal' }));
+      link(push({ owner: 'han', title: '제안 품질 검수', stage: '03_proposal' }));
     }
     if (b.gates.includes('G2')) { link(push({ owner: 'jeong', title: 'PRD 초안 작성', stage: '02_requirements' })); link(push({ owner: 'na', title: 'IA·플로우 설계', stage: '05_plan' })); }
     if (b.gates.includes('G3')) { link(push({ owner: 'oh', title: '브랜드 무드보드', stage: '06_design' })); link(push({ owner: 'cha', title: '메인 UI 시안', stage: '06_design' })); }
@@ -179,9 +181,25 @@ export async function decompose(briefing, { mode, model, log }) {
   const b = normalizeBriefing(briefing);
   if (!b.result) return { tasks: [], questions: ['브리핑에 "결과(끝나면 손에 쥘 것)" 줄이 비어 있습니다. 눈으로 확인할 수 있는 산출물 한 가지를 적어 주세요.'], via: 'rule', costUsd: 0 };
 
+  // 제안서 브리핑 — 팀장 분해 대신 표준 제안 프로세스(server/proposal.mjs). 모델 호출이 없으니 비용도 없다.
+  const settings = await getSettings();
+  const proposal = await proposalPlan(b, { lang: settings.lang === 'en' ? 'en' : 'ko' });
+  if (proposal) {
+    // 분해를 모델 없이 해도 CLI 없음·로그인 풀림이면 작업이 전부 같은 이유로 실패한다 — 시작하지 않는다(CLAUDE.md §8).
+    if (mode === 'claude_code') {
+      const code = !(await claudeAvailable()) ? 'cli_missing' : (await authStatus()).loggedIn === false ? 'not_logged_in' : '';
+      if (code) {
+        log(`팀장: 제안 프로세스 시작 전 점검 실패(${code}) — 브리핑을 시작하지 않음`);
+        return { tasks: [], questions: [], blocked: failureHint(code), blockedCode: code, via: `blocked:${code}`, costUsd: 0 };
+      }
+    }
+    log(`팀장: 제안서 브리핑 — ${proposal.summary}${proposal.client.length ? ` · 고객사 전용 스킬 ${proposal.client.join(', ')}` : ''}`);
+    return { tasks: proposal.tasks, questions: [], summary: proposal.summary, via: 'proposal', costUsd: 0 };
+  }
+
   if (mode === 'claude_code') {
     const system = await loadLeaderPersona();
-    const lang = languageLine(await getSettings());
+    const lang = languageLine(settings);
     const r = await runStructured({ system, prompt: decomposePrompt(b) + lang, schema: decomposeSchema(), model });
     if (r.ok) {
       const tasks = (r.data.tasks || []).map((t) => ({ ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '' }));
@@ -227,7 +245,7 @@ export function assignBody(b, task, { priorFiles = [], outDirRel }) {
 
 /** 보고서(블랙보드) — 팀장이 모든 작업이 끝나거나 멈춘 뒤 쓴다. 남은 제한은 그대로 모아 맨 아래. */
 export function buildReport(b, tasks, { approvals = [], leftovers = [], outDirRel, mode, costUsd }) {
-  const row = (t) => `| ${t.id} | ${nameOf(t.owner)} | ${t.title} | ${t.status} | ${t.gate} | ${t.output || ''} |`;
+  const row = (t) => `| ${t.id} | ${nameOf(t.owner)} | ${t.title} | ${t.status}${t.revised ? ' · 보완 1회' : ''} | ${t.gate} | ${t.output || ''} |`; // 보완 1회 = QA 반려 뒤 자동 보완(orchestrator)
   const pending = approvals.filter((a) => a.status === 'pending');
   return [
     `# 현황판 — ${b.title}`,

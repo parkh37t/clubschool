@@ -90,7 +90,10 @@ interface CharOpts {
 interface Worker { id: string; task: string; }
 interface Stage { dur: number; workers: Worker[]; artifact: { file: string; score: number }; }
 interface Spot { x: number; y: number; top?: number; }
-interface Wander { phase: 'go' | 'linger' | 'back'; t: number; }
+interface Wander { phase: 'go' | 'linger' | 'back'; t: number; room?: HangoutRoom; key?: string; booth?: number; }
+type HangoutRoom = 'lounge' | 'print' | 'focus';
+/** 쉬는 사람의 나들이 자리 — 문(doorX·corY) → 방 안 통로(laneY) → 자리(spot). w 는 고를 때 가중치. */
+interface Hangout { room: HangoutRoom; key: string; doorX: number; corY: number; laneY: number; spot: Spot; w: number; booth?: number; }
 interface Door { x: number; y: number; g: SVGGElement; }
 interface MoveState {
   mode: MoveMode; node: SVGGElement; av: SVGGElement;
@@ -105,6 +108,62 @@ interface St {
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
+/* ── 가로형 평면도(1440×860) ──
+ * 위 두 줄: 부서 방 3개씩(문은 아래쪽) + 오른쪽 사장실·라운지 / 팀장실·서버룸. 각 줄 아래에 가로 복도(A·B)가 있고,
+ * 두 복도는 가운데 세로 복도(VX)로 이어진다. 아래 줄: 회의실(킥오프) · 포커스룸(통화 부스 2) · 자료실(복합기) · 확장 구역(추가 인원 3×2석).
+ * 방 크기는 사람(1.5배 스프라이트) 기준 — 회의실은 12석 탁자+상석 2, 확장 구역은 책상 6개가 들어가는 만큼만 잡는다.
+ * 좌표는 SVG 사용자 단위. 걷는 사람의 위치는 스프라이트 왼쪽 위라서 복도·문 '가운데'로 걸을 때 x-CX, y-CY 를 쓴다. */
+const W = 1440;
+const H = 860;
+const ROW_A = 44;          // 위 줄 방 y
+const ROW_B = 284;         // 가운데 줄 방 y
+const ROOM_W = 264;        // 부서 방 크기
+const ROOM_H = 190;
+const COR_A_Y0 = 234;      // 가로 복도 A(위 줄 아래)
+const COR_B_Y0 = 474;      // 가로 복도 B(가운데 줄 아래)
+const COR_H = 50;
+const COR_A = COR_A_Y0 + COR_H / 2; // 복도 가운데 y
+const COR_B = COR_B_Y0 + COR_H / 2;
+const ROW_C = COR_B_Y0 + COR_H;     // 아래 줄 방 y(524)
+const ROW_C_H = H - 20 - ROW_C;     // 아래 줄 방 높이(316)
+const VX0 = 844;           // 세로 연결 복도
+const VX1 = 886;
+const VX = (VX0 + VX1) / 2;
+type Rect = { x: number; y: number; w: number; h: number };
+const BOSS: Rect = { x: 890, y: ROW_A, w: 260, h: ROOM_H };
+const LOUNGE: Rect = { x: 1162, y: ROW_A, w: 254, h: ROOM_H };
+const BRIEF: Rect = { x: 890, y: ROW_B, w: 260, h: ROOM_H };
+const SERVER: Rect = { x: 1162, y: ROW_B, w: 254, h: ROOM_H };
+const MEET: Rect = { x: 24, y: ROW_C, w: 620, h: ROW_C_H };
+const FOCUS: Rect = { x: 656, y: ROW_C, w: 168, h: ROW_C_H };
+const PRINT: Rect = { x: 836, y: ROW_C, w: 158, h: ROW_C_H };
+const ANNEX: Rect = { x: 1006, y: ROW_C, w: 410, h: ROW_C_H };
+const LOUNGE_DOOR_X = LOUNGE.x + 127;
+const BRIEF_DOOR_X = BRIEF.x + 130;
+const MEET_DOOR_X = MEET.x + 310;
+const FOCUS_DOOR_X = FOCUS.x + 84;
+const PRINT_DOOR_X = PRINT.x + 79;
+const ANNEX_DOOR_X = ANNEX.x + 136;   // 첫째·둘째 열 책상 사이 통로 위
+// 사람·책상 배율 — 스프라이트(20×33)를 1.5배로 키워 넓은 평면도에서도 잘 보이게 한다. 걷는 길 좌표는 이 크기 기준.
+const DS = 1.5;
+const SW = 20 * DS;        // 걷는 사람 폭·키(사용자 단위)
+const SH = 33 * DS;
+const CX = SW / 2;         // 복도·문 '가운데'로 걸을 때 스프라이트 위치 보정
+const CY = SH / 2;
+const LOUNGE_LANE = LOUNGE.y + ROOM_H - SH - 4;   // 방 안 문 앞 통로(스프라이트 위쪽 y)
+const BRIEF_LANE = BRIEF.y + ROOM_H - SH - 4;
+const ROW_C_LANE = ROW_C + 30;        // 아래 줄 방(문이 위쪽 벽): 문 안쪽 통로
+const MEET_LANE_TOP = ROW_C_LANE;     // 회의실: 탁자 위쪽 통로 · 왼쪽 통로 x · 아래쪽 통로
+const MEET_AISLE_X = MEET.x + 22;
+const MEET_LANE_BOTTOM = ROW_C + 250;
+const MEET_TABLE_X = MEET.x + 120;    // 긴 탁자(12석) 왼쪽 위 모서리와 크기
+const MEET_TABLE_Y = ROW_C + 120;
+const MEET_TABLE_W = 420;
+const MEET_TABLE_H = 60;
+const MEET_SEAT_XS = [0, 1, 2, 3, 4, 5].map(i => MEET_TABLE_X + 24 + i * 66);   // 위·아래 의자 6개씩(걷는 사람 x)
+const FOCUS_BOOTHS = [FOCUS.x + 4, FOCUS.x + 88];   // 통화 부스 2칸(폭 76) x
+const ANNEX_DESKS = [0, 1, 2, 3, 4, 5].map(i => ({ x: ANNEX.x + 30 + (i % 3) * 126, y: ANNEX.y + (i < 3 ? 40 : 198) }));
+
 export class OfficeSimulator {
   private svg: SVGSVGElement;
   private opts: OfficeSimulatorOptions;
@@ -117,6 +176,9 @@ export class OfficeSimulator {
   private MEET_SPOTS: Spot[];
   private LOUNGE_SPOTS: Spot[];
   private BRIEF_SPOTS: Spot[];
+  private HANGOUTS: Hangout[];
+  private boothLeds: SVGElement[] = [];
+  private boothBusy: boolean[] = [];
 
   private M: Record<string, MoveState> = {};
   private doors: Door[] = [];
@@ -149,7 +211,8 @@ export class OfficeSimulator {
   private lang: Lang = 'ko';
   private T: SimText = SIM_TEXT.ko;
   private custom: CustomAgentDesk[] = [];
-  private H = 880; // 그림 높이 — 추가 인원이 있으면 확장 구역만큼 늘어난다
+  private roundsClk = 0; // 팀장 현장 순회 시계
+  private roundsNext = 14;
 
   private timer: ReturnType<typeof setInterval> | null = null;
   private raf = 0;
@@ -180,7 +243,7 @@ export class OfficeSimulator {
       { id: 'go', name: '고지표', role: '데이터', dept: 'dm', hair: '#4A4132', skin: '#D9AE84', hairStyle: 'bun', acc: 'glasses' },
       { id: 'hong', name: '홍보라', role: '마케팅', dept: 'dm', hair: '#5B2A6E', skin: '#F2D4AE', hairStyle: 'long', acc: 'hairpin' },
     ];
-    this.ZONES = { sales: { x: 20, y: 20 }, plan: { x: 300, y: 20 }, design: { x: 20, y: 250 }, pub: { x: 300, y: 250 }, dev: { x: 20, y: 480 }, dm: { x: 300, y: 480 } };
+    this.ZONES = { sales: { x: 24, y: ROW_A }, plan: { x: 300, y: ROW_A }, design: { x: 576, y: ROW_A }, pub: { x: 24, y: ROW_B }, dev: { x: 300, y: ROW_B }, dm: { x: 576, y: ROW_B } };
     this.GATES = ['영업/평가', '기획', '디자인', '구현', '검증/배포', '그로스'];
     this.SCENARIO = [
       { dur: 9000, workers: [{ id: 'han', task: 'RFP 5축 평가' }, { id: 'kim', task: '고객 요구 정리' }], artifact: { file: '수주평가서.md', score: 92 } },
@@ -190,9 +253,19 @@ export class OfficeSimulator {
       { dur: 8000, workers: [{ id: 'go', task: 'QA·지표 검증' }], artifact: { file: 'QA리포트.md', score: 91 } },
       { dur: 8000, workers: [{ id: 'hong', task: '런칭 캠페인' }], artifact: { file: '캠페인플랜.md', score: 89 } },
     ];
-    this.MEET_SPOTS = [{ x: 157, y: 735, top: 1 }, { x: 177, y: 796 }, { x: 237, y: 735, top: 1 }, { x: 257, y: 796 }, { x: 317, y: 735, top: 1 }, { x: 297, y: 796 }];
-    this.LOUNGE_SPOTS = [{ x: 698, y: 306 }, { x: 626, y: 324 }, { x: 604, y: 331 }, { x: 622, y: 331 }, { x: 652, y: 376 }, { x: 700, y: 392 }];
-    this.BRIEF_SPOTS = Array.from({ length: 12 }, (_, i) => i < 6 ? { x: 582 + i * 26, y: 800 } : { x: 582 + (i - 6) * 26, y: 826 });
+    // 회의실 긴 탁자 — 위 6 · 아래 6 · 왼쪽 상석, 마지막은 발표 화면 앞 오른쪽 상석(팀장 자리). top=1 은 위쪽 통로에서 곧장 내려간다.
+    this.MEET_SPOTS = MEET_SEAT_XS.map((x): Spot => ({ x, y: MEET_TABLE_Y - SH + 8, top: 1 }))
+      .concat(MEET_SEAT_XS.map((x): Spot => ({ x, y: MEET_TABLE_Y + MEET_TABLE_H - 10 })))
+      .concat([{ x: MEET_TABLE_X - 42, y: MEET_TABLE_Y + 6, top: 1 }, { x: MEET_TABLE_X + MEET_TABLE_W + 12, y: MEET_TABLE_Y + 6, top: 1 }]);
+    // 라운지 — 커피 카운터 앞 2 · 정수기 옆 · 소파 2 · 둥근 탁자 옆
+    this.LOUNGE_SPOTS = ([[158, 52], [204, 56], [70, 70], [28, 108], [60, 108], [118, 100]] as [number, number][]).map(([dx, dy]) => ({ x: LOUNGE.x + dx, y: LOUNGE.y + dy }));
+    this.BRIEF_SPOTS = Array.from({ length: 12 }, (_, i) => ({ x: BRIEF.x + 12 + (i % 6) * 25, y: BRIEF.y + (i < 6 ? 90 : 116) }));
+    // 나들이 자리 — 라운지가 가장 잦고, 자료실(복합기·서류함·정리 탁자)과 통화 부스가 가끔.
+    this.HANGOUTS = [
+      ...this.LOUNGE_SPOTS.map((spot, i): Hangout => ({ room: 'lounge', key: 'L' + i, doorX: LOUNGE_DOOR_X, corY: COR_A, laneY: LOUNGE_LANE, spot, w: 3 })),
+      ...([[62, 52], [92, 104], [60, 174]] as [number, number][]).map(([dx, dy], i): Hangout => ({ room: 'print', key: 'P' + i, doorX: PRINT_DOOR_X, corY: COR_B, laneY: ROW_C_LANE, spot: { x: PRINT.x + dx, y: PRINT.y + dy }, w: 1.6 })),
+      ...FOCUS_BOOTHS.map((bx, i): Hangout => ({ room: 'focus', key: 'F' + i, doorX: FOCUS_DOOR_X, corY: COR_B, laneY: ROW_C_LANE, spot: { x: bx + 23, y: FOCUS.y + 210 }, w: 1.4, booth: i })),
+    ];
     this.st = { stage: 0, phase: 'working', progress: 0, speed: opts.initialSpeed ?? 1, playing: true, auto: opts.autoApprove ?? false, clockMin: 540, day: 1, autoWait: 0, meetWait: 0 };
 
     this.applyText();
@@ -345,6 +418,8 @@ export class OfficeSimulator {
 
   private buildOffice(): void {
     while (this.svg.firstChild) this.svg.removeChild(this.svg.firstChild); // StrictMode 재마운트 대비 멱등
+    this.doors = [];
+    this.boothLeds = []; this.boothBusy = [];
     const el = this.el.bind(this);
     const defs = el('defs', {});
     const pat = el('pattern', { id: 'tile', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, defs);
@@ -356,69 +431,105 @@ export class OfficeSimulator {
     const sp = el('pattern', { id: 'stone', width: 24, height: 24, patternUnits: 'userSpaceOnUse' }, defs);
     el('rect', { x: 0, y: 0, width: 24, height: 24, fill: '#4E5670' }, sp);
     el('path', { d: 'M24 0H0V24', fill: 'none', stroke: '#454C64', 'stroke-width': 1 }, sp);
-    this.H = this.custom.length ? 1080 : 880;
-    this.svg.setAttribute('viewBox', `0 0 760 ${this.H}`);
-    el('rect', { x: 0, y: 0, width: 760, height: this.H, fill: 'url(#tile)' });
-    el('rect', { x: 4, y: 4, width: 752, height: this.H - 8, fill: 'none', stroke: '#141827', 'stroke-width': 4, rx: 8 });
+    const cp = el('pattern', { id: 'carpet', width: 16, height: 16, patternUnits: 'userSpaceOnUse' }, defs);
+    el('rect', { x: 0, y: 0, width: 16, height: 16, fill: '#4E7CA6' }, cp);
+    el('path', { d: 'M0 16L16 0', stroke: '#47729A', 'stroke-width': 1 }, cp);
+    this.svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#tile)' });
+    el('rect', { x: 4, y: 4, width: W - 8, height: H - 8, fill: 'none', stroke: '#141827', 'stroke-width': 4, rx: 8 });
+    this.buildWindows();
     this.buildCorridors();
     for (const key in this.ZONES) {
       const z = this.ZONES[key], d = this.DEPT[key];
-      el('rect', { x: z.x, y: z.y, width: 236, height: 182, fill: 'url(#wood)', stroke: '#6E4A2E', 'stroke-width': 2 });
-      el('rect', { x: z.x, y: z.y, width: 236, height: 18, fill: '#4A3628' });
-      el('rect', { x: z.x, y: z.y + 18, width: 236, height: 2, fill: 'rgba(0,0,0,.25)' });
-      this.buildShelf(z.x + 152, z.y + 3);
+      el('rect', { x: z.x, y: z.y, width: ROOM_W, height: ROOM_H, fill: 'url(#wood)', stroke: '#6E4A2E', 'stroke-width': 2 });
+      el('rect', { x: z.x, y: z.y, width: ROOM_W, height: 18, fill: '#4A3628' });
+      el('rect', { x: z.x, y: z.y + 18, width: ROOM_W, height: 2, fill: 'rgba(0,0,0,.25)' });
+      this.buildShelf(z.x + ROOM_W - 78, z.y + 3);
       const chipW = Math.min(150, Math.max(46, [...d.label].reduce((w, ch) => w + (/[가-힣]/.test(ch) ? 12 : 7), 0) + 28));
       el('rect', { x: z.x + 8, y: z.y + 3, width: chipW, height: 13, rx: 3, fill: '#2A2218' });
       el('rect', { x: z.x + 13, y: z.y + 6, width: 7, height: 7, fill: d.c });
       el('text', { x: z.x + 24, y: z.y + 13, class: 'zlabel', fill: '#F0E8D8', text: d.label });
-      el('rect', { x: z.x + 14, y: z.y + 146, width: 20, height: 26, rx: 2, fill: '#6B7288' });
-      el('rect', { x: z.x + 14, y: z.y + 146, width: 20, height: 3, fill: '#7C849A' });
-      el('path', { d: `M${z.x + 18} ${z.y + 155}h12M${z.x + 18} ${z.y + 164}h12`, stroke: '#4E5670', 'stroke-width': 2 });
-      this.buildPlant(z.x + 202, z.y + 150);
+      // 서류함 · 화분 · 작은 화이트보드(방마다 같은 소품, 부서색 띠)
+      el('rect', { x: z.x + 14, y: z.y + ROOM_H - 42, width: 20, height: 26, rx: 2, fill: '#6B7288' });
+      el('rect', { x: z.x + 14, y: z.y + ROOM_H - 42, width: 20, height: 3, fill: '#7C849A' });
+      el('path', { d: `M${z.x + 18} ${z.y + ROOM_H - 33}h12M${z.x + 18} ${z.y + ROOM_H - 24}h12`, stroke: '#4E5670', 'stroke-width': 2 });
+      el('rect', { x: z.x + 98, y: z.y + 26, width: 68, height: 22, rx: 2, fill: '#F4EEE0', stroke: '#8F897A', 'stroke-width': 1.5 });
+      el('rect', { x: z.x + 98, y: z.y + 26, width: 68, height: 3, fill: d.c });
+      el('path', { d: `M${z.x + 104} ${z.y + 36}h40M${z.x + 104} ${z.y + 42}h28`, stroke: '#B0AA98', 'stroke-width': 1.4 });
+      this.buildPlant(z.x + ROOM_W - 28, z.y + ROOM_H - 34);
     }
     this.AGENTS.forEach((a, i) => {
       const z = this.ZONES[a.dept];
       const slot = this.AGENTS.filter(x => x.dept === a.dept).indexOf(a);
-      this.buildDesk(a, z.x + (slot === 0 ? 40 : 140), z.y + 72, i);
+      this.buildDesk(a, z.x + (slot === 0 ? 30 : 150), z.y + 60, i);
     });
     this.buildBossRoom(); this.buildLounge(); this.buildServerRoom();
-    this.buildMeetingRoom(); this.buildBriefingRoom(); this.buildDoors();
-    if (this.custom.length) this.buildAnnex();
+    this.buildMeetingRoom(); this.buildFocusRoom(); this.buildPrintRoom(); this.buildBriefingRoom(); this.buildAnnex(); this.buildDoors();
     this.walkLayer = el('g', { id: 'walkLayer' }) as SVGGElement;
   }
 
-  /** 확장 구역 — 인원 추가로 들어온 사람의 책상(최대 6). 걷는 안무 없이 자리에서 일한다. */
+  /** 위쪽 외벽 — 창문 띠(방 위로 창이 나 있다). */
+  private buildWindows(): void {
+    const el = this.el.bind(this);
+    el('rect', { x: 20, y: 20, width: W - 40, height: 22, fill: '#2A3048' });
+    const spans: [number, number][] = [[24, ROOM_W], [300, ROOM_W], [576, ROOM_W], [BOSS.x, BOSS.w], [LOUNGE.x, LOUNGE.w]];
+    spans.forEach(([x0, w]) => {
+      for (let i = 0; i < 3; i++) {
+        const x = x0 + 24 + i * ((w - 48 - 44) / 2);
+        el('rect', { x, y: 24, width: 44, height: 13, rx: 1, fill: '#9CC7E8', stroke: '#1B2034', 'stroke-width': 1.5 });
+        el('path', { d: `M${x + 22} 24v13M${x} 30.5h44`, stroke: '#1B2034', 'stroke-width': 1 });
+      }
+    });
+  }
+
+  /** 확장 구역 — 인원 추가로 들어온 사람의 책상(최대 6, 3×2). 빈 자리는 점선 책상, 아무도 없으면 안내 한 줄. 걷는 안무 없이 자리에서 일한다. */
   private buildAnnex(): void {
     const el = this.el.bind(this);
-    const y0 = 884;
-    el('rect', { x: 20, y: 864, width: 720, height: 20, fill: 'url(#stone)' });
-    el('rect', { x: 20, y: y0, width: 720, height: 176, fill: 'url(#wood)', stroke: '#6E4A2E', 'stroke-width': 2 });
-    el('rect', { x: 20, y: y0, width: 720, height: 18, fill: '#4A3628' });
+    const R = ANNEX;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: 'url(#wood)', stroke: '#6E4A2E', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#4A3628' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.25)' });
     const label = this.T.rooms.ext;
-    const w = Math.min(220, [...label].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? 12 : 7), 0) + 28);
-    el('rect', { x: 28, y: y0 + 3, width: w, height: 13, rx: 3, fill: '#2A2218' });
-    el('rect', { x: 33, y: y0 + 6, width: 7, height: 7, fill: '#6A4C9C' });
-    el('text', { x: 44, y: y0 + 13, class: 'zlabel', fill: '#F0E8D8', text: label });
-    this.buildPlant(700, y0 + 140);
-    this.custom.forEach((c, i) => {
+    const w = Math.min(240, [...label].reduce((n, ch) => n + (/[가-힣]/.test(ch) ? 12 : 7), 0) + 28);
+    el('rect', { x: R.x + 8, y: R.y + 3, width: w, height: 13, rx: 3, fill: '#2A2218' });
+    el('rect', { x: R.x + 13, y: R.y + 6, width: 7, height: 7, fill: '#6A4C9C' });
+    el('text', { x: R.x + 24, y: R.y + 13, class: 'zlabel', fill: '#F0E8D8', text: label });
+    this.buildShelf(R.x + R.w - 80, R.y + 3);
+    this.buildPlant(R.x + 8, R.y + R.h - 30);
+    this.buildPlant(R.x + R.w - 22, R.y + R.h - 30);
+    ANNEX_DESKS.forEach((d, i) => {
+      if (i < this.custom.length) return;
+      el('rect', { x: d.x, y: d.y + 28 * DS, width: 56 * DS, height: 20 * DS, rx: 2, fill: 'rgba(94,61,34,.35)', stroke: 'rgba(240,232,216,.35)', 'stroke-width': 1.2, 'stroke-dasharray': '4 3' });
+      el('rect', { x: d.x + 27 * DS - 10, y: d.y + 6, width: 20, height: 26, rx: 3, fill: 'none', stroke: 'rgba(240,232,216,.22)', 'stroke-width': 1.2, 'stroke-dasharray': '3 3' });
+    });
+    if (!this.custom.length) el('text', { x: R.x + R.w / 2, y: R.y + 176, class: 'nrole', 'text-anchor': 'middle', text: this.T.rooms.extEmpty });
+    this.custom.slice(0, ANNEX_DESKS.length).forEach((c, i) => {
       const look = c.look || { hair: '#2A2230', skin: '#EAC49C', shirt: '#6A4C9C', style: 'short' };
       const acc = look.glasses ? 'glasses' : null;
-      this.buildDesk({ id: c.id, name: c.name, role: c.role, dept: 'ext', hair: look.hair, skin: look.skin, hairStyle: look.style, acc, shirt: look.shirt }, 46 + i * 116, y0 + 72, 13 + i);
+      const d = ANNEX_DESKS[i];
+      this.buildDesk({ id: c.id, name: c.name, role: c.role, dept: 'ext', hair: look.hair, skin: look.skin, hairStyle: look.style, acc, shirt: look.shirt }, d.x, d.y, 13 + i);
     });
   }
 
   private buildCorridors(): void {
     const el = this.el.bind(this);
     const strip = (x: number, y: number, w: number, h: number) => el('rect', { x, y, width: w, height: h, fill: 'url(#stone)' });
-    strip(256, 20, 44, 840); strip(536, 20, 44, 690);
-    strip(20, 202, 720, 48); strip(20, 432, 720, 48); strip(20, 662, 720, 48);
-    strip(460, 710, 40, 150);
-    this.buildPlant(259, 84); this.buildPlant(543, 300); this.buildPlant(259, 560);
+    strip(24, COR_A_Y0, W - 48, COR_H);
+    strip(24, COR_B_Y0, W - 48, COR_H);
+    strip(VX0, ROW_A, VX1 - VX0, COR_B_Y0 - ROW_A);
+    // 복도 가운데 안내선(점선)
+    el('path', { d: `M34 ${COR_A}H${W - 34}M34 ${COR_B}H${W - 34}M${VX} ${ROW_A + 10}V${COR_B_Y0}`, stroke: 'rgba(240,232,216,.07)', 'stroke-width': 2, 'stroke-dasharray': '10 12', fill: 'none' });
+    // 세로 복도 위쪽 정수기, 복도 양 끝 화분(걷는 길 밖)
+    el('rect', { x: VX - 7, y: ROW_A + 6, width: 14, height: 10, rx: 2, fill: '#7FB8E8' });
+    el('rect', { x: VX - 9, y: ROW_A + 16, width: 18, height: 26, rx: 2, fill: '#D8D2C4' });
+    el('rect', { x: VX - 4, y: ROW_A + 22, width: 8, height: 3, fill: '#4E5670' });
+    this.buildPlant(VX - 5, ROW_A + 150);
+    ([[30, COR_A_Y0 + 18], [W - 44, COR_A_Y0 + 18], [30, COR_B_Y0 + 18], [W - 44, COR_B_Y0 + 18]] as [number, number][]).forEach(([x, y]) => this.buildPlant(x, y));
   }
 
   private buildDesk(a: AgentDef, x: number, y: number, idx: number): void {
     const el = this.el.bind(this);
-    const g = el('g', { class: 'desk-sprite', id: 'sp-' + a.id, transform: `translate(${x},${y})` }) as SVGGElement;
+    const g = el('g', { class: 'desk-sprite', id: 'sp-' + a.id, transform: `translate(${x},${y}) scale(${DS})` }) as SVGGElement;
     // 선택 강조 테두리(에이전트 카드·책상 클릭). 기본은 숨김, .selected 일 때 보인다.
     el('rect', { x: -10, y: -8, width: 76, height: 88, rx: 6, class: 'deskhl', fill: 'rgba(183,156,232,.10)', stroke: '#B79CE8', 'stroke-width': 2.5, 'stroke-dasharray': '6 4' }, g);
     el('rect', { x: 12, y: 6, width: 32, height: 24, rx: 3, fill: '#3A3F52' }, g);
@@ -447,127 +558,239 @@ export class OfficeSimulator {
     el('rect', { x: 24, y: -12, width: 8, height: 3, fill: '#FFFFFF' }, b);
     el('text', { x: 28, y: -15, class: 'btask', 'text-anchor': 'middle', id: 'task-' + a.id, text: '' }, b);
     g.addEventListener('click', () => this.opts.onSelectAgent?.(a.id));
-    this.M[a.id] = { mode: 'seated', node: ch, av, seatAbs: { x: x + 18, y: y }, pos: { x: x + 18, y: y }, path: [], cb: null, awayPath: null, wander: null, spd: 0.88 + (idx % 5) * 0.06, face: 1 };
+    this.M[a.id] = { mode: 'seated', node: ch, av, seatAbs: { x: x + 18 * DS, y: y }, pos: { x: x + 18 * DS, y: y }, path: [], cb: null, awayPath: null, wander: null, spd: 0.88 + (idx % 5) * 0.06, face: 1 };
   }
 
   private buildBossRoom(): void {
     const el = this.el.bind(this);
-    el('rect', { x: 580, y: 20, width: 160, height: 182, fill: '#4E7CA6', stroke: '#33506E', 'stroke-width': 2 });
-    el('rect', { x: 580, y: 20, width: 160, height: 18, fill: '#2F3A50' });
-    el('rect', { x: 580, y: 38, width: 160, height: 2, fill: 'rgba(0,0,0,.25)' });
-    el('text', { x: 590, y: 33, class: 'roomlabel', text: this.T.rooms.boss });
-    el('rect', { x: 694, y: 23, width: 32, height: 13, fill: '#E8A33D' });
-    el('rect', { x: 697, y: 25, width: 26, height: 9, fill: '#2D8C4E' });
-    el('rect', { x: 596, y: 52, width: 128, height: 104, rx: 4, fill: '#5D8CB5' });
-    el('rect', { x: 644, y: 56, width: 32, height: 22, rx: 3, fill: '#2E3440' });
-    this.buildChar(null, 650, 60, { hair: '#4A4B52', hairStyle: 'short', shirt: '#37413A', skin: '#EAC49C' }, 3);
-    el('rect', { x: 612, y: 94, width: 96, height: 13, fill: '#8A5A34' });
-    el('rect', { x: 612, y: 107, width: 96, height: 7, fill: '#5E3D22' });
-    el('rect', { x: 620, y: 97, width: 14, height: 9, fill: '#FFFFFF', stroke: '#B9AF97' });
-    el('path', { d: 'M622 100h10M622 103h7', stroke: '#B9AF97', 'stroke-width': 1, fill: 'none' });
+    const R = BOSS;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#4E7CA6', stroke: '#33506E', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#2F3A50' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.25)' });
+    el('text', { x: R.x + 10, y: R.y + 13, class: 'roomlabel', text: this.T.rooms.boss });
+    el('rect', { x: R.x + R.w - 46, y: R.y + 3, width: 32, height: 13, fill: '#E8A33D' });
+    el('rect', { x: R.x + R.w - 43, y: R.y + 5, width: 26, height: 9, fill: '#2D8C4E' });
+    el('rect', { x: R.x + 16, y: R.y + 30, width: R.w - 32, height: R.h - 54, rx: 4, fill: '#5D8CB5' });
+    this.buildShelf(R.x + 20, R.y + 34);
+    this.buildPlant(R.x + R.w - 34, R.y + 36);
+    // 사장 의자 등받이 → 사장 → 큰 책상(사람 배율). 책상 윗면이 몸 아래쪽을 가려 앉은 모습이 된다.
+    el('rect', { x: R.x + 106, y: R.y + 30, width: 48, height: 30, rx: 4, fill: '#2E3440' });
+    el('rect', { x: R.x + 106, y: R.y + 30, width: 48, height: 5, rx: 2, fill: '#3A4152' });
+    this.buildChar(null, R.x + 115, R.y + 26, { hair: '#4A4B52', hairStyle: 'short', shirt: '#37413A', skin: '#EAC49C' }, 3).setAttribute('transform', `translate(${R.x + 115},${R.y + 26}) scale(${DS})`);
+    el('rect', { x: R.x + 60, y: R.y + 68, width: 140, height: 22, fill: '#8A5A34' });
+    el('path', { d: `M${R.x + 60} ${R.y + 79}H${R.x + 200}`, stroke: '#7A4E2C', 'stroke-width': 1 });
+    el('rect', { x: R.x + 60, y: R.y + 90, width: 140, height: 10, fill: '#5E3D22' });
+    el('rect', { x: R.x + 72, y: R.y + 71, width: 21, height: 14, fill: '#FFFFFF', stroke: '#B9AF97' });
+    el('path', { d: `M${R.x + 75} ${R.y + 76}h15M${R.x + 75} ${R.y + 80}h10`, stroke: '#B9AF97', 'stroke-width': 1, fill: 'none' });
+    el('circle', { cx: R.x + 188, cy: R.y + 76, r: 4.5, fill: '#E8A33D' });
     const doc = el('g', { id: 'bossDoc', class: 'bossdoc', visibility: 'hidden' }) as SVGGElement;
-    el('rect', { x: 676, y: 96, width: 20, height: 14, fill: '#FFFFFF', stroke: '#E8A33D', 'stroke-width': 2 }, doc);
-    el('path', { d: 'M679 100h14M679 104h10', stroke: '#E8A33D', 'stroke-width': 1.4, fill: 'none' }, doc);
-    el('circle', { cx: 692, cy: 107, r: 2.4, fill: '#D0684A' }, doc);
-    el('rect', { x: 630, y: 126, width: 14, height: 10, rx: 2, fill: '#3A3F52' });
-    el('rect', { x: 674, y: 126, width: 14, height: 10, rx: 2, fill: '#3A3F52' });
-    el('text', { x: 660, y: 172, class: 'nrole', 'text-anchor': 'middle', text: this.T.rooms.bossNote });
+    el('rect', { x: R.x + 140, y: R.y + 70, width: 28, height: 18, fill: '#FFFFFF', stroke: '#E8A33D', 'stroke-width': 2 }, doc);
+    el('path', { d: `M${R.x + 144} ${R.y + 75}h20M${R.x + 144} ${R.y + 80}h14`, stroke: '#E8A33D', 'stroke-width': 1.4, fill: 'none' }, doc);
+    el('circle', { cx: R.x + 163, cy: R.y + 84, r: 3, fill: '#D0684A' }, doc);
+    el('rect', { x: R.x + 94, y: R.y + 116, width: 22, height: 16, rx: 3, fill: '#3A3F52' });
+    el('rect', { x: R.x + 144, y: R.y + 116, width: 22, height: 16, rx: 3, fill: '#3A3F52' });
+    el('text', { x: R.x + R.w / 2, y: R.y + 158, class: 'nrole', 'text-anchor': 'middle', text: this.T.rooms.bossNote });
     doc.addEventListener('click', () => { if (this.st.phase === 'awaiting') this.approve(false); });
     this.bossDoc = doc;
   }
 
   private buildLounge(): void {
     const el = this.el.bind(this);
-    el('rect', { x: 580, y: 250, width: 160, height: 182, fill: '#BFB9A8', stroke: '#8F897A', 'stroke-width': 2 });
-    el('rect', { x: 580, y: 250, width: 160, height: 18, fill: '#4A4438' });
-    el('rect', { x: 580, y: 268, width: 160, height: 2, fill: 'rgba(0,0,0,.2)' });
-    el('text', { x: 590, y: 263, class: 'roomlabel', text: this.T.rooms.lounge });
-    el('circle', { cx: 716, cy: 259, r: 6.5, fill: '#F4EEE0', stroke: '#141824', 'stroke-width': 1.5 });
-    el('path', { d: 'M716 259v-4M716 259l3 2', stroke: '#141824', 'stroke-width': 1.4, fill: 'none' });
-    el('rect', { x: 588, y: 278, width: 26, height: 44, rx: 2, fill: '#2E3440' });
-    el('rect', { x: 591, y: 282, width: 20, height: 22, fill: '#1A1E2A' });
-    ([['#D0684A', 0, 0], ['#2D8C4E', 7, 0], ['#E8A33D', 14, 0], ['#4A7DBF', 0, 8], ['#B75FA2', 7, 8], ['#7FE3A6', 14, 8]] as [string, number, number][])
-      .forEach(it => el('rect', { x: 593 + it[1], y: 285 + it[2], width: 5, height: 5, fill: it[0] }));
-    el('rect', { x: 591, y: 308, width: 20, height: 5, fill: '#141824' });
-    el('rect', { x: 624, y: 286, width: 9, height: 8, fill: '#7FB8E8' });
-    el('rect', { x: 622, y: 294, width: 13, height: 26, rx: 2, fill: '#D8D2C4' });
-    el('rect', { x: 626, y: 300, width: 5, height: 3, fill: '#4E5670' });
-    el('rect', { x: 682, y: 284, width: 44, height: 14, fill: '#8A5A34' });
-    el('rect', { x: 682, y: 298, width: 44, height: 4, fill: '#5E3D22' });
-    el('rect', { x: 688, y: 272, width: 14, height: 12, rx: 1, fill: '#2E3440' });
-    el('rect', { x: 691, y: 281, width: 5, height: 3, fill: '#F4EEE0' });
-    el('path', { d: 'M710 280c-2-3 2-4 0-7', stroke: '#B9C2D8', 'stroke-width': 1.4, fill: 'none', class: 'steam' });
-    el('rect', { x: 588, y: 346, width: 6, height: 20, rx: 2, fill: '#8A3A30' });
-    el('rect', { x: 640, y: 346, width: 6, height: 20, rx: 2, fill: '#8A3A30' });
-    el('rect', { x: 592, y: 342, width: 50, height: 10, rx: 3, fill: '#A34A3E' });
-    el('rect', { x: 592, y: 352, width: 50, height: 12, fill: '#B85548' });
-    el('rect', { x: 592, y: 362, width: 50, height: 4, fill: '#8A3A30' });
-    el('circle', { cx: 690, cy: 376, r: 16, fill: '#8A5A34' });
-    el('circle', { cx: 690, cy: 376, r: 12, fill: '#A0713F' });
-    el('circle', { cx: 664, cy: 396, r: 5, fill: '#3A3F52' });
-    el('circle', { cx: 714, cy: 354, r: 5, fill: '#3A3F52' });
-    el('rect', { x: 684, y: 371, width: 9, height: 7, fill: '#F4EEE0' });
-    this.buildPlant(712, 404);
+    const R = LOUNGE;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#BFB9A8', stroke: '#8F897A', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#4A4438' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.2)' });
+    el('text', { x: R.x + 10, y: R.y + 13, class: 'roomlabel', text: this.T.rooms.lounge });
+    el('circle', { cx: R.x + R.w - 16, cy: R.y + 9, r: 6.5, fill: '#F4EEE0', stroke: '#141824', 'stroke-width': 1.5 });
+    el('path', { d: `M${R.x + R.w - 16} ${R.y + 9}v-4M${R.x + R.w - 16} ${R.y + 9}l3 2`, stroke: '#141824', 'stroke-width': 1.4, fill: 'none' });
+    // 자판기
+    el('rect', { x: R.x + 8, y: R.y + 24, width: 30, height: 60, rx: 2, fill: '#2E3440' });
+    el('rect', { x: R.x + 11, y: R.y + 28, width: 24, height: 30, fill: '#1A1E2A' });
+    ([['#D0684A', 0, 0], ['#2D8C4E', 8, 0], ['#E8A33D', 16, 0], ['#4A7DBF', 0, 10], ['#B75FA2', 8, 10], ['#7FE3A6', 16, 10]] as [string, number, number][])
+      .forEach(it => el('rect', { x: R.x + 13 + it[1], y: R.y + 31 + it[2], width: 6, height: 6, fill: it[0] }));
+    el('rect', { x: R.x + 11, y: R.y + 64, width: 24, height: 7, fill: '#141824' });
+    // 정수기
+    el('rect', { x: R.x + 46, y: R.y + 28, width: 12, height: 12, fill: '#7FB8E8' });
+    el('rect', { x: R.x + 44, y: R.y + 40, width: 16, height: 36, rx: 2, fill: '#D8D2C4' });
+    // 커피 카운터 · 머신 · 머그
+    el('rect', { x: R.x + 150, y: R.y + 30, width: 94, height: 20, fill: '#8A5A34' });
+    el('rect', { x: R.x + 150, y: R.y + 50, width: 94, height: 6, fill: '#5E3D22' });
+    el('rect', { x: R.x + 160, y: R.y + 16, width: 20, height: 16, rx: 1, fill: '#2E3440' });
+    el('rect', { x: R.x + 164, y: R.y + 27, width: 7, height: 4, fill: '#F4EEE0' });
+    el('path', { d: `M${R.x + 190} ${R.y + 26}c-2-3 2-4 0-7`, stroke: '#B9C2D8', 'stroke-width': 1.4, fill: 'none', class: 'steam' });
+    el('rect', { x: R.x + 210, y: R.y + 36, width: 7, height: 7, rx: 1, fill: '#F4EEE0' });
+    el('rect', { x: R.x + 222, y: R.y + 36, width: 7, height: 7, rx: 1, fill: '#D0684A' });
+    // 소파(3인)
+    el('rect', { x: R.x + 12, y: R.y + 124, width: 8, height: 34, rx: 2, fill: '#8A3A30' });
+    el('rect', { x: R.x + 92, y: R.y + 124, width: 8, height: 34, rx: 2, fill: '#8A3A30' });
+    el('rect', { x: R.x + 18, y: R.y + 120, width: 76, height: 14, rx: 3, fill: '#A34A3E' });
+    el('rect', { x: R.x + 18, y: R.y + 134, width: 76, height: 18, fill: '#B85548' });
+    el('rect', { x: R.x + 18, y: R.y + 150, width: 76, height: 6, fill: '#8A3A30' });
+    // 둥근 탁자 · 의자 3
+    el('circle', { cx: R.x + 172, cy: R.y + 138, r: 22, fill: '#8A5A34' });
+    el('circle', { cx: R.x + 172, cy: R.y + 138, r: 17, fill: '#A0713F' });
+    el('rect', { x: R.x + 165, y: R.y + 132, width: 12, height: 9, fill: '#F4EEE0' });
+    ([[142, 162], [204, 114], [204, 162]] as [number, number][]).forEach(([dx, dy]) => el('circle', { cx: R.x + dx, cy: R.y + dy, r: 7, fill: '#3A3F52' }));
+    this.buildPlant(R.x + R.w - 20, R.y + R.h - 30);
   }
 
   private buildServerRoom(): void {
     const el = this.el.bind(this);
-    el('rect', { x: 580, y: 480, width: 160, height: 182, fill: '#20242F', stroke: '#12151E', 'stroke-width': 2 });
-    el('text', { x: 590, y: 502, class: 'roomlabel', text: this.T.rooms.server });
-    [596, 646, 696].forEach((rx, r) => {
-      el('rect', { x: rx, y: 514, width: 40, height: 60, rx: 2, fill: '#2E3440' });
+    const R = SERVER;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#20242F', stroke: '#12151E', 'stroke-width': 2 });
+    el('text', { x: R.x + 10, y: R.y + 16, class: 'roomlabel', text: this.T.rooms.server });
+    [0, 1, 2, 3].forEach(r => {
+      const rx = R.x + 14 + r * 58;
+      el('rect', { x: rx, y: R.y + 28, width: 44, height: 64, rx: 2, fill: '#2E3440' });
       for (let j = 0; j < 4; j++) {
-        el('rect', { x: rx + 4, y: 520 + j * 13, width: 32, height: 10, rx: 1, fill: '#1A1E2A' });
-        el('circle', { cx: rx + 9, cy: 525 + j * 13, r: 2.2, fill: '#7FE3A6', class: 'led', style: 'animation-delay:' + ((r + j) * 0.31) + 's' });
-        el('circle', { cx: rx + 15, cy: 525 + j * 13, r: 2.2, fill: '#E8A33D', class: 'led', style: 'animation-delay:' + ((r + j) * 0.47 + 0.2) + 's' });
-        el('path', { d: `M${rx + 20} ${525 + j * 13}h12`, stroke: '#3A4152', 'stroke-width': 2 });
+        el('rect', { x: rx + 4, y: R.y + 34 + j * 14, width: 36, height: 11, rx: 1, fill: '#1A1E2A' });
+        el('circle', { cx: rx + 9, cy: R.y + 39.5 + j * 14, r: 2.2, fill: '#7FE3A6', class: 'led', style: 'animation-delay:' + ((r + j) * 0.31) + 's' });
+        el('circle', { cx: rx + 15, cy: R.y + 39.5 + j * 14, r: 2.2, fill: '#E8A33D', class: 'led', style: 'animation-delay:' + ((r + j) * 0.47 + 0.2) + 's' });
+        el('path', { d: `M${rx + 20} ${R.y + 39.5 + j * 14}h16`, stroke: '#3A4152', 'stroke-width': 2 });
       }
     });
-    el('rect', { x: 612, y: 606, width: 96, height: 18, rx: 2, fill: '#2E3440' });
-    el('rect', { x: 616, y: 610, width: 40, height: 10, fill: '#1A1E2A' });
-    el('path', { d: 'M619 615h8M630 615h6M639 615h10', stroke: '#7FE3A6', 'stroke-width': 1.6 });
-    el('circle', { cx: 668, cy: 615, r: 2.4, fill: '#7FE3A6', class: 'led' });
-    el('circle', { cx: 678, cy: 615, r: 2.4, fill: '#E8A33D', class: 'led', style: 'animation-delay:.5s' });
-    el('path', { d: 'M596 640h128', stroke: '#2E3440', 'stroke-width': 3, 'stroke-dasharray': '8 6' });
+    el('rect', { x: R.x + 30, y: R.y + 118, width: 120, height: 18, rx: 2, fill: '#2E3440' });
+    el('rect', { x: R.x + 34, y: R.y + 122, width: 50, height: 10, fill: '#1A1E2A' });
+    el('path', { d: `M${R.x + 37} ${R.y + 127}h10M${R.x + 50} ${R.y + 127}h8M${R.x + 61} ${R.y + 127}h14`, stroke: '#7FE3A6', 'stroke-width': 1.6 });
+    el('circle', { cx: R.x + 98, cy: R.y + 127, r: 2.4, fill: '#7FE3A6', class: 'led' });
+    el('circle', { cx: R.x + 108, cy: R.y + 127, r: 2.4, fill: '#E8A33D', class: 'led', style: 'animation-delay:.5s' });
+    el('path', { d: `M${R.x + 16} ${R.y + 156}h${R.w - 32}`, stroke: '#2E3440', 'stroke-width': 3, 'stroke-dasharray': '8 6' });
   }
 
   private buildMeetingRoom(): void {
     const el = this.el.bind(this);
-    el('rect', { x: 20, y: 710, width: 440, height: 150, fill: '#4E7CA6', stroke: '#33506E', 'stroke-width': 2 });
-    el('rect', { x: 20, y: 710, width: 440, height: 18, fill: '#2F3A50' });
-    el('rect', { x: 20, y: 728, width: 440, height: 2, fill: 'rgba(0,0,0,.25)' });
-    el('text', { x: 30, y: 723, class: 'roomlabel', text: this.T.rooms.meeting });
-    this.buildShelf(370, 713);
-    el('rect', { x: 36, y: 738, width: 52, height: 30, fill: '#F4EEE0', stroke: '#8F897A', 'stroke-width': 2 });
-    el('path', { d: 'M42 746h38M42 752h26M42 758h32', stroke: '#2D8C4E', 'stroke-width': 1.6, fill: 'none' });
-    el('rect', { x: 150, y: 766, width: 200, height: 30, fill: '#8A5A34' });
-    el('path', { d: 'M150 781H350', stroke: '#7A4E2C', 'stroke-width': 1 });
-    el('rect', { x: 150, y: 796, width: 200, height: 6, fill: '#5E3D22' });
-    el('rect', { x: 200, y: 772, width: 36, height: 12, fill: '#F4EEE0' });
-    el('path', { d: 'M204 776h28M204 780h18', stroke: '#B0AA98', 'stroke-width': 1 });
-    el('rect', { x: 262, y: 772, width: 14, height: 10, rx: 1, fill: '#20242F' });
-    ([[160, 752], [200, 752], [240, 752], [280, 752], [320, 752]] as [number, number][]).forEach(p => el('rect', { x: p[0], y: p[1], width: 14, height: 10, rx: 2, fill: '#3A3F52' }));
-    ([[180, 806], [220, 806], [260, 806], [300, 806]] as [number, number][]).forEach(p => el('rect', { x: p[0], y: p[1], width: 14, height: 10, rx: 2, fill: '#3A3F52' }));
-    this.buildPlant(428, 832);
+    const R = MEET;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: 'url(#carpet)', stroke: '#33506E', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#2F3A50' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.25)' });
+    el('text', { x: R.x + 10, y: R.y + 13, class: 'roomlabel', text: this.T.rooms.meeting });
+    this.buildShelf(R.x + R.w - 84, R.y + 3);
+    // 벽면 — 왼쪽 화이트보드, 오른쪽 지표 화면
+    el('rect', { x: R.x + 40, y: R.y + 24, width: 118, height: 30, fill: '#F4EEE0', stroke: '#8F897A', 'stroke-width': 2 });
+    el('path', { d: `M${R.x + 48} ${R.y + 33}h60M${R.x + 48} ${R.y + 40}h84M${R.x + 48} ${R.y + 47}h44`, stroke: '#2D8C4E', 'stroke-width': 1.6, fill: 'none' });
+    el('rect', { x: R.x + R.w - 120, y: R.y + 24, width: 84, height: 44, rx: 2, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
+    el('path', { d: `M${R.x + R.w - 112} ${R.y + 58}l14-14 12 9 16-18 16 11`, stroke: '#7FE3A6', 'stroke-width': 1.6, fill: 'none' });
+    // 탁자 밑 러그 → 의자(사람이 앉으면 가려진다) → 12석 긴 탁자
+    const tx = MEET_TABLE_X, ty = MEET_TABLE_Y, tw = MEET_TABLE_W, th = MEET_TABLE_H;
+    el('rect', { x: tx - 64, y: ty - 50, width: tw + 128, height: th + 100, rx: 6, fill: '#3F6890', stroke: '#5A88B2', 'stroke-width': 2 });
+    MEET_SEAT_XS.forEach(sx => {
+      el('rect', { x: sx + 4.5, y: ty - 26, width: 21, height: 16, rx: 3, fill: '#3A3F52' });
+      el('rect', { x: sx + 4.5, y: ty - 26, width: 21, height: 4, rx: 2, fill: '#4A5068' });
+      el('rect', { x: sx + 4.5, y: ty + th + 12, width: 21, height: 16, rx: 3, fill: '#3A3F52' });
+      el('rect', { x: sx + 4.5, y: ty + th + 24, width: 21, height: 4, rx: 2, fill: '#4A5068' });
+    });
+    el('rect', { x: tx - 30, y: ty + 19, width: 16, height: 22, rx: 3, fill: '#3A3F52' });
+    el('rect', { x: tx + tw + 14, y: ty + 19, width: 16, height: 22, rx: 3, fill: '#3A3F52' });
+    el('rect', { x: tx, y: ty, width: tw, height: th, rx: 4, fill: '#8A5A34' });
+    el('rect', { x: tx + 6, y: ty + 6, width: tw - 12, height: th - 12, rx: 3, fill: '#94643B' });
+    el('rect', { x: tx, y: ty + th, width: tw, height: 8, fill: '#5E3D22' });
+    // 자리마다 노트북·서류(번갈아), 가운데 회의용 스피커폰
+    MEET_SEAT_XS.forEach((sx, i) => {
+      [ty + 6, ty + th - 19].forEach((yy, side) => {
+        if ((i + side) % 2 === 0) {
+          el('rect', { x: sx + 6, y: yy, width: 18, height: 13, fill: '#F4EEE0', stroke: '#B9AF97' });
+        } else {
+          el('rect', { x: sx + 5, y: yy, width: 20, height: 13, rx: 1, fill: '#2E3440' });
+          el('rect', { x: sx + 7, y: yy + 2, width: 16, height: 8, fill: '#4A7DBF' });
+        }
+      });
+    });
+    el('circle', { cx: tx + tw / 2, cy: ty + th / 2, r: 8, fill: '#20242F' });
+    el('circle', { cx: tx + tw / 2, cy: ty + th / 2, r: 2.6, fill: '#7FE3A6', class: 'led' });
+    // 오른쪽 벽 발표 화면(벽걸이, 옆에서 본 모습)
+    el('rect', { x: R.x + R.w - 22, y: ty - 30, width: 10, height: th + 60, rx: 2, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
+    el('rect', { x: R.x + R.w - 20, y: ty - 26, width: 4, height: th + 52, fill: '#4A7DBF', opacity: 0.75 });
+    // 물·컵 놓인 수납장, 화분
+    el('rect', { x: R.x + R.w - 110, y: R.y + R.h - 34, width: 70, height: 16, fill: '#8A5A34' });
+    el('rect', { x: R.x + R.w - 110, y: R.y + R.h - 18, width: 70, height: 5, fill: '#5E3D22' });
+    [0, 1, 2].forEach(i => el('rect', { x: R.x + R.w - 102 + i * 9, y: R.y + R.h - 44, width: 6, height: 14, rx: 2, fill: '#7FB8E8' }));
+    [0, 1].forEach(i => el('rect', { x: R.x + R.w - 66 + i * 10, y: R.y + R.h - 38, width: 7, height: 7, rx: 1, fill: '#F4EEE0' }));
+    this.buildPlant(R.x + 8, R.y + R.h - 30);
+    this.buildPlant(R.x + R.w - 26, R.y + R.h - 30);
+  }
+
+  /** 포커스룸 — 1인 통화 부스 2칸. 쉬는 사람이 가끔 들어가 통화한다. 부스 문 위 표시등은 쓰는 중이면 빨강. */
+  private buildFocusRoom(): void {
+    const el = this.el.bind(this);
+    const R = FOCUS;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#3E4660', stroke: '#2A3048', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#2A3048' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.25)' });
+    el('text', { x: R.x + 10, y: R.y + 13, class: 'roomlabel', text: this.T.rooms.focus });
+    // 대기 공간 — 옷걸이 · 작은 탁자 · 화분(부스로 가는 길 밖)
+    el('circle', { cx: R.x + 14, cy: R.y + 100, r: 7, fill: '#5E3D22' });
+    el('rect', { x: R.x + 9, y: R.y + 90, width: 4, height: 8, fill: '#4A7DBF' });
+    el('rect', { x: R.x + 15, y: R.y + 92, width: 4, height: 7, fill: '#D0684A' });
+    el('circle', { cx: R.x + 84, cy: R.y + 102, r: 11, fill: '#8A5A34' });
+    el('circle', { cx: R.x + 84, cy: R.y + 102, r: 8, fill: '#A0713F' });
+    el('rect', { x: R.x + 81, y: R.y + 98, width: 6, height: 6, rx: 1, fill: '#F4EEE0' });
+    this.buildPlant(R.x + R.w - 20, R.y + 94);
+    FOCUS_BOOTHS.forEach(bx => {
+      const by = R.y + 130, bw = 76, bh = R.h - 136;
+      el('rect', { x: bx, y: by, width: bw, height: bh, fill: '#56607E' });
+      // 유리벽(위쪽 가운데가 문)
+      el('path', { d: `M${bx} ${by}h21M${bx + 55} ${by}h21M${bx} ${by}v${bh}M${bx + bw} ${by}v${bh}M${bx} ${by + bh}h${bw}`, stroke: '#BFE3F0', 'stroke-width': 3, opacity: 0.8, fill: 'none' });
+      // 의자(앉으면 가려진다) → 작은 책상 · 노트북 · 스탠드
+      el('rect', { x: bx + 28, y: R.y + 226, width: 20, height: 16, rx: 3, fill: '#3A3F52' });
+      el('rect', { x: bx + 14, y: R.y + 250, width: 48, height: 14, fill: '#8A5A34' });
+      el('rect', { x: bx + 14, y: R.y + 264, width: 48, height: 5, fill: '#5E3D22' });
+      el('rect', { x: bx + 30, y: R.y + 252, width: 16, height: 10, rx: 1, fill: '#2E3440' });
+      el('circle', { cx: bx + 56, cy: R.y + 255, r: 3, fill: '#E8A33D' });
+      this.boothLeds.push(el('circle', { cx: bx + bw / 2, cy: by - 6, r: 3, fill: '#7FE3A6' }));
+      this.boothBusy.push(false);
+    });
+  }
+
+  /** 자료실 · 복합기 — 쉬는 사람이 가끔 들러 출력물을 찾거나 서류를 정리한다. */
+  private buildPrintRoom(): void {
+    const el = this.el.bind(this);
+    const R = PRINT;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#C9C3B2', stroke: '#8F897A', 'stroke-width': 2 });
+    el('rect', { x: R.x, y: R.y, width: R.w, height: 18, fill: '#4A4438' });
+    el('rect', { x: R.x, y: R.y + 18, width: R.w, height: 2, fill: 'rgba(0,0,0,.2)' });
+    el('text', { x: R.x + 10, y: R.y + 13, class: 'roomlabel', text: this.T.rooms.print });
+    // 복합기(왼쪽 벽)
+    el('rect', { x: R.x + 10, y: R.y + 40, width: 48, height: 56, rx: 3, fill: '#D8D2C4', stroke: '#8F897A', 'stroke-width': 1.5 });
+    el('rect', { x: R.x + 10, y: R.y + 40, width: 48, height: 14, rx: 3, fill: '#B9B2A2' });
+    el('rect', { x: R.x + 16, y: R.y + 44, width: 16, height: 6, rx: 1, fill: '#20242F' });
+    el('circle', { cx: R.x + 50, cy: R.y + 47, r: 2.4, fill: '#7FE3A6', class: 'led' });
+    el('rect', { x: R.x + 16, y: R.y + 60, width: 36, height: 8, fill: '#F4EEE0' });
+    el('path', { d: `M${R.x + 14} ${R.y + 78}h40M${R.x + 14} ${R.y + 88}h40`, stroke: '#A8A190', 'stroke-width': 1.5 });
+    // 서류함(오른쪽 벽, 3단)
+    [0, 1, 2].forEach(i => {
+      const y = R.y + 30 + i * 40;
+      el('rect', { x: R.x + R.w - 38, y, width: 28, height: 38, rx: 2, fill: '#6B7288' });
+      el('rect', { x: R.x + R.w - 38, y, width: 28, height: 4, fill: '#7C849A' });
+      el('rect', { x: R.x + R.w - 28, y: y + 16, width: 8, height: 3, fill: '#4E5670' });
+    });
+    // 정리 탁자 — 서류 더미 · 바인더
+    el('rect', { x: R.x + 30, y: R.y + 214, width: 90, height: 24, fill: '#8A5A34' });
+    el('rect', { x: R.x + 30, y: R.y + 238, width: 90, height: 6, fill: '#5E3D22' });
+    el('rect', { x: R.x + 38, y: R.y + 218, width: 20, height: 14, fill: '#F4EEE0', stroke: '#B9AF97' });
+    el('rect', { x: R.x + 64, y: R.y + 220, width: 14, height: 12, fill: '#4A7DBF' });
+    el('rect', { x: R.x + 84, y: R.y + 218, width: 24, height: 14, fill: '#F4EEE0', stroke: '#B9AF97' });
+    // 복사지 상자 · 문서 세단기
+    el('rect', { x: R.x + 10, y: R.y + R.h - 58, width: 30, height: 22, fill: '#C9A270', stroke: '#8A6A40' });
+    el('rect', { x: R.x + 12, y: R.y + R.h - 36, width: 30, height: 22, fill: '#BF9866', stroke: '#8A6A40' });
+    el('rect', { x: R.x + R.w - 40, y: R.y + R.h - 50, width: 24, height: 30, rx: 2, fill: '#3A3F52' });
+    el('rect', { x: R.x + R.w - 36, y: R.y + R.h - 46, width: 16, height: 3, fill: '#141824' });
   }
 
   private buildBriefingRoom(): void {
     const el = this.el.bind(this);
-    el('rect', { x: 500, y: 710, width: 240, height: 150, fill: '#262B3E', stroke: '#161A26', 'stroke-width': 2 });
-    el('text', { x: 512, y: 730, class: 'roomlabel', text: this.T.rooms.briefing });
-    el('rect', { x: 520, y: 736, width: 180, height: 62, rx: 3, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
-    el('rect', { x: 526, y: 742, width: 168, height: 50, fill: '#101420' });
-    el('rect', { x: 526, y: 742, width: 168, height: 11, fill: '#0C1016' });
-    el('circle', { cx: 535, cy: 747.5, r: 2.6, fill: '#D0684A', class: 'onair' });
-    el('text', { x: 542, y: 751, class: 'btask', style: 'fill:#7FE3A6;font-size:8.5px;letter-spacing:.08em', text: this.T.rooms.onAir });
-    ([[534, 14], [549, 22], [564, 10], [579, 26], [594, 18], [609, 28], [624, 12], [639, 24], [654, 20], [669, 16]] as [number, number][])
-      .forEach((p, i) => el('rect', { x: p[0], y: 788 - p[1], width: 8, height: p[1], fill: i === 5 ? '#E8A33D' : '#2D8C4E' }));
-    el('path', { d: 'M526 790h168', stroke: '#2E3440', 'stroke-width': 2 });
-    el('rect', { x: 560, y: 798, width: 10, height: 5, fill: '#141824' });
-    el('rect', { x: 650, y: 798, width: 10, height: 5, fill: '#141824' });
-    this.buildPlant(716, 826);
-    // 팀장 책상 — 재하의 브리핑을 받아 작업을 나누는 자리(Munder Difflin 의 마이클 자리)
-    this.buildDesk({ id: 'lead', name: this.T.names.lead, role: this.T.roles.lead, dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' }, 512, 778, 12);
+    const R = BRIEF;
+    el('rect', { x: R.x, y: R.y, width: R.w, height: R.h, fill: '#262B3E', stroke: '#161A26', 'stroke-width': 2 });
+    el('text', { x: R.x + 10, y: R.y + 16, class: 'roomlabel', text: this.T.rooms.briefing });
+    el('rect', { x: R.x + 14, y: R.y + 24, width: 160, height: 62, rx: 3, fill: '#141824', stroke: '#2E3440', 'stroke-width': 2 });
+    el('rect', { x: R.x + 20, y: R.y + 30, width: 148, height: 50, fill: '#101420' });
+    el('rect', { x: R.x + 20, y: R.y + 30, width: 148, height: 11, fill: '#0C1016' });
+    el('circle', { cx: R.x + 29, cy: R.y + 35.5, r: 2.6, fill: '#D0684A', class: 'onair' });
+    el('text', { x: R.x + 36, y: R.y + 39, class: 'btask', style: 'fill:#7FE3A6;font-size:8.5px;letter-spacing:.08em', text: this.T.rooms.onAir });
+    ([14, 22, 10, 26, 18, 28, 12, 24, 20] as number[]).forEach((h, i) => el('rect', { x: R.x + 28 + i * 15, y: R.y + 76 - h, width: 8, height: h, fill: i === 5 ? '#E8A33D' : '#2D8C4E' }));
+    el('path', { d: `M${R.x + 20} ${R.y + 78}h148`, stroke: '#2E3440', 'stroke-width': 2 });
+    this.buildPlant(R.x + R.w - 24, R.y + R.h - 30);
+    // 팀장 책상 — 재하의 브리핑을 받아 작업을 나누는 자리. 일이 돌면 가끔 일어나 현장을 돈다.
+    this.buildDesk({ id: 'lead', name: this.T.names.lead, role: this.T.roles.lead, dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' }, R.x + 172, R.y + 30, 12);
   }
 
   private buildDoor(cx: number, cy: number, horiz: boolean): void {
@@ -595,50 +818,72 @@ export class OfficeSimulator {
   }
 
   private buildDoors(): void {
-    this.buildDoor(138, 202, true); this.buildDoor(418, 202, true);
-    this.buildDoor(138, 432, true); this.buildDoor(418, 432, true);
-    this.buildDoor(138, 662, true); this.buildDoor(418, 662, true);
-    this.buildDoor(580, 111, false); this.buildDoor(580, 341, false); this.buildDoor(580, 571, false);
-    this.buildDoor(226, 710, true); this.buildDoor(710, 710, true);
+    for (const k in this.ZONES) { const z = this.ZONES[k]; this.buildDoor(z.x + ROOM_W / 2, z.y + ROOM_H, true); }
+    this.buildDoor(BOSS.x + 130, BOSS.y + BOSS.h, true);
+    this.buildDoor(LOUNGE_DOOR_X, LOUNGE.y + LOUNGE.h, true);
+    this.buildDoor(BRIEF_DOOR_X, BRIEF.y + BRIEF.h, true);
+    this.buildDoor(SERVER.x + 127, SERVER.y + SERVER.h, true);
+    this.buildDoor(MEET_DOOR_X, ROW_C, true);
+    this.buildDoor(FOCUS_DOOR_X, ROW_C, true);
+    this.buildDoor(PRINT_DOOR_X, ROW_C, true);
+    this.buildDoor(ANNEX_DOOR_X, ROW_C, true);
   }
 
-  /* ── 이동 엔진: 복도 웨이포인트 라우팅 ── */
-  private zoneMeta(a: AgentDef): { z: Pt; doorX: number; corY: number } {
+  /* ── 이동 엔진: 복도 웨이포인트 라우팅 ──
+   * 방마다 문 x(doorX)·문이 닿는 복도 가운데 y(corY)·방 안 문 앞 통로 y(insideY)를 둔다. 복도가 다르면 세로 복도 VX 로 갈아탄다. */
+  private roomMeta(a: AgentDef): { doorX: number; corY: number; insideY: number } {
+    if (a.dept === 'lead') return { doorX: BRIEF_DOOR_X, corY: COR_B, insideY: BRIEF_LANE };
+    if (a.dept === 'ext') return { doorX: ANNEX_DOOR_X, corY: COR_B, insideY: ROW_C_LANE };
     const z = this.ZONES[a.dept];
-    return { z, doorX: z.x === 20 ? 138 : 418, corY: z.y === 20 ? 226 : z.y === 250 ? 456 : 686 };
+    return { doorX: z.x + ROOM_W / 2, corY: z.y === ROW_A ? COR_A : COR_B, insideY: z.y + ROOM_H - SH - 6 };
   }
 
-  private corridorRoute(ax: number, ay: number, bx: number, by: number): Pt[] {
-    if (ay === by) return [{ x: bx, y: by - 16 }];
-    const c278 = Math.abs(ax - 278) + Math.abs(bx - 278), c558 = Math.abs(ax - 558) + Math.abs(bx - 558);
-    const vx = (c278 <= c558 ? 278 : 558) - 10;
-    return [{ x: vx, y: ay - 16 }, { x: vx, y: by - 16 }, { x: bx, y: by - 16 }];
+  /** 복도 위 한 문 앞(ax, ay=복도 y)에서 다른 문 앞(bx, by)으로 — 스프라이트 위치(왼쪽 위)로 돌려준다. */
+  private corridorRoute(_ax: number, ay: number, bx: number, by: number): Pt[] {
+    if (ay === by) return [{ x: bx - CX, y: by - CY }];
+    return [{ x: VX - CX, y: ay - CY }, { x: VX - CX, y: by - CY }, { x: bx - CX, y: by - CY }];
   }
 
+  /** 자리 → 문 → 복도. 부서 방은 문이 책상 사이 통로 바로 아래라 옆으로 한 칸 나가 곧장 내려간다. */
   private exitPts(a: AgentDef): Pt[] {
-    const m = this.M[a.id], { z, doorX } = this.zoneMeta(a);
-    const slot = (m.seatAbs.x - z.x) < 100 ? 0 : 1;
-    const sideX = slot === 0 ? z.x + 104 : z.x + 116;
-    return [{ x: sideX, y: m.seatAbs.y }, { x: sideX, y: z.y + 124 }, { x: doorX - 10, y: z.y + 124 }, { x: doorX - 10, y: this.zoneMeta(a).corY - 16 }];
+    const m = this.M[a.id], r = this.roomMeta(a);
+    if (a.dept === 'lead') return [{ x: m.seatAbs.x, y: r.insideY }, { x: r.doorX - CX, y: r.insideY }, { x: r.doorX - CX, y: r.corY - CY }];
+    return [{ x: r.doorX - CX, y: m.seatAbs.y }, { x: r.doorX - CX, y: r.corY - CY }];
   }
 
   private pathToMeeting(a: AgentDef, spot: Spot): Pt[] {
-    const { doorX, corY } = this.zoneMeta(a);
-    const pts: Pt[] = [...this.corridorRoute(doorX - 10, corY, 216, 686), { x: 216, y: 730 }];
-    if (spot.top) { pts.push({ x: spot.x, y: 730 }); }
-    else { pts.push({ x: 120, y: 730 }, { x: 120, y: 826 }, { x: spot.x, y: 826 }); }
+    const r = this.roomMeta(a);
+    const pts: Pt[] = [...this.exitPts(a), ...this.corridorRoute(r.doorX, r.corY, MEET_DOOR_X, COR_B), { x: MEET_DOOR_X - CX, y: MEET_LANE_TOP }];
+    if (spot.top) pts.push({ x: spot.x, y: MEET_LANE_TOP });
+    else pts.push({ x: MEET_AISLE_X, y: MEET_LANE_TOP }, { x: MEET_AISLE_X, y: MEET_LANE_BOTTOM }, { x: spot.x, y: MEET_LANE_BOTTOM });
     pts.push({ x: spot.x, y: spot.y });
-    return [...this.exitPts(a), ...pts];
+    return pts;
   }
 
-  private pathToLounge(a: AgentDef, spot: Spot): Pt[] {
-    const { corY } = this.zoneMeta(a);
-    return [...this.exitPts(a), { x: 548, y: corY - 16 }, { x: 548, y: 325 }, { x: 592, y: 325 }, { x: spot.x, y: 325 }, { x: spot.x, y: spot.y }];
+  /** 나들이 — 자리 → 문 → 복도 → 목적지 문 → 방 안 통로 → 자리. 라운지(문이 아래)·아래 줄 방(문이 위) 모두 같은 모양. */
+  private pathToHangout(a: AgentDef, h: Hangout): Pt[] {
+    const r = this.roomMeta(a);
+    return [...this.exitPts(a), ...this.corridorRoute(r.doorX, r.corY, h.doorX, h.corY), { x: h.doorX - CX, y: h.laneY }, { x: h.spot.x, y: h.laneY }, { x: h.spot.x, y: h.spot.y }];
   }
 
   private pathToBriefing(a: AgentDef, spot: Spot): Pt[] {
-    const { doorX, corY } = this.zoneMeta(a);
-    return [...this.exitPts(a), ...this.corridorRoute(doorX - 10, corY, 700, 686), { x: 700, y: 815 }, { x: spot.x, y: 815 }, { x: spot.x, y: spot.y }];
+    const r = this.roomMeta(a);
+    return [...this.exitPts(a), ...this.corridorRoute(r.doorX, r.corY, BRIEF_DOOR_X, COR_B), { x: BRIEF_DOOR_X - CX, y: BRIEF_LANE }, { x: spot.x, y: BRIEF_LANE }, { x: spot.x, y: spot.y }];
+  }
+
+  /** 팀장 현장 순회 — 팀장 자리에서 대상의 방 문 안쪽까지. */
+  private pathToVisit(lead: AgentDef, target: AgentDef): Pt[] {
+    const rl = this.roomMeta(lead), rt = this.roomMeta(target);
+    return [...this.exitPts(lead), ...this.corridorRoute(rl.doorX, rl.corY, rt.doorX, rt.corY), { x: rt.doorX - CX, y: rt.insideY }];
+  }
+
+  /** 걷기 경로에 쓸 사람 정의 — 기본 12인, 팀장, 추가 인원. */
+  private defOf(id: string): AgentDef | null {
+    const a = this.AGENTS.find(x => x.id === id);
+    if (a) return a;
+    if (id === 'lead') return { id: 'lead', name: this.T.names.lead, role: this.T.roles.lead, dept: 'lead', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' };
+    const c = this.custom.find(x => x.id === id);
+    return c ? { id: c.id, name: c.name, role: c.role, dept: 'ext', hair: '#2A2230', skin: '#EAC49C', hairStyle: 'short', acc: null } : null;
   }
 
   private returnPts(id: string): Pt[] {
@@ -656,7 +901,7 @@ export class OfficeSimulator {
       m.pos = { ...m.seatAbs };
       this.walkLayer.appendChild(m.node);
     }
-    m.node.setAttribute('transform', `translate(${m.pos.x},${m.pos.y})`);
+    m.node.setAttribute('transform', `translate(${m.pos.x},${m.pos.y}) scale(${DS})`);
     m.node.classList.add('walker'); m.node.classList.remove('talking');
     m.path = pts.slice(); m.cb = cb; m.mode = 'walking';
   }
@@ -673,9 +918,9 @@ export class OfficeSimulator {
 
   /* ── 봉투 비행: hive 메일 이벤트(assign/result/approval…)를 책상 사이를 나는 봉투로 보여 준다 ── */
   private seatOf(id: string): Pt | null {
-    if (id === 'jaeha') return { x: 650, y: 80 };           // 재하 = 사장실
+    if (id === 'jaeha') return { x: BOSS.x + 130, y: BOSS.y + 60 }; // 재하 = 사장실
     const m = this.M[id];
-    return m ? { x: m.seatAbs.x + 10, y: m.seatAbs.y + 6 } : null;
+    return m ? { x: m.seatAbs.x + CX, y: m.seatAbs.y + 8 } : null;
   }
 
   private flyEnvelope(fromId: string, toId: string, type: string): void {
@@ -705,7 +950,7 @@ export class OfficeSimulator {
   }
 
   private loungeSocial(): void {
-    const ls = Object.keys(this.M).filter(id => this.M[id].wander && this.M[id].wander.phase === 'linger');
+    const ls = Object.keys(this.M).filter(id => { const w = this.M[id].wander; return !!w && w.phase === 'linger' && w.room === 'lounge'; });
     ls.forEach(id => this.M[id].node.classList.toggle('talking', ls.length >= 2));
   }
 
@@ -725,7 +970,7 @@ export class OfficeSimulator {
           m.pos = { x: m.pos.x + mx, y: m.pos.y + my }; rem = 0;
         }
       }
-      m.node.setAttribute('transform', m.face < 0 ? `translate(${m.pos.x + 20},${m.pos.y}) scale(-1,1)` : `translate(${m.pos.x},${m.pos.y})`);
+      m.node.setAttribute('transform', m.face < 0 ? `translate(${m.pos.x + SW},${m.pos.y}) scale(${-DS},${DS})` : `translate(${m.pos.x},${m.pos.y}) scale(${DS})`);
       if (!m.path.length) {
         m.mode = 'standing';
         m.node.classList.remove('walker');
@@ -734,9 +979,9 @@ export class OfficeSimulator {
       }
     }
     const cs: Pt[] = [];
-    for (const id in this.M) { const m = this.M[id]; if (m.mode === 'walking') cs.push({ x: m.pos.x + 10, y: m.pos.y + 16 }); }
+    for (const id in this.M) { const m = this.M[id]; if (m.mode === 'walking') cs.push({ x: m.pos.x + CX, y: m.pos.y + CY }); }
     this.doors.forEach(d => {
-      const open = cs.some(c => Math.abs(c.x - d.x) < 26 && Math.abs(c.y - d.y) < 30);
+      const open = cs.some(c => Math.abs(c.x - d.x) < 30 && Math.abs(c.y - d.y) < 36);
       d.g.classList.toggle('open', open);
     });
   }
@@ -881,21 +1126,23 @@ export class OfficeSimulator {
     this.opts.onRender();
   }
 
-  /* ── 유휴 직원 라운지 나들이 ── */
+  /* ── 유휴 직원 나들이(라운지 · 자료실 · 통화 부스) ── */
   private maybeWander(dt: number): void {
     const st = this.st;
+    this.syncBooths();
     if (st.phase !== 'working' && st.phase !== 'awaiting') return;
     for (const id in this.M) {
       const m = this.M[id];
       if (m.wander && m.wander.phase === 'linger') {
         m.wander.t += dt * st.speed;
-        if (m.wander.t > 4.5) {
+        if (m.wander.t > (m.wander.room === 'focus' ? 7 : 4.5)) {
           m.wander.phase = 'back';
           this.walk(id, this.returnPts(id), () => this.seatInstant(id));
           this.loungeSocial();
         }
       }
     }
+    this.maybeRounds(dt);
     this.wanderClk += dt * st.speed;
     if (this.wanderClk < this.wanderNext) return;
     this.wanderClk = 0; this.wanderNext = 6 + Math.random() * 6;
@@ -903,16 +1150,56 @@ export class OfficeSimulator {
     const busy = this.externalMode
       ? new Set(Object.keys(this.agentStates).filter(id => this.agentStates[id].state !== 'idle'))
       : new Set(this.SCENARIO[Math.min(st.stage, 5)].workers.map(w => w.id));
-    const wandering = Object.keys(this.M).filter(id => this.M[id].wander).length;
-    if (wandering >= 3) return;
+    const away = Object.keys(this.M).filter(id => this.M[id].wander);
+    if (away.length >= 3) return;
     const cands = this.AGENTS.filter(a => !busy.has(a.id) && this.M[a.id].mode === 'seated');
     if (!cands.length) return;
+    // 이미 누가 가 있거나 가는 자리는 빼고, 가중치(라운지 3 · 자료실 1.6 · 부스 1.4)로 고른다
+    const taken = new Set(away.map(id => this.M[id].wander?.key).filter(Boolean));
+    const free = this.HANGOUTS.filter(h => !taken.has(h.key));
+    if (!free.length) return;
+    let roll = Math.random() * free.reduce((n, h) => n + h.w, 0);
+    const h = free.find(x => (roll -= x.w) < 0) ?? free[free.length - 1];
     const a = cands[Math.floor(Math.random() * cands.length)];
-    const spot = this.LOUNGE_SPOTS[Math.floor(Math.random() * this.LOUNGE_SPOTS.length)];
-    const pts = this.pathToLounge(a, spot);
+    const pts = this.pathToHangout(a, h);
     this.M[a.id].awayPath = pts;
-    this.M[a.id].wander = { phase: 'go', t: 0 };
-    this.walk(a.id, pts, () => { const m = this.M[a.id]; if (m.wander) { m.wander = { phase: 'linger', t: 0 }; this.loungeSocial(); } });
+    this.M[a.id].wander = { phase: 'go', t: 0, room: h.room, key: h.key, booth: h.booth };
+    this.walk(a.id, pts, () => {
+      const m = this.M[a.id];
+      if (!m.wander) return;
+      m.wander = { ...m.wander, phase: 'linger', t: 0 };
+      if (h.room === 'focus') m.node.classList.add('talking');   // 부스 안에서 통화 중
+      else this.loungeSocial();
+    });
+  }
+
+  /** 통화 부스 표시등 — 부스 안에 머무는 사람이 있으면 빨강, 아니면 초록(바뀔 때만 칠한다). */
+  private syncBooths(): void {
+    this.boothLeds.forEach((led, i) => {
+      const busy = Object.keys(this.M).some(id => { const w = this.M[id].wander; return !!w && w.booth === i && w.phase === 'linger'; });
+      if (busy === this.boothBusy[i]) return;
+      this.boothBusy[i] = busy;
+      led.setAttribute('fill', busy ? '#D0684A' : '#7FE3A6');
+    });
+  }
+
+  /** 팀장 현장 순회 — 일하는 사람이 있으면 16~26초마다 한 명의 방 앞까지 걸어가 들여다보고 돌아온다(머무는 시간은 라운지 나들이와 같다). */
+  private maybeRounds(dt: number): void {
+    this.roundsClk += dt * this.st.speed;
+    if (this.roundsClk < this.roundsNext) return;
+    this.roundsClk = 0; this.roundsNext = 16 + Math.random() * 10;
+    const lm = this.M.lead;
+    const lead = this.defOf('lead');
+    if (!lm || !lead || lm.mode !== 'seated' || lm.wander) return;
+    const working = Object.keys(this.agentStates).filter(id => id !== 'lead' && this.agentStates[id].state === 'working' && this.M[id] && this.M[id].mode === 'seated');
+    if (!working.length) return;
+    const target = this.defOf(working[Math.floor(Math.random() * working.length)]);
+    if (!target) return;
+    const pts = this.pathToVisit(lead, target);
+    lm.awayPath = pts;
+    lm.wander = { phase: 'go', t: 0 };
+    this.walk('lead', pts, () => { if (lm.wander) { lm.wander = { phase: 'linger', t: 0 }; lm.node.classList.add('talking'); } });
+    this.feedAdd(lead.name, this.T.feed.rounds(target.name));
   }
 
   private tick(): void {
@@ -1041,7 +1328,37 @@ export class OfficeSimulator {
     if (id) this.svg.querySelector('#sp-' + id)?.classList.add('selected');
   }
 
+  /** 실제(hive) 상태: 서 있거나 걷는 사람을 자리로 돌려보낸다 — 앞 브리핑의 '모두 모임'이 다음 브리핑까지 남지 않게. */
+  private returnAllToSeats(keepWander = false): void {
+    for (const id in this.M) {
+      const m = this.M[id];
+      if (m.mode === 'seated' || (keepWander && m.wander)) continue; // 라운지 나들이·현장 순회는 그대로 둔다
+      m.wander = null;
+      if (m.awayPath && m.mode === 'standing') this.walk(id, this.returnPts(id), () => this.seatInstant(id));
+      else this.seatInstant(id);
+    }
+  }
+
+  /** 실제(hive) 상태의 분해 단계 — 팀장이 회의실 탁자 가운데로 가서 브리핑을 나눈다(데모 직원 대신). */
+  private leadToMeeting(): void {
+    const lead = this.defOf('lead'), lm = this.M.lead;
+    if (!lead || !lm) return;
+    const spot = this.MEET_SPOTS[this.MEET_SPOTS.length - 1];
+    const rl = this.roomMeta(lead);
+    const pts: Pt[] = [...this.exitPts(lead), ...this.corridorRoute(rl.doorX, rl.corY, MEET_DOOR_X, COR_B), { x: MEET_DOOR_X - CX, y: MEET_LANE_TOP }, { x: spot.x, y: MEET_LANE_TOP }, { x: spot.x, y: spot.y }];
+    lm.awayPath = pts;
+    lm.wander = null;
+    this.walk('lead', pts, () => lm.node.classList.add('talking'));
+  }
+
   private driveExternalPhase(phase: Phase, workers: Worker[]): void {
+    if (phase === 'meeting' && this.hive) {
+      this.AGENTS.forEach(a => this.setAgent(a.id, 'idle', ''));
+      this.returnAllToSeats();
+      this.leadToMeeting();
+      return;
+    }
+    if (this.hive && (phase === 'working' || phase === 'awaiting')) this.returnAllToSeats(true);
     if (phase === 'meeting') {
       this.AGENTS.forEach(a => this.setAgent(a.id, 'idle', ''));
       workers.forEach(w => { if (this.M[w.id].mode !== 'seated') this.seatInstant(w.id); });

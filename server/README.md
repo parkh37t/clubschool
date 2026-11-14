@@ -52,6 +52,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `OFFICE_AGENT_DAILY_USD` | 5 | 에이전트 1명의 하루 예산 기본값(80% 제한 · 100% 중지). 모니터 탭에서 변경 |
 | `OFFICE_MOCK_COST_USD` | 0 | (mock 시험용) 작업 1건이 쓴 것처럼 볼 비용. 상한보다 크면 '상한 초과' 승인 카드가 뜬다. 사용량 합계에는 넣지 않음 |
 | `OFFICE_MOCK_QUESTION` | (없음) | (mock 시험용) `1` 이면 역할 에이전트가 회신에 "재하에게 질문"을 한 줄 넣는다 |
+| `OFFICE_MOCK_QA_FAIL` | (없음) | (mock 시험용) `once` 면 첫 실행만 본문이 빈 산출물을 써서 QA FAIL → 보완 재작업은 정상, `always` 면 보완 뒤에도 FAIL |
 
 경로 계산은 `paths.mjs` 한 곳에 있습니다. 원장(`tasks.json`)의 `output`·`docx`, 첨부 경로는 산출물 폴더 기준 상대경로('/' 구분)입니다.
 
@@ -68,7 +69,10 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `POST /api/instruct` | 브리핑 양식 `{title, result, context, constraints[], question_policy, deadline, attachments, gates?}` → 202 `{queued, position}`. 대기열에 넣고 차례가 오면 실행. 구 지시(`goal`·`brief`·`gates`)도 받는다 |
 | `GET /api/queue` · `POST /api/queue` · `DELETE /api/queue/:id` | 팀장 대기열 보기 / 메시지 넣기 `{text}` / 아직 대기 중인 항목 취소. POST·DELETE 는 이 PC 화면에서 온 요청만 |
 | `GET /api/questions` · `POST /api/questions/:id/answer` | "나에게 질문" 목록 / 답하기 `{answer, by}`(by 없으면 400). 팀장 질문의 답은 대기열 메시지로, 역할 에이전트 질문의 답은 그 사람 편지함으로 |
-| `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산 `{lang, max_task_usd, agent_daily_usd}`. 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만 |
+| `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산·QA 반려 시 자동 보완 `{lang, max_task_usd, agent_daily_usd, auto_revise}`. 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만 |
+| `GET /api/mail?limit=80&agent=` | 대화 탭 — 받은 편지함(`inbox/<사람>/`)·처리한 편지(`.done/`)·아직 옮기지 않은 outbox 의 메시지를 최근순으로 `{messages:[{id, from, to, type, task, ts, body, truncated}]}`. 같은 id 는 한 번만. `agent` 가 있으면 그 사람이 보내거나 받은 것만(없는 사람은 404). 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'. 읽기 전용 |
+| `GET /api/templates?lang=` · `POST /api/templates` · `DELETE /api/templates/:id` | 브리핑 템플릿 — 기본 6개(코드, 한·영. `lang` 이 없으면 설정 언어) + 사용자 저장(`templates.json`, 최대 30개) / 저장 `{title, result, context?, constraints?}`(과제명·결과 필수) / 사용자 템플릿 삭제(기본은 400, 없으면 404). POST·DELETE 는 이 PC 화면에서만 |
+| `GET /api/env` | 환경 점검 `{mode, cli:{found, version, path}, loggedIn, checked_at}` — `claude --version`·`claude auth status` 중 로그인 여부만(계정 메일·조직 정보는 버림). 실행 파일 경로의 사용자 폴더는 `~` 로 줄임. 30초 기억, `?refresh=1` 은 3초에 한 번까지 다시 확인하고 `/api/auth` 기억도 함께 맞춘다 |
 | `GET /api/agents/templates` · `POST /api/agents` · `DELETE /api/agents/:id` | 역할 템플릿 12종 / 템플릿으로 인원 추가 `{template, name, name_en}`(최대 6명) / 빼기(진행·대기 작업이 있으면 409). POST·DELETE 는 이 PC 화면에서만 |
 | `GET /api/breakers` · `POST /api/breakers/:agent/reset` | 서킷 브레이커 단계 / 재하가 초기화 `{by, reason}`(둘 다 필수) |
 | `GET /api/triggers` · `POST /api/triggers` · `POST /api/triggers/:id` · `POST /api/triggers/:id/run` · `DELETE /api/triggers/:id` | 예약 목록 / 추가 `{title, schedule:{kind:weekly\|daily\|once, time:'HH:MM', days?, date?}, briefing:{result, context?, constraints?}}` / 켜기·끄기 `{enabled}`·내용 변경 / 지금 실행 / 삭제. 결과 줄이 없으면 400. 바꾸는 요청은 이 PC 화면에서만 |
@@ -135,6 +139,11 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
   역할 에이전트는 최근 산출물 과제 폴더에서). 재하가 직접 입력하는 세션이므로 Claude Code 의 평소 권한 확인을 그대로 거칩니다.
 
 - 결과 줄이 비어 있으면 팀장은 나누지 않고 `inbox/jaeha` 에 되묻습니다(`question`).
+- **QA 반려 시 1회 자동 보완(reflection)**: 작업이 QA FAIL 이면 같은 담당에게 QA 지적(issues·summary)을 붙여 **한 번만** 다시 실행하고 다시 판정합니다.
+  두 번째도 FAIL 이면 지금처럼 실패로 닫습니다. 서킷 브레이커 `qa_fail` 은 최종 결과에서만 1회 셉니다. 보완 실행의 상한은 원래 작업 상한 그대로이고
+  두 번 쓴 비용은 `cost_usd`(QA 는 `qa.cost_usd`)에 더해집니다. 작업 레코드에 `revised: 1`·`revise`(지적·요약·앞 산출물)가 남고, 실시간 기록(`k: revise`)·
+  events(`kind: revise`)·보고서 표(`보완 1회`)에 표시됩니다. CLI 없음·로그인 풀림·그 밖의 QA 검토 오류(판정 자체가 실패)는 보완하지 않습니다.
+  모니터 탭의 [QA 반려 시 1회 자동 보완] 체크박스(`settings.json` 의 `auto_revise`, 기본 켜짐)로 끕니다. 보완 중 비용 상한으로 멈췄다가 승인으로 다시 돌면 지적을 이어 붙이고 더 보완하지 않습니다.
 - **QA 기계 검사**: 파일 있음 · 본문이 비지 않음(제목 줄 빼고 20자 이상) · 분량 하한(200자) · 제목(#) · 목업 표시 없음.
   브리핑 결과·제약이나 작업 완료 기준에 짧은 형식 요청('3줄'·'한 줄'·'5문장 이내'·'200자 이내'·'짧게' — 줄·문장 10, 단어 60, 글자 300 이하)이 있으면
   분량 하한·제목 검사는 결과만 남기고 게이트 판정에서 뺍니다(로그에 `(참고)`). 판정에 넣는 검사가 fail 이면 내용 검토가 PASS 여도 FAIL 입니다.
@@ -171,12 +180,37 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `live.mjs` | stream-json 사건 → 실시간 기록 줄(`live/`) |
 | `pty.mjs` | 대화형 터미널(node-pty) 세션과 WebSocket 입출력 |
 | `triggers.mjs` | 예약 — 다음 실행 시각 계산, 20초마다 확인해 브리핑 대기열에 넣기, 꺼져 있던 동안의 놓침 처리(`triggers.json`) |
+| `templates.mjs` | 브리핑 템플릿 — 기본 6개(RFP 검토·제안서 초안·주간 보고·회의록·경쟁사 벤치마킹·화면설계 초안, 한·영)와 사용자 템플릿(`templates.json`, 최대 30개) |
 
 ## 산출물
 
 - `<산출물 폴더>/<과제>/<단계>/T-0001_<담당>_<작업>.md` (+ `.docx`), `briefing.json`, `_index.md`(= 보고서). 기본 산출물 폴더는 `DELIVERABLES/`.
 - 단계 폴더는 SI Lifecycle 의 번호를 따릅니다: `00_sales 01_rfp 02_requirements 03_proposal 04_rebaseline 05_plan 06_design 07_publish 08_test_scenario 09_test_run 10_growth`.
 - 앞 산출물은 뒤 작업의 assign 메시지에 경로로 붙어 이어집니다.
+
+## 제안서 작성 프로세스 (`proposal.mjs`)
+
+결과 줄이 제안서(작성·초안·발표자료)인 브리핑은 팀장의 자유 분해 대신 **표준 제안 프로세스**로 나눕니다(모델 호출 없음).
+'제안서 검수'처럼 이미 있는 제안서를 보는 일, RFP 검토만 하는 일은 해당하지 않습니다. 브리핑에 `process: 'free'` 를 주면 쓰지 않고,
+`process: 'proposal'` 이면 항상 씁니다.
+
+| # | 단계 | 담당 | 산출 폴더 | 스킬('a|b' = a 없으면 b) | 승인 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 제안 조사 — 고객·경쟁·페인포인트 | 김영업 | 00_sales | competitor-benchmark, strategy-proposal-analyzer | |
+| 2 | RFP 분석 — 요구·평가 대응표와 Go/No-Go | 한도전 | 01_rfp | rfp-analysis, wylie-proposal\|proposal-writing | **Go/No-Go** |
+| 3 | 제안 전략 — 승부 메시지·스토리·목차 | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | |
+| 4 | UX·디자인 제안 섹션 *(화면·서비스 과제일 때)* | 차도안 | 03_proposal | proposal-skills, wylie-proposal-visual\|ui-review | |
+| 5 | 성과 지표(KPI) 설계 *(성과·지표 언급 시)* | 고지표 | 03_proposal | kpi-event-tracking | |
+| 6 | 장표 구성안·근거표(구조 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, wylie-proposal-visual | |
+| 7 | 제안서 본문(본문 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | 견적·인력 수치가 걸리면 **수치확정** |
+| 8 | 제안서 검수(정합 단계) | 고지표 | 03_proposal | wylie-proposal-review\|proposal-review | |
+
+- 단계별 스킬은 작업 원장(`tasks.json`)의 `skills` 에 남고, 실행기는 이 값이 있으면 담당의 기본 스킬 대신 씁니다. `process: 'proposal'`·`step` 도 함께 남습니다.
+- Go/No-Go 승인 전에는 3단계 이후가 시작되지 않습니다(반려하면 보류). 6단계는 3·4·5단계가 모두 끝나야 시작합니다.
+- **고객사 전용 제안 스킬** — 사용자 스킬 폴더(`~/.claude/skills`, 동기화 폴더 포함)의 `<고객>-…-proposal` 가운데 브리핑에 그 고객사가 나오면
+  (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 한도전 단계(2·3·6·7)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
+- 사내 제안 스킬이 없는 PC 에서는 저장소의 공용 스킬(`proposal-writing`·`rfp-analysis`·`proposal-review`)로 대체됩니다. 공용 스킬은 사내 방법론을 옮기지 않고 일반 원칙으로 썼습니다.
+- `claude_code` 모드에서는 시작 전에 CLI·로그인을 확인하고, 없으면 브리핑을 시작하지 않습니다(분해에 모델을 쓰지 않아도 같은 규칙).
 
 ## 스킬 연결 (업무 지침서)
 
@@ -185,15 +219,16 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 
 | 게이트 | 작업(순서대로) | 스킬 |
 | --- | --- | --- |
-| G1 영업/평가 | 김영업 · 고객·경쟁 조사 | competitor-benchmark |
+| G1 영업/평가 | 김영업 · 고객·경쟁 조사 | competitor-benchmark, strategy-proposal-analyzer |
 | | 한도전 · RFP 분석·제안 전략 | rfp-analysis, **wylie-proposal**(없으면 proposal-writing), **wylie-proposal-visual** |
-| | 한도전 · 제안 품질 검수 | **wylie-proposal-review** — 이 스킬이 없으면 이 작업은 건너뜀 |
+| | 한도전 · 제안 품질 검수 | **wylie-proposal-review**(없으면 proposal-review) |
 | G2 기획 | 정우선 · PRD 초안 / 나기획 · IA·플로우 | product-strategy, **ba-agent** / ia-flow-design |
 | G3 디자인 | 오색감 · 브랜드 / 차도안 · UI 시안 | brand-guideline / design-system-build, ui-review |
 | G4 구현 | 이풍뎅 · 인터랙션 (나머지는 스킬 없음) | accessibility-audit |
 | G5 검증 / G6 그로스 | 고지표 · QA·지표 / 홍보라 · 런칭 캠페인 | kpi-event-tracking / landing-copywriting |
 
-- **굵게 표시한 사내 스킬**(`wylie-*`, `ba-agent`, `proposal-maker`)은 회사 내부 자산이라 **공개 저장소에 올리지 않습니다**(`.gitignore`).
+- 제안서 브리핑은 위 '제안서 작성 프로세스'의 단계별 스킬이 우선합니다.
+- **굵게 표시한 사내 스킬**(`wylie-*`, `ba-agent`, `proposal-maker`, `proposal-skills`, `strategy-proposal-analyzer`, 고객사 전용 `*-proposal`)은 회사 내부 자산이라 **공개 저장소에 올리지 않습니다**(`.gitignore`).
   각 PC의 `.claude/skills/<이름>/` 에 직접 두거나, Claude 계정 동기화 폴더(`~/.claude/skills/synced/…`)에 있으면 자동으로 씁니다.
   없으면 공용 스킬로 대체되거나 건너뛰고, 그 사실을 로그와 목업 산출물에 남깁니다.
 - 이 대시보드 저장소 전용 내용이 담긴 스킬(frontend-implementation·api-design·db-modeling·quality-gate·service-planning)은

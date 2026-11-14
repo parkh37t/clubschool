@@ -42,6 +42,7 @@ function formatLine(l: LiveLine, t: TFn): string {
     case 'approval': return `${time}${C.yellow}◆ ${t('tl.approval')} ${l.text ?? ''}${C.reset}`;
     case 'approval_done': return `${time}${l.text === 'approved' ? C.green : C.red}◆ ${t('tl.approval_done')} ${l.text ?? ''}${C.reset}`;
     case 'budget_stop': return `${time}${C.red}■ ${t('tl.budgetText', { cap: Number(l.cap ?? 0).toFixed(2), msg: l.text ?? '' })}${C.reset}`;
+    case 'revise': return `${time}${C.yellow}↻ ${t('tl.revise')}${C.reset} ${C.dim}${body(l.text).slice(0, 200)}${C.reset}`;
     case 'done': return `${time}${C.green}✓ ${t('tl.done')}${C.reset}`;
     case 'user_msg': return `${time}${C.pink}${t('tl.user_msg')} ›${C.reset} ${body(l.text)}`;
     case 'briefing_queued': return `${time}${C.magenta}◆ ${t('tl.briefing_queued')} ${l.text ?? ''}${C.reset}`;

@@ -47,7 +47,21 @@ export interface LiveLine {
   cost?: number; turns?: number; cap?: number; level?: string; gate?: string; agent?: string; task?: string;
 }
 
-export interface OfficeSettings { lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; leader_session: boolean; }
+/** auto_revise — QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(server/orchestrator.mjs) */
+export interface OfficeSettings { lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; auto_revise: boolean; leader_session: boolean; }
+
+/** 대화 탭 — 에이전트끼리 주고받은 메시지(GET /api/mail). 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'. 최신순 */
+export interface MailMessage { id: string; from: string; to: string; type: string; task: string; ts: string; body: string; truncated: boolean; }
+export interface MailResponse { messages: MailMessage[]; agent: string; limit: number; }
+
+/** 브리핑 템플릿 — 기본 6개(server/templates.mjs, 한·영) + 사용자 저장(hive/templates.json, 최대 30개) */
+export interface BriefingTemplate { id: string; title: string; result: string; context: string; constraints: string[]; builtin: boolean; by?: string; created?: string; steps?: string[]; }
+export interface TemplatesResponse { templates: BriefingTemplate[]; max: number; lang: string; }
+/** 입력창 채우기 — nonce 가 바뀔 때마다 브리핑 양식에 한 번 채운다(보내기는 사람이 누른다) */
+export interface BriefingPrefill { nonce: number; title: string; result: string; context: string; constraints: string[]; }
+
+/** 환경 점검(GET /api/env) — 계정 정보 없이 CLI 유무·버전·실행 파일(사용자 폴더는 ~)·로그인 여부만. loggedIn=null 은 확인 불가 */
+export interface EnvState { mode: string; cli: { found: boolean; version: string | null; path: string }; loggedIn: boolean | null; checked_at: string; }
 
 /** 예약(트리거) — 시각이 되면 브리핑을 대기열에 넣는다. 요일 0=일 … 6=토. 시각은 PC 현지 시각. */
 export interface TriggerSchedule { kind: 'weekly' | 'daily' | 'once'; time: string; days?: number[]; date?: string; }
