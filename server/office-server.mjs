@@ -480,6 +480,7 @@ const server = http.createServer(async (req, res) => {
       const text = String(body?.text || '').trim();
       if (!text) { sendJson(res, 400, { error: '메시지가 비어 있습니다.' }); return; }
       const item = await enqueue({ kind: 'message', text, by: OWNER.id });
+      if (item.duplicate) { log(`대기열: 같은 메시지 중복 — ${item.id} 그대로 둠`); sendJson(res, 200, { accepted: true, duplicate: true, item }); return; }
       log(`대기열: ${item.id} 팀장에게 메시지`);
       sendJson(res, 202, { accepted: true, item });
       return;
@@ -748,6 +749,11 @@ const server = http.createServer(async (req, res) => {
       }
       // 실행 중이어도 거절하지 않고 대기열에 넣는다(Munder Difflin QUEUE). 앞 브리핑이 끝나면 차례로 돈다.
       const item = await enqueue({ kind: 'briefing', briefing: instruction, by: OWNER.id });
+      if (item.duplicate) {
+        log(`대기열: 같은 브리핑 중복 — ${item.id} "${instruction.title}" 그대로 둠`);
+        sendJson(res, 200, { accepted: true, duplicate: true, queued: item.id, status: item.status, title: instruction.title });
+        return;
+      }
       const q = await loadQueue();
       const position = q.items.filter((i) => i.kind === 'briefing' && i.status === 'queued').findIndex((i) => i.id === item.id) + 1;
       log(`대기열: ${item.id} 브리핑 "${instruction.title}" (대기 ${position}번째${running() ? ', 앞 브리핑 실행 중' : ''})`);

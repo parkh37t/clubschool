@@ -39,10 +39,32 @@ export async function loadQueue() {
   return load();
 }
 
+// 같은 내용을 몇 초 사이에 두 번 넣는 것(보내기 두 번 누름·Enter 반복)은 실수로 본다.
+// 앞 항목이 아직 대기·실행 중이고 이 시간 안이면 새로 넣지 않고 그 항목을 돌려준다(duplicate: true).
+export const DUP_WINDOW_MS = 30_000;
+const norm = (v) => String(v ?? '').trim();
+function signature(kind, text, briefing) {
+  if (kind === 'message') return `m:${norm(String(text ?? '').slice(0, 8000))}`;
+  const b = briefing || {};
+  return `b:${JSON.stringify([
+    norm(b.title), norm(b.result || b.goal), norm(b.context || b.brief),
+    (Array.isArray(b.constraints) ? b.constraints : []).map(norm),
+    (Array.isArray(b.attachments) ? b.attachments : []).map((a) => norm(a?.path)),
+  ])}`;
+}
+
 /** 대기열에 넣는다. kind: 'message'(팀장에게) | 'briefing'(바로 실행할 브리핑) */
 export function enqueue({ kind, text, briefing, by = OWNER.id, source = '' }) {
   return lock(async () => {
     const q = await load();
+    const sig = signature(kind, text, briefing);
+    const now = Date.now();
+    const dup = q.items.find((i) => i.kind === kind && (i.status === 'queued' || i.status === 'running')
+      && now - Date.parse(i.created) < DUP_WINDOW_MS && signature(i.kind, i.text, i.briefing) === sig);
+    if (dup) {
+      await hive.appendEvent({ kind: 'queue', id: dup.id, item_kind: kind, status: dup.status, by, note: '같은 내용 중복 접수 — 새로 넣지 않음' });
+      return { ...dup, duplicate: true };
+    }
     q.seq += 1;
     const item = {
       id: `L-${String(q.seq).padStart(4, '0')}`, seq: q.seq, kind, by, source,

@@ -96,6 +96,8 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill, o
   const [status, setStatus] = useState('');
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // 보내는 중 표시를 ref 로도 둔다 — busy(state)는 다음 그리기 전까지 안 바뀌어, 같은 틈에 들어온 두 번째 Enter·클릭을 막지 못한다.
+  const inFlight = useRef(false);
 
   // 템플릿 채우기 — 같은 nonce 는 한 번만(언어를 바꿔 t 가 바뀌어도 사람이 고친 내용을 덮지 않게).
   const filledNonce = useRef(0);
@@ -226,13 +228,20 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill, o
     try {
       const res = await fetch(`${apiBase}/api/queue`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) { say(true, t('bc.queued', { id: data.item?.id ?? '' })); setMessage(''); onQueued?.(); }
+      if (res.ok) { say(true, t(data.duplicate ? 'bc.dupMsg' : 'bc.queued', { id: data.item?.id ?? '' })); setMessage(''); onQueued?.(); }
       else say(false, t('bc.failed', { s: res.status, e: data.error || '' }));
     } catch {
       say(false, t('bc.error'));
     } finally {
       setBusy(false);
     }
+  };
+
+  const clearForm = () => {
+    setTitle(''); setResult(''); setContext(''); setConstraints(''); setPolicy('');
+    setGates([false, false, false, false, false, false]);
+    setOpen(false);
+    setAttachments([]);
   };
 
   const sendBriefing = async () => {
@@ -257,8 +266,12 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill, o
       if (instructUrl) {
         const res = await fetch(instructUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json });
         const data = await res.json().catch(() => ({}));
-        if (res.ok) { say(true, t('bc.queuedBrief', { id: data.queued ?? '', pos: data.position ?? 1 })); setAttachments([]); onQueued?.(); }
-        else say(false, t('bc.failed', { s: res.status, e: data.error || '' }));
+        if (!res.ok) { say(false, t('bc.failed', { s: res.status, e: data.error || '' })); return; }
+        // 접수되면 양식을 비운다 — 내용이 남아 있으면 '안 갔나?' 싶어 한 번 더 눌러 같은 브리핑이 두 번 들어간다.
+        clearForm();
+        onQueued?.();
+        if (data.duplicate) { say(true, t('bc.dupBrief', { id: data.queued ?? '' })); return; }
+        say(true, t('bc.queuedBrief', { id: data.queued ?? '', pos: data.position ?? 1 }));
       } else {
         try { await navigator.clipboard.writeText(json); } catch { /* clipboard 권한/https 아님 → 다운로드로 대체 */ }
         const blob = new Blob([json], { type: 'application/json' });
@@ -290,7 +303,15 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill, o
   };
 
   const canSend = !busy && (mode === 'message' ? Boolean(message.trim()) : Boolean(title.trim() && result.trim()));
-  const submit = () => { if (busy) return; if (mode === 'message') sendMessage(); else sendBriefing(); };
+  const submit = async () => {
+    if (busy || inFlight.current) return;
+    inFlight.current = true;
+    try {
+      if (mode === 'message') await sendMessage(); else await sendBriefing();
+    } finally {
+      inFlight.current = false;
+    }
+  };
 
   // 입력칸 자동 높이 — 글이 늘면 커지고 상한을 넘으면 안에서 스크롤
   const msgRef = useRef<HTMLTextAreaElement>(null);
