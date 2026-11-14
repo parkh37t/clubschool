@@ -119,6 +119,19 @@ function runPy(kit, args, { timeoutMs = 120000 } = {}) {
 
 const packDir = (kit, id) => path.join(kit, 'packs', id);
 
+// 팩 파일(pack.json·nav.config.js·index.html)을 고치는 일은 팩마다 한 번에 하나씩 한다.
+// ③ 빌더 둘이 동시에 new_screen.py 를 돌리면 두 프로세스가 pack.json 을 함께 덮어써 짧은 쪽 뒤에 긴 쪽의 끝이 남는다
+// (2026-11-14 demo 팩에서 실제로 깨져 ③ 두 작업이 V02 'pack.json 해석 실패'로 FAIL). 서버가 하는 쓰기는 전부 이 잠금 안에서.
+const packLocks = new Map();
+export function withPackLock(dir, fn) {
+  const key = path.resolve(dir).toLowerCase();
+  const run = (packLocks.get(key) || Promise.resolve()).then(() => fn());
+  const tail = run.catch(() => {});
+  packLocks.set(key, tail);
+  tail.then(() => { if (packLocks.get(key) === tail) packLocks.delete(key); });
+  return run;
+}
+
 async function readJson(file) {
   const raw = await fs.readFile(file, 'utf8');
   return JSON.parse(raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw); // 메모장 BOM
@@ -274,7 +287,7 @@ export async function planningBefore(task, { tasks, log = () => {} }) {
   const kit = await kitStatus();
   if (!kit.ok) return { context: '', addDirs: [], files: [], error: kit.error };
   const id = task.pack;
-  const { dir, created } = await ensurePack(kit.dir, id);
+  const { dir, created } = await withPackLock(packDir(kit.dir, id), () => ensurePack(kit.dir, id));
   if (created) log(`기획 팩 생성: packs/${id} (packs/_template 복사)`);
   const rel = (p) => p.split(path.sep).join('/');
   const files = { pack: rel(path.join(dir, 'pack.json')), rules: rel(path.join(dir, '규칙.md')), ia: rel(path.join(dir, 'IA.md')), guide: rel(path.join(dir, '작업가이드.md')), nav: rel(path.join(dir, 'nav.config.js')), readme: rel(path.join(dir, 'readme')), screens: rel(path.join(dir, 'screens')) };
@@ -321,17 +334,20 @@ export async function planningBefore(task, { tasks, log = () => {} }) {
     const pj = await readJson(path.join(dir, 'pack.json')).catch(() => ({}));
     if (pj?.layers?.guide !== 'confirmed') return { addDirs, files: [], context: '', error: '작업가이드가 확정(confirmed)되지 않아 화면을 만들 수 없음 — ② 단계 승인 필요' };
     const made = [];
-    for (const s of mine) {
-      const target = path.join(dir, 'screens', `${s.id}.html`);
-      if (await exists(target)) { made.push({ s, file: target, note: '이미 있음 — 고친다' }); continue; }
-      const args = ['scripts/new_screen.py', id, s.type, s.id, '--title', s.title, '--portal', s.portal, '--menu', s.menu, '--purpose', s.purpose, '--no-lint'];
-      if (s.menu_label) args.push('--menu-label', s.menu_label);
-      if (s.req.length) args.push('--req', s.req.join(','));
-      if (s.hidden || ['detail', 'form', 'detail-m'].includes(s.type)) args.push('--hidden');
-      const r = await runPy(kit.dir, args);
-      if (r.code === 0 && await exists(target)) made.push({ s, file: target, note: '뼈대 생성' });
-      else problems.push(`${s.id}: 뼈대 생성 실패(종료 ${r.code}) ${(r.stderr || r.stdout || r.error?.message || '').trim().split('\n').slice(-2).join(' ').slice(0, 200)}`);
-    }
+    // new_screen.py 는 pack.json·nav.config.js 에 화면을 등록한다 — 다른 빌더와 겹치지 않게 팩 잠금 안에서 차례로
+    await withPackLock(dir, async () => {
+      for (const s of mine) {
+        const target = path.join(dir, 'screens', `${s.id}.html`);
+        if (await exists(target)) { made.push({ s, file: target, note: '이미 있음 — 고친다' }); continue; }
+        const args = ['scripts/new_screen.py', id, s.type, s.id, '--title', s.title, '--portal', s.portal, '--menu', s.menu, '--purpose', s.purpose, '--no-lint'];
+        if (s.menu_label) args.push('--menu-label', s.menu_label);
+        if (s.req.length) args.push('--req', s.req.join(','));
+        if (s.hidden || ['detail', 'form', 'detail-m'].includes(s.type)) args.push('--hidden');
+        const r = await runPy(kit.dir, args);
+        if (r.code === 0 && await exists(target)) made.push({ s, file: target, note: '뼈대 생성' });
+        else problems.push(`${s.id}: 뼈대 생성 실패(종료 ${r.code}) ${(r.stderr || r.stdout || r.error?.message || '').trim().split('\n').slice(-2).join(' ').slice(0, 200)}`);
+      }
+    });
     log(`기획 뼈대: ${made.map((m) => m.s.id).join(', ') || '없음'}${problems.length ? ` · 문제 ${problems.length}건` : ''}`);
     if (!made.length) return { addDirs, files: [], context: '', error: `화면 뼈대를 만들지 못함 — ${problems.join(' / ')}` };
     const planFiles = made.map((m) => path.relative(kit.dir, m.file).split(path.sep).join('/'));
@@ -348,7 +364,7 @@ export async function planningBefore(task, { tasks, log = () => {} }) {
   if (task.step === 'review' || task.step === 'handoff') {
     const mine = tasks.filter((t) => t.briefing === task.briefing && t.step === 'build').flatMap((t) => t.plan_files || []);
     const v = await verifyFiles(kit.dir, mine.map((f) => path.join(kit.dir, f)));
-    const idx = await runPy(kit.dir, ['scripts/pack_index.py', id]).catch(() => null);
+    const idx = await withPackLock(dir, () => runPy(kit.dir, ['scripts/pack_index.py', id])).catch(() => null);
     const pj = await readJson(path.join(dir, 'pack.json')).catch(() => ({}));
     const reg = (pj.screens || []).map((s) => `| ${s.id} | ${s.title || ''} | ${s.type || ''} | ${(s.req || []).join(', ') || '미연결'} | ${s.status || ''} |`);
     return { addDirs, files: [], context: [...head, '',
@@ -386,10 +402,12 @@ export async function planningOnApproved(task, { log = () => {} } = {}) {
   if (!kit.ok) { log(`가이드 확정 반영 못 함 — ${kit.error}`); return; }
   const file = path.join(packDir(kit.dir, task.pack), 'pack.json');
   try {
-    const pj = await readJson(file);
-    pj.layers = { ...(pj.layers || {}), rules: 'confirmed', ia: 'confirmed', guide: 'confirmed' };
-    if (pj.status === 'onboarding') pj.status = 'active';
-    await fs.writeFile(file, JSON.stringify(pj, null, 2) + '\n', 'utf8');
+    await withPackLock(path.dirname(file), async () => {
+      const pj = await readJson(file);
+      pj.layers = { ...(pj.layers || {}), rules: 'confirmed', ia: 'confirmed', guide: 'confirmed' };
+      if (pj.status === 'onboarding') pj.status = 'active';
+      await fs.writeFile(file, JSON.stringify(pj, null, 2) + '\n', 'utf8');
+    });
     log(`기획 팩 ${task.pack}: 규칙·IA·작업가이드 confirmed (승인 ${task.id})`);
   } catch (e) {
     log(`가이드 확정 반영 실패(${task.pack}): ${e.message}`);
@@ -402,11 +420,13 @@ export async function mockClarifyBlock(task) {
   if (!kit.ok || !task.pack) return '';
   const file = path.join(packDir(kit.dir, task.pack), 'pack.json');
   try {
-    const pj = await readJson(file);
-    if (!pj.prefix) {
-      Object.assign(pj, { prefix: 'mck', name: pj.name || '목업 시험 팩', portals: { admin: { name: '관리자', segment: 'admin' } } });
-      await fs.writeFile(file, JSON.stringify(pj, null, 2) + '\n', 'utf8');
-    }
+    await withPackLock(path.dirname(file), async () => {
+      const pj = await readJson(file);
+      if (!pj.prefix) {
+        Object.assign(pj, { prefix: 'mck', name: pj.name || '목업 시험 팩', portals: { admin: { name: '관리자', segment: 'admin' } } });
+        await fs.writeFile(file, JSON.stringify(pj, null, 2) + '\n', 'utf8');
+      }
+    });
   } catch {
     return '';
   }
