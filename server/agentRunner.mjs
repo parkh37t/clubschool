@@ -404,6 +404,8 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   const extraLeft = [];
   let { file, note } = await findOutput();
   if (note) extraLeft.push(note);
+  // 마지막 응답이 길이 상한에서 잘렸다 — 회신(남은 제한·질문)이 빠졌을 수 있으니 사실대로 남긴다
+  if (r.truncated) { extraLeft.push('마지막 응답이 길이 상한에서 잘림 — 회신 일부가 빠졌을 수 있음'); log(`${name}: 마지막 응답이 길이 상한에서 잘림`); }
   if (!file) {
     file = expected;
     await fs.writeFile(expected, (r.text || `# ${task.title}\n(산출 텍스트 없음)`) + '\n', 'utf8');

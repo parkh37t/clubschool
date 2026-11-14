@@ -17,12 +17,12 @@ import { promises as fs } from 'node:fs';
 import { readState, writeState, clearState } from './state.mjs';
 import { runBriefing, watchOrphanApprovals } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
-import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren, onRateLimit, probeLimits, failureHint } from './claudeCode.mjs';
+import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren, onRateLimit, probeLimits, failureHint, billingEnvPresent, apiKeyAllowed } from './claudeCode.mjs';
 import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, loadCustomAgents, addCustomAgent, removeCustomAgent, agentById, nameOf } from './roster.mjs';
 import { resolveSkills, registryStatus } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
 import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
-import { kitStatus, listPacks, packDetail, kitFile } from './planning.mjs';
+import { kitStatus, kitGuide, listPacks, packDetail, kitFile } from './planning.mjs';
 import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency } from './settings.mjs';
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
@@ -31,7 +31,7 @@ import { listTriggers, addTrigger, updateTrigger, removeTrigger, runTriggerNow, 
 import { listTemplates, addTemplate, removeTemplate, MAX_TEMPLATES } from './templates.mjs';
 import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
 import { loadPersona } from './agentRunner.mjs';
-import { weighted } from './tokens.mjs';
+import { weighted, knownTokens } from './tokens.mjs';
 
 const MAX_UPLOAD = 25 * 1024 * 1024; // 파일 첨부 상한 25MB
 
@@ -218,6 +218,27 @@ async function skillsByAgent() {
   return data;
 }
 
+// ── 승인 뒤 바뀐 산출물 표시 ──
+// 승인된 작업(approved_hash)의 산출물이 지금 다른 내용이면 approval_stale. 파일 크기·수정 시각이 같으면 다시 해시하지 않는다.
+const staleCache = new Map();
+async function markApprovalStale(tasks) {
+  const out = [];
+  for (const t of tasks) {
+    if (!t.approved_hash || !t.output) { out.push(t); continue; }
+    const abs = absData(t.output);
+    let st = null;
+    try { st = await fs.stat(abs); } catch { /* 파일 없음 */ }
+    const key = st ? `${st.size}:${st.mtimeMs}` : 'missing';
+    let c = staleCache.get(t.id);
+    if (!c || c.key !== key) {
+      c = { key, hash: st ? await hive.fileHash(abs) : null };
+      staleCache.set(t.id, c);
+    }
+    out.push({ ...t, approval_stale: c.hash !== t.approved_hash });
+  }
+  return out;
+}
+
 // ── 화면 위 사용량 막대(/api/usage/top) ──
 // 구독 사용 한도(Claude 가 실행마다 알려 준 주간·5시간 창 사용률), 오늘 사용 토큰(끝난 작업 + 실행 중), 하루 한도에 가까운 담당, 실행 중 작업.
 onRateLimit((info) => hive.recordLimits(info));
@@ -360,7 +381,10 @@ const server = http.createServer(async (req, res) => {
 
     // 오피스가 2초마다 폴링하는 상태. 브리핑 전이면 hive 에서 대기 상태를 만들어 준다.
     if (req.method === 'GET' && url.pathname === '/office-state.json') {
-      sendJson(res, 200, (await readState()) || (await idleState()));
+      const st = (await readState()) || (await idleState());
+      // 승인된 산출물이 그 뒤 바뀌었는지 — 작업 탭이 '승인 뒤 바뀜'으로 보인다
+      if (Array.isArray(st?.hive?.tasks)) st.hive.tasks = await markApprovalStale(st.hive.tasks);
+      sendJson(res, 200, st);
       return;
     }
 
@@ -372,6 +396,7 @@ const server = http.createServer(async (req, res) => {
     // hive 스냅샷 — 작업 원장·승인 큐·메일 이벤트·현황판.
     if (req.method === 'GET' && url.pathname === '/api/hive') {
       const snap = await hive.snapshot({ events: 60 });
+      snap.tasks = await markApprovalStale(snap.tasks);
       sendJson(res, 200, { ...snap, blackboard: await hive.readBlackboard(), mode: MODE, running: running() });
       return;
     }
@@ -400,7 +425,9 @@ const server = http.createServer(async (req, res) => {
     // 로그인 여부만 돌려준다(계정 메일·조직 정보는 버림). ?refresh=1 이면 다시 확인.
     if (req.method === 'GET' && url.pathname === '/api/auth') {
       const a = await cachedAuth(url.searchParams.get('refresh') === '1');
-      sendJson(res, 200, { loggedIn: a.loggedIn, cli: a.cli, checked_at: a.checked_at, mode: MODE });
+      // api_key: 환경에 과금 자격 변수가 있는지(이름만), 그 키로 실제 과금되는지(allowed) — 화면이 경고 띠를 띄운다
+      const keys = billingEnvPresent();
+      sendJson(res, 200, { loggedIn: a.loggedIn, cli: a.cli, checked_at: a.checked_at, mode: MODE, api_key: { present: keys, billed: MODE === 'claude_code' && keys.length > 0 && apiKeyAllowed() } });
       return;
     }
 
@@ -420,7 +447,8 @@ const server = http.createServer(async (req, res) => {
       const [u, ledger, st] = await Promise.all([hive.usageSummary({ qaAgent: QA_AGENT }), hive.loadTasks(), getSettings()]);
       const tasks = ledger.tasks.slice(-40).reverse().map((t) => ({
         id: t.id, owner: t.owner, title: t.title, status: t.status, gate: t.gate,
-        tokens: weighted(t.tokens), qa_tokens: weighted(t.qa?.tokens), parts: t.tokens || null,
+        // 기록이 없으면(목업·아직 안 돎·토큰 기록 전) null — 화면은 0 이 아니라 '—'(모름)으로 보인다
+        tokens: knownTokens(t.tokens), qa_tokens: knownTokens(t.qa?.tokens), parts: t.tokens || null,
         cap_tokens: t.cap_tokens || st.max_task_tokens, at: t.cost_at || t.updated || t.created,
       }));
       sendJson(res, 200, { ...u, tasks, max_task_tokens: st.max_task_tokens, agent_daily_tokens: st.agent_daily_tokens });
@@ -489,7 +517,8 @@ const server = http.createServer(async (req, res) => {
       const dir = String(body?.dir || '').trim().replace(/^"(.*)"$/, '$1');
       if (dir) {
         const k = await kitStatus(dir);
-        if (!k.ok) { sendJson(res, 400, { error: k.error }); return; }
+        // 어떤 폴더를 골랐는지 알려 주는 안내(빈 폴더·문서 폴더면 산출물 위치로, 상위 폴더면 안의 패키지로)
+        if (!k.ok) { sendJson(res, 400, { error: k.error, guide: await kitGuide(dir, { deliverablesDir: DELIVERABLES_DIR }) }); return; }
       }
       await updateSettings({ plan_kit_dir: dir ? path.resolve(dir) : '' });
       log(`기획 에이전트 패키지: ${dir ? path.resolve(dir) : '(끔)'}`);
@@ -780,7 +809,9 @@ const server = http.createServer(async (req, res) => {
         log(`승인 처리: ${a.id} → ${a.status} (${a.decided_by}: ${a.decision_reason})`);
         sendJson(res, 200, { ok: true, approval: a });
       } catch (e) {
-        sendJson(res, 400, { error: e.message });
+        // 산출물이 승인 요청 뒤 바뀜 — 409 로 알리고(다시 확인하고 누르면 된다), 그 밖의 거절은 400
+        if (e.code === 'artifact_changed') log(`승인 보류: ${body.id} — 승인 요청 뒤 산출물이 바뀜(다시 확인 필요)`);
+        sendJson(res, e.code === 'artifact_changed' ? 409 : 400, { error: e.message, code: e.code || '' });
       }
       return;
     }
@@ -929,6 +960,9 @@ server.listen(PORT, HOST, async () => {
   else if (MODE === 'claude_code') {
     const v = await claudeAvailable();
     if (v) log(`claude_code 모드: Claude Code CLI ${v} 사용(로그인된 계정의 구독 사용량). API 키 불필요. 실행 파일: ${claudeBinPath()}`);
+    const keys = billingEnvPresent();
+    if (keys.length && apiKeyAllowed()) log(`경고: ${keys.join(', ')} 가 있고 OFFICE_ALLOW_API_KEY=1 — 구독 대신 API 키로 인증되어 요금이 청구됩니다.`);
+    else if (keys.length) log(`알림: 환경에 ${keys.join(', ')} 가 있어 claude 실행에는 빼고 넘깁니다(구독 사용량으로만). API 키로 돌리려면 OFFICE_ALLOW_API_KEY=1.`);
     else log('경고: claude_code 모드인데 claude CLI 를 찾지 못했습니다. 설치·로그인(claude) 후 다시 실행하세요. 더미로 바꿔 돌리지 않습니다.');
   } else if (!process.env.ANTHROPIC_API_KEY) log('경고: live 모드인데 ANTHROPIC_API_KEY가 없습니다.');
 });

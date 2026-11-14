@@ -47,6 +47,8 @@ export interface HiveTask {
   docx?: string; // 산출물 Word 판(산출물 폴더 기준 상대경로)
   xlsx?: string; // 산출물의 표를 옮긴 엑셀 판(견적 단계 등)
   process?: string; // 표준 절차(proposal·estimate·planning)
+  approved_hash?: string; // 승인된 산출물의 지문(sha256)
+  approval_stale?: boolean; // 승인 뒤 산출물이 바뀜
   step?: string;
 }
 export interface HiveApproval {

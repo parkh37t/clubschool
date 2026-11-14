@@ -126,7 +126,11 @@ export interface HiveEvent {
   level?: string; reason?: string; reason_code?: string; reason_detail?: string; item_kind?: string; action?: string; count?: number; template?: string; item?: string; why?: string; at?: string;
 }
 
-export interface AuthState { loggedIn: boolean | null; cli: boolean; checked_at?: string; mode?: string; }
+export interface AuthState {
+  loggedIn: boolean | null; cli: boolean; checked_at?: string; mode?: string;
+  /** 환경의 과금 자격 변수(이름만)와, 그것으로 실제 과금되는지(OFFICE_ALLOW_API_KEY=1 일 때만) */
+  api_key?: { present: string[]; billed: boolean };
+}
 
 /** url 을 ms 마다 GET 해 JSON 을 돌려준다. url 이 없으면 멈춘다. refresh() 로 즉시 다시 읽는다. */
 export function usePolling<T>(url: string | undefined, ms: number): { data: T | null; error: boolean; refresh: () => void } {
@@ -191,7 +195,7 @@ export async function postJson(url: string, body: unknown): Promise<{ ok: boolea
   try {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) });
     const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!res.ok) return { ok: false, error: String(data.error || res.status) };
+    if (!res.ok) return { ok: false, error: String(data.error || res.status), data }; // 실패해도 안내(guide 등)를 읽을 수 있게
     return { ok: true, data };
   } catch {
     return { ok: false, error: '서버에 연결하지 못했습니다.' };

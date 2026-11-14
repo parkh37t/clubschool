@@ -43,6 +43,8 @@ hive/
 | `task.revised` | 1 = QA 반려 뒤 1회 자동 보완함(`task.revise` 에 지적·요약·앞 산출물). 없으면 보완 안 함 |
 | `approval.kind` | 외부발송 · 비용(실제 결제·구매) · 삭제 · 범위변경 · 수치확정 · 산출물승인 · 사용량 · 재개 · 가이드확정 · 컨펌 · Go/No-Go. 사용 토큰 한도 초과는 `사용량`(`payload.kind: budget`, `cap`·`used` 는 토큰), 서킷 브레이커 재개는 `payload.kind: resume` |
 | `task.export` · `task.xlsx` | 함께 저장할 형식(`['xlsx']` — 견적 단계)과 만든 엑셀 경로(산출물 폴더 기준) |
+| `approval.payload.artifact_hash` · `approval.approved_hash` | 승인 요청 때·승인 때 산출물 지문(sha256). 요청 뒤 파일이 바뀌면 승인을 한 번 거절하고 `changed_at`·`changed_from` 을 남긴다 |
+| `task.approved_hash` · `approved_at` | 승인된 산출물 지문 — 화면은 지금 파일과 비교해 '승인 뒤 바뀜'을 보인다 |
 | `task.extra_skills` | 팀장이 골라 붙인 등록 스킬(최대 3, 담당의 기본 스킬에 더해짐) |
 | live `k:'usage'` | 실행 중 사용 토큰(2만 토큰마다 한 줄) — 화면 위 사용량 막대가 마지막 실행의 마지막 줄을 읽는다 |
 | `task.tokens` · `task.qa.tokens` | 사용 토큰 네 갈래 `{in, cw, cr, out}`(입력·캐시 생성·캐시 읽기·출력) — 보완 재작업까지 더한 값. `cost_usd` 는 API 환산 참고값으로만 남는다 |

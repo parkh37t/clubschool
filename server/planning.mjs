@@ -15,6 +15,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { getSettings } from './settings.mjs';
 import { absData } from './paths.mjs';
+import { fence } from './fence.mjs';
 
 export const MAX_SCREENS = 6; // 브리핑 하나에서 만들 화면 수 상한(빌더 2명 × 3). 나머지는 남은 제한으로 넘긴다
 const SCREEN_ID_RE = /^[a-z]+-[a-z]+-[A-Za-z0-9]+(-m)?$/;
@@ -94,8 +95,32 @@ export async function kitStatus(dirArg) {
   const need = ['scripts/new_screen.py', 'scripts/verify_page.py', 'packs/_template/pack.json', 'core/golden', 'core/template'];
   const missing = [];
   for (const n of need) if (!(await exists(path.join(dir, n)))) missing.push(n);
-  if (missing.length) return { ok: false, dir, error: `패키지 폴더가 아닙니다 — 없는 것: ${missing.join(', ')}` };
+  if (missing.length) return { ok: false, dir, missing, error: `기획 에이전트 패키지 폴더가 아닙니다 — scripts·packs·core 가 함께 든 폴더(wylie-plan-agent)를 고르세요. 없는 것: ${missing.join(', ')}` };
   return { ok: true, dir };
+}
+
+/**
+ * 패키지가 아닌 폴더를 골랐을 때 무엇을 해야 하는지 — 설정 창이 안내 상자로 보여 준다.
+ *   nested    바로 아래에 패키지가 있다(상위 폴더를 고름) → suggest 로 연결
+ *   empty     빈 폴더 · not_kit 문서만 있는 폴더 → 산출물 폴더로 쓰려던 것일 수 있다
+ *   partial   scripts·packs·core 중 일부만 있다 → 패키지를 통째로 복사해야 한다
+ *   missing_dir 폴더가 없다 · path 전체 경로가 아니다
+ */
+export async function kitGuide(dir, { deliverablesDir = '' } = {}) {
+  const d = String(dir || '').trim();
+  if (!d || !path.isAbsolute(d)) return { kind: 'path' };
+  if (deliverablesDir && path.resolve(d).toLowerCase() === path.resolve(deliverablesDir).toLowerCase()) return { kind: 'deliverables' };
+  let entries;
+  try { entries = await fs.readdir(d, { withFileTypes: true }); } catch { return { kind: 'missing_dir' }; }
+  for (const e of entries.filter((x) => x.isDirectory()).slice(0, 40)) {
+    const sub = path.join(d, e.name);
+    if ((await kitStatus(sub)).ok) return { kind: 'nested', suggest: sub };
+  }
+  if (!entries.length) return { kind: 'empty' };
+  const parts = ['scripts', 'packs', 'core'].filter((n) => entries.some((e) => e.isDirectory() && e.name === n));
+  if (parts.length) return { kind: 'partial', missing: (await kitStatus(d)).missing || [] };
+  const docs = entries.filter((e) => e.isFile() && /\.(md|docx?|pptx?|xlsx?|pdf|hwpx?|csv|txt)$/i.test(e.name)).length;
+  return { kind: 'not_kit', docs };
 }
 
 function runPy(kit, args, { timeoutMs = 120000 } = {}) {
@@ -207,7 +232,7 @@ async function kitAgentNote(kit, name) {
     const body = (await fs.readFile(path.join(kit, '.claude', 'agents', `${name}.md`), 'utf8')).replace(/^---[\s\S]*?---\s*/, '').trim();
     return ['## 기획 에이전트 지침 (' + name + ')',
       '> 이 실행 환경에서는 명령(Bash·python)을 실행할 수 없다. 지침의 스크립트 실행 단계는 건너뛴다 — 화면 뼈대 생성(new_screen)과 린트·verify 는 서버가 하고 결과를 이 지시문에 붙인다.',
-      '<<<자료 시작: 기획 에이전트 지침>>>', body.slice(0, 7000), '<<<자료 끝>>>'].join('\n');
+      fence('기획 에이전트 지침', body.slice(0, 7000))].join('\n');
   } catch {
     return '';
   }

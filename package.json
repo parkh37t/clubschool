@@ -15,6 +15,7 @@
     "deploy-check": "node deploy-check.js",
     "clean": "rm -rf dist node_modules/.vite",
     "type-check": "tsc --noEmit",
+    "test:server": "node --test \"server/tests/*.test.mjs\"",
     "desktop:dev": "npm run build && electron desktop",
     "desktop:build": "npm run build && electron-builder --config desktop/electron-builder.yml --win nsis",
     "desktop:icon": "node desktop/scripts/make-icon.mjs"

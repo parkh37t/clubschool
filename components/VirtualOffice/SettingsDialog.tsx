@@ -19,6 +19,8 @@ type DesktopBridge = { pickFolder: (defaultPath?: string) => Promise<string> };
 const desktopBridge = (): DesktopBridge | undefined => (window as unknown as { axoDesktop?: DesktopBridge }).axoDesktop;
 
 type Msg = { ok: boolean; text: string } | null;
+/** 패키지가 아닌 폴더를 골랐을 때 서버가 주는 안내(server/planning.mjs kitGuide) */
+type KitGuide = { kind: 'path' | 'deliverables' | 'missing_dir' | 'nested' | 'empty' | 'partial' | 'not_kit'; suggest?: string; missing?: string[]; docs?: number } | null;
 
 const btn = { font: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '5px 11px', borderRadius: 6, border: `1px solid ${LINE}`, background: '#fff', color: INK, whiteSpace: 'nowrap' } as const;
 const primary = { ...btn, fontWeight: 800, border: `1px solid ${WYLIE_DARK}`, background: WYLIE, color: '#fff' } as const;
@@ -44,6 +46,10 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
   const [behaviorMsg, setBehaviorMsg] = useState<Msg>(null);
   const [kitDir, setKitDir] = useState('');
   const [kitMsg, setKitMsg] = useState<Msg>(null);
+  const [kitGuide, setKitGuide] = useState<KitGuide>(null);
+  const [kitTried, setKitTried] = useState('');
+  const storageRef = useRef<HTMLElement>(null);
+  const dirInputRef = useRef<HTMLInputElement>(null);
   const loaded = useRef(false);
   const desktop = desktopBridge();
 
@@ -87,13 +93,29 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
 
   const setKit = async (dirValue: string) => {
     setKitMsg(null);
+    setKitGuide(null);
     const r = await postJson(`${apiBase}/api/settings/plan-kit`, { dir: dirValue });
-    if (!r.ok) { setKitMsg({ ok: false, text: String(r.error) }); return; }
+    if (!r.ok) {
+      setKitMsg({ ok: false, text: String(r.error) });
+      setKitGuide((r.data?.guide as KitGuide) ?? null);
+      setKitTried(dirValue);
+      return;
+    }
     setKitMsg({ ok: true, text: dirValue ? t('set.kitOn') : t('set.kitOff') });
     setKitDir('');
     refresh();
     onSaved();
   };
+  // 안내 상자의 [산출물 위치로 쓰기] — 고른 폴더를 위 '새 위치' 칸으로 옮기고 그 칸으로 이동한다(바꾸기는 사람이 누른다)
+  const useAsDeliverables = () => {
+    setDir(kitTried);
+    setKitDir('');
+    setKitGuide(null);
+    setKitMsg(null);
+    storageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => dirInputRef.current?.focus(), 250);
+  };
+
   const pickKit = async () => {
     if (!desktop) return;
     const chosen = await desktop.pickFolder(kitDir.trim() || data?.plan_kit_dir || '');
@@ -135,7 +157,7 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
         {connected && error && !data && <p style={{ ...smallMuted, color: BAD_FG }}>{t('set.loadFail')}</p>}
 
         {connected && data && (
-          <section style={section} aria-label={t('set.storage')}>
+          <section ref={storageRef} style={section} aria-label={t('set.storage')}>
             <h3 style={h3}>{t('set.storage')}</h3>
             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, whiteSpace: 'nowrap' }}>{t('set.current')}</span>
@@ -152,7 +174,7 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
             <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED }}>
               {t('set.newDir')}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                <input value={dir} onChange={(e) => setDir(e.target.value)} placeholder={t('set.dirPh')} spellCheck={false}
+                <input ref={dirInputRef} value={dir} onChange={(e) => setDir(e.target.value)} placeholder={t('set.dirPh')} spellCheck={false}
                   style={{ ...inputStyle, marginTop: 4, fontFamily: MONO, fontSize: 12, flex: 1, resize: undefined }} />
                 {desktop && <button type="button" style={{ ...btn, marginTop: 4 }} onClick={pick}>{t('set.pick')}</button>}
               </div>
@@ -185,8 +207,33 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
               {desktop && <button type="button" style={btn} onClick={pickKit}>{t('set.pick')}</button>}
               <button type="button" style={{ ...primary, opacity: kitDir.trim() ? 1 : 0.55 }} disabled={!kitDir.trim()} onClick={() => setKit(kitDir.trim())}>{t('set.kitApply')}</button>
             </div>
-            {note(kitMsg)}
+            {kitGuide ? (
+              <div role="status" style={{ border: `1px solid ${WARN_FG}`, background: '#FBF3E3', borderRadius: 8, padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <strong style={{ fontSize: 12.5, color: INK }}>{t('set.kgTitle')}</strong>
+                <span style={{ fontSize: 12, color: INK, lineHeight: 1.55 }}>
+                  {t(`set.kg.${kitGuide.kind}`, { n: kitGuide.docs ?? 0, missing: (kitGuide.missing ?? []).join(', ') })}
+                </span>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {(kitGuide.kind === 'empty' || kitGuide.kind === 'not_kit') && (
+                    <button type="button" style={{ ...primary, padding: '5px 11px' }} onClick={useAsDeliverables}>{t('set.kgUseDeliv')}</button>
+                  )}
+                  {kitGuide.kind === 'nested' && kitGuide.suggest && (
+                    <button type="button" style={{ ...primary, padding: '5px 11px' }} onClick={() => setKit(kitGuide.suggest || '')}>{t('set.kgUseNested', { dir: kitGuide.suggest })}</button>
+                  )}
+                  <button type="button" style={btn} onClick={() => { setKitGuide(null); setKitMsg(null); }}>{t('set.kgClose')}</button>
+                </div>
+              </div>
+            ) : note(kitMsg)}
             <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.kitNote')}</p>
+            <details>
+              <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 700, color: WYLIE_DARK }}>{t('set.kgHowTitle')}</summary>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: INK, lineHeight: 1.6 }}>
+                <li>{t('set.kgHow1')}</li>
+                <li>{t('set.kgHow2', { dir: data.plan_kit_dir || '—' })}</li>
+                <li>{t('set.kgHow3')}</li>
+                <li>{t('set.kgHow4')}</li>
+              </ul>
+            </details>
           </section>
         )}
 

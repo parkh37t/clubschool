@@ -304,6 +304,13 @@ export function VirtualOfficeView({
             <span>{t('cli.body')}</span>
           </section>
         )}
+        {/* API 키로 과금 중 — 환경에 키가 있고 OFFICE_ALLOW_API_KEY=1 일 때만(아니면 서버가 키를 빼고 구독으로 돌린다) */}
+        {a?.api_key?.billed && (
+          <section role="alert" style={{ ...bar, background: '#FBEFE9', border: '1px solid #E3B39F' }}>
+            <strong style={{ color: BAD_FG }}>{t('key.billedTitle')}</strong>
+            <span>{t('key.billedBody', { k: a.api_key.present.join(', ') })}</span>
+          </section>
+        )}
         {/* 팀장 되물음 */}
         {question && (
           <section role="alert" style={{ ...bar, background: '#F8E3DF', border: '1px solid #D0684A' }}>

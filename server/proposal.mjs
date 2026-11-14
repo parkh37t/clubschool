@@ -45,8 +45,8 @@ export const PROPOSAL_STEPS = [
     key: 'rfp', owner: 'han', stage: '01_rfp', client: true,
     ko: 'RFP 분석 — 요구·평가 대응표와 Go/No-Go', en: 'RFP analysis — requirement-scoring matrix and Go/No-Go',
     skills: ['rfp-analysis', WRITE],
-    done: 'RFP 요구사항을 빠짐없이 옮긴 요구·평가 대응표(요구 id · 원문 위치 · 평가 항목 · 대응할 장 · 근거 · 충족 상태 · 공백)와 Go/No-Go 5축(적합성·승산·수익성·리스크·전략가치) 권고',
-    doneEn: 'A requirement-scoring matrix that carries every RFP requirement (req id, source location, scoring item, answering chapter, evidence, coverage, gap) and a 5-axis Go/No-Go recommendation (fit, win odds, margin, risk, strategic value)',
+    done: 'RFP 요구사항을 빠짐없이 옮긴 요구·평가 대응표(요구 id · 원문 인용 · 원문 위치 · 평가 항목 · 대응할 장 · 근거 · 충족 상태 · 공백)와 Go/No-Go 5축(적합성·승산·수익성·리스크·전략가치) 권고. 원문 인용은 RFP 문장을 「」 안에 글자 그대로(서버가 원문에서 다시 찾는다), 요구 id 는 겹치지 않게, 비기능 6축(성능·가용성·보안·접근성·호환성·감리)은 근거 요구가 없어도 「해당 없음」이 아니라 「근거 없음(missing)」으로 적는다',
+    doneEn: 'A requirement-scoring matrix that carries every RFP requirement (req id, verbatim quote, source location, scoring item, answering chapter, evidence, coverage, gap) and a 5-axis Go/No-Go recommendation (fit, win odds, margin, risk, strategic value). Quote the RFP sentence verbatim inside 「」 (the server searches the source for it), keep requirement ids unique, and cover all six non-functional axes (performance, availability, security, accessibility, compatibility, audit) — an axis without supporting requirements is "missing", not "n/a"',
     deps: ['research'], approval: 'Go/No-Go',
   },
   {

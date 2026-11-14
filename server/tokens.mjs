@@ -30,6 +30,12 @@ export function weighted(t) {
 }
 
 /** 사람이 읽는 표기 — 1234 → 1.2천, 1234567 → 123만. 로그·승인 카드 문구용. */
+/** 작업 1건의 사용 토큰 — 기록이 없거나 0 이면 null(모름). 실제 실행은 0 토큰일 수 없으므로 0 은 '돌지 않았거나 목업'이다. */
+export function knownTokens(t) {
+  const w = t ? weighted(t) : 0;
+  return w > 0 ? w : null;
+}
+
 export function fmtTokens(n) {
   const v = int(n);
   if (v >= 100000000) return `${(v / 100000000).toFixed(1)}억`;

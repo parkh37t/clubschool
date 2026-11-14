@@ -50,6 +50,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `OFFICE_DIST_DIR` | `<저장소>/dist` | 함께 내보낼 빌드된 화면 |
 | `OFFICE_MAX_TOKENS` | 400000 | 작업 1건 실행의 사용 토큰 한도 기본값(사용 토큰 = 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10). 설정 화면·모니터 탭에서 바꾸면 `settings.json` 값이 우선 |
 | `OFFICE_AGENT_DAILY_TOKENS` | 1200000 | 에이전트 1명의 하루 사용 토큰 한도 기본값(80% 제한 · 100% 중지) |
+| `OFFICE_ALLOW_API_KEY` | (없음) | `1` 이면 claude 자식 프로세스에 `ANTHROPIC_API_KEY`·`ANTHROPIC_AUTH_TOKEN` 을 넘긴다(구독 대신 API 요금, 화면에 경고 띠). 없으면 빼고 넘긴다 |
 | `OFFICE_MAX_USD` | 2 | `live`(API 키) 모드 전용 — 실제로 청구되는 API 요금의 작업당 상한(달러). claude_code 모드는 쓰지 않음 |
 | `OFFICE_MOCK_TOKENS` | 0 | (mock 시험용) 작업 1건이 쓴 것처럼 볼 사용 토큰. 한도보다 크면 '사용량' 승인 카드가 뜬다. 합계에는 넣지 않음 |
 | `OFFICE_MOCK_QUESTION` | (없음) | (mock 시험용) `1` 이면 역할 에이전트가 회신에 "재하에게 질문"을 한 줄 넣는다 |
@@ -183,6 +184,9 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `docxExport.mjs` | 마크다운 산출물 → Word |
 | `state.mjs` | `office-state.json` 읽기/쓰기 |
 | `leaderSession.mjs` | 팀장 상주 세션과 대기열(`queue.json`) — 메시지 처리·브리핑 등록·두 줄 실행 |
+| `fence.mjs` | 자료 울타리 — 안의 울타리 표시를 깨뜨려 일찍 닫히지 않게 |
+| `rfpCheck.mjs` | 제안 RFP 분석 산출물 기계 검사 — 인용 재검증(exact·whitespace·none)·요구 id 중복·비기능 6축 |
+| `tests/` | `guards.test.mjs`(모델 호출 없는 회귀 시험, `npm run test:server`) · `injection.live.mjs`(실제 주입 시험, `OFFICE_LIVE_TEST=1`) |
 | `xlsxExport.mjs` | 마크다운 산출물의 표 → 엑셀(.xlsx, 표 하나 = 시트 하나). 견적 단계처럼 `task.export` 에 xlsx 가 있는 작업만 |
 | `skillRegistry.mjs` | 문서·제안 스킬 등록부 — 이름·쓰임새·담당·넣는 방식(지시문/참고)·자동 부착·사용 가능 여부 |
 | `settings.mjs` | 언어·작업당·하루 사용 토큰 한도·자동 보완·동시 작업 수·산출물 폴더·기획 패키지·팀장 세션 id(`settings.json`), 서버가 만드는 상태 문구의 한·영 |

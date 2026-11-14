@@ -4,7 +4,7 @@ import type { HiveState, HiveTask } from './officeSimulator';
 import { postJson } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
 import { gateLabel, statusLabel, useOfficeLang } from './i18n';
-import { BAD_FG, GATE_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, STATUS_COLOR, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, h2Style, smallMuted, tok } from './officeTheme';
+import { BAD_FG, GATE_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, STATUS_COLOR, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, h2Style, smallMuted, tok } from './officeTheme';
 
 interface TasksTabProps {
   connected: boolean;
@@ -120,7 +120,10 @@ function TaskCard({ task, dim, apiBase }: { task: HiveTask; dim: boolean; apiBas
       </div>
       <div style={{ fontWeight: 650, lineHeight: 1.4, marginTop: 4, color: INK, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }} title={task.title}>{task.title}</div>
       <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: 11, color: MUTED, alignItems: 'center', flexWrap: 'wrap' }}>
-        {task.needs_approval && <span style={{ whiteSpace: 'nowrap', color: WARN_FG, fontWeight: 800 }}>{t('tasks.needsApproval')}</span>}
+        {task.needs_approval && !task.approved_hash && <span style={{ whiteSpace: 'nowrap', color: WARN_FG, fontWeight: 800 }}>{t('tasks.needsApproval')}</span>}
+        {task.approved_hash && (task.approval_stale
+          ? <span style={{ whiteSpace: 'nowrap', color: BAD_FG, fontWeight: 800 }} title={t('tasks.staleNote')}>{t('tasks.stale')}</span>
+          : <span style={{ whiteSpace: 'nowrap', color: OK_FG, fontWeight: 700, fontFamily: MONO }} title={t('tasks.approvedNote')}>{t('tasks.approved', { h: task.approved_hash.slice(0, 8) })}</span>)}
         {task.depends_on && task.depends_on.length > 0 && <span style={{ whiteSpace: 'nowrap', fontFamily: MONO }}>← {task.depends_on.join(', ')}</span>}
         {Boolean(task.tokens) && <span style={{ whiteSpace: 'nowrap' }} title={t('tasks.tokenNote')}>{t('tasks.tokens', { v: tok((task.tokens || 0) + (task.qa_tokens || 0)) })}</span>}
         {task.output && apiBase !== undefined && (

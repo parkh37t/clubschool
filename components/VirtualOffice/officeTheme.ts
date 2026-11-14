@@ -71,8 +71,9 @@ export const inputStyle = { width: '100%', boxSizing: 'border-box' as const, fon
  * 사용 토큰 = 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10(server/tokens.mjs). 금액이 아니다.
  */
 export function tok(v: number | undefined | null): string {
-  const n = Math.max(0, Math.round(Number(v) || 0));
-  if (!n) return '—';
+  // '모름'(기록 없음·돌지 않음)만 '—' — 0 은 0 으로 보인다. 둘을 섞으면 '안 썼다'와 '모른다'가 구분되지 않는다(con-ai 규칙)
+  if (v === null || v === undefined || !Number.isFinite(Number(v))) return '—';
+  const n = Math.max(0, Math.round(Number(v)));
   if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
   if (n >= 10000) return `${Math.round(n / 10000).toLocaleString('ko-KR')}만`;
   if (n >= 1000) return `${(n / 1000).toFixed(1)}천`;

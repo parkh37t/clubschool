@@ -25,9 +25,10 @@
 // 동시 작업: 작업 풀이 여러 작업을 함께 돌리므로 tasks.json·approvals.json 의 읽고-고치고-쓰기가 겹치면
 // 서로 덮어쓴다. 그래서 파일마다 프로세스 안 잠금(쓰기 직렬화)을 두고, 갱신은 전부 그 잠금 안에서 한다.
 
+import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { HIVE_DIR } from './paths.mjs';
+import { HIVE_DIR, absData } from './paths.mjs';
 import { weighted, addTokens } from './tokens.mjs';
 
 export { HIVE_DIR };
@@ -599,6 +600,15 @@ export async function requestApproval({ task, kind, reason, payload }) {
 }
 
 /** 재하의 결정. by·reason 이 없으면 거부한다(행위자·사유 없는 승인은 기록하지 않는다). */
+/** 파일 내용의 sha256(16진). 없으면 null. 승인을 '그때 그 산출물'에 묶는 데 쓴다. */
+export async function fileHash(file) {
+  try {
+    return crypto.createHash('sha256').update(await fs.readFile(file)).digest('hex');
+  } catch {
+    return null;
+  }
+}
+
 export async function resolveApproval(id, { decision, by, reason }) {
   if (!['approved', 'rejected'].includes(decision)) throw new Error('decision 은 approved | rejected');
   if (!by || !reason) throw new Error('승인·반려에는 by(행위자)와 reason(사유)이 필요합니다.');
@@ -607,12 +617,30 @@ export async function resolveApproval(id, { decision, by, reason }) {
     const found = q.approvals.find((x) => x.id === id);
     if (!found) throw new Error(`승인 요청 ${id} 없음`);
     if (found.status !== 'pending') throw new Error(`이미 처리됨: ${found.status}`);
-    Object.assign(found, { status: decision, decided_by: by, decided_at: nowIso(), decision_reason: reason });
+    // 승인은 요청 때의 산출물에 묶는다 — 그 뒤 파일이 바뀌었으면 이번 승인은 받지 않고 지문을 지금 것으로 바꿔 둔다
+    // (다시 확인하고 한 번 더 누르면 승인된다). 반려는 내용과 상관없이 받는다.
+    let approvedHash = '';
+    if (decision === 'approved' && found.payload?.artifact_hash && found.payload?.output) {
+      const now = await fileHash(absData(found.payload.output));
+      if (!now) throw Object.assign(new Error(`산출물 파일이 없어 승인할 수 없습니다: ${found.payload.output}`), { code: 'artifact_missing' });
+      if (now !== found.payload.artifact_hash) {
+        found.payload = { ...found.payload, artifact_hash: now, changed_at: nowIso(), changed_from: found.payload.artifact_hash };
+        await writeJson(p('approvals.json'), q);
+        throw Object.assign(new Error('승인 요청 뒤 산출물이 바뀌었습니다. 바뀐 내용을 확인한 뒤 다시 승인하세요(지문을 새 파일로 바꿔 두었습니다).'), { code: 'artifact_changed' });
+      }
+      approvedHash = now;
+    }
+    Object.assign(found, { status: decision, decided_by: by, decided_at: nowIso(), decision_reason: reason, ...(approvedHash ? { approved_hash: approvedHash } : {}) });
     await writeJson(p('approvals.json'), q);
     return { ...found };
   });
   await appendEvent({ kind: 'approval', id: a.id, task: a.task, status: decision, by });
   return a;
+}
+
+/** 승인 레코드 하나(없으면 null). */
+export async function approvalRecord(id) {
+  return (await loadApprovals()).approvals.find((x) => x.id === id) || null;
 }
 
 /** 승인이 날 때까지 기다린다. 타임아웃이면 'timeout'. 파일을 폴링하므로 서버 재시작 후에도 이어진다. */

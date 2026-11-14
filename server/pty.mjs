@@ -9,7 +9,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { HIVE_DIR } from './paths.mjs';
-import { interactiveCommand } from './claudeCode.mjs';
+import { interactiveCommand, childEnv } from './claudeCode.mjs';
 
 const SESSIONS = new Map(); // id → { pty, agent, cwd, title, buf, clients:Set, exited, created }
 const MAX_BUF = 256 * 1024; // 다시 붙을 때 보여 줄 최근 출력
@@ -43,8 +43,8 @@ export async function openPty({ agent, cwd, title, persona, resumeId, cols = 110
     await fs.writeFile(f, persona, 'utf8');
     args.push('--append-system-prompt-file', f);
   }
-  const env = { ...process.env };
-  delete env.ELECTRON_RUN_AS_NODE; // 서버(Electron 내장 Node)용 표식이 자식에게 새지 않게
+  // API 키·토큰을 빼고 넘긴다(구독 사용량으로만) — claudeCode.mjs childEnv
+  const env = childEnv();
   const file = needsShell ? 'cmd.exe' : bin;
   const argv = needsShell ? ['/d', '/c', bin, ...args] : args;
   const p = pty.spawn(file, argv, { name: 'xterm-256color', cols, rows, cwd, env });
