@@ -94,7 +94,10 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/memory/:agent` | 에이전트 기억 파일(`memory/<agent>.md`) 내용 |
 | `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
 | `GET /api/auth` | `claude auth status` — 로그인 여부, 이 PC 화면에만 계정(`account`: 메일·조직·플랜·방식·만료, 서버 메모리에만 두고 기록하지 않음), API 키 상태. 1분 기억, `?refresh=1` 로 다시 확인 |
-| `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login --claudeai`(구독 로그인, `{email}` 을 주면 미리 채움 — 형식 검사). 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
+| `POST /api/auth/login` | 앱 안 로그인 시작 — 보이지 않는 가상 터미널에서 `claude auth login --claudeai`(구독 로그인, `{email}` 을 주면 미리 채움 — 형식 검사). 이 PC 화면에서 온 요청만, 브리핑 중이면 409. node-pty 가 없으면 새 PowerShell 창(`mode:'window'`) |
+| `GET /api/auth/login` | 로그인 진행 `{state: idle·starting·waiting·success·failed·cancelled·expired, needs_code, message, url}` — `url`(메일 포함)은 이 PC 화면에만 |
+| `POST /api/auth/login/code` · `/cancel` | 브라우저에 나온 인증 코드를 넘김(토큰 형식만) / 진행 중인 로그인 취소 |
+| `GET·POST /api/cli/install` | Claude Code 설치(새 PC) — 공식 설치 스크립트를 창 없이. POST 는 이 PC 화면·`{confirm:true}`. 상태 `{state, log, version, message}` |
 | `POST /api/auth/logout` | `claude auth logout` — 이 PC 화면·`{confirm:true}`·브리핑이 돌지 않을 때만(409). 이 PC 의 claude 명령 로그인도 함께 풀린다. 이벤트에 메일은 남기지 않음 |
 | `GET /api/usage/top` | 화면 위 사용량 막대 — 구독 사용 한도 창(`limits.json`), 오늘 사용 토큰(끝난 작업 + 실행 중), 담당별 하루 한도 대비, 실행 중 작업의 토큰/한도 |
 | `POST /api/usage/probe` | 구독 사용 한도 지금 확인 — claude_code 모드·이 PC 화면·1분에 한 번. 작은 호출 1번(사용 토큰 기록) |
@@ -187,6 +190,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `leaderSession.mjs` | 팀장 상주 세션과 대기열(`queue.json`) — 메시지 처리·브리핑 등록·두 줄 실행 |
 | `fence.mjs` | 자료 울타리 — 안의 울타리 표시를 깨뜨려 일찍 닫히지 않게 |
 | `rfpCheck.mjs` | 제안 RFP 분석 산출물 기계 검사 — 인용 재검증(exact·whitespace·none)·요구 id 중복·비기능 6축 |
+| `proposalCheck.mjs` | 제안·견적 단계 기계 검사 — 근거표(EV id)·대응표 역채움·견적 승인 전 수치·AI 검수 표기·렌더 not_run·제목(인력 카드·갭 분석 등)·보완 변경 기록 |
 | `tests/` | `guards.test.mjs`(모델 호출 없는 회귀 시험, `npm run test:server`) · `injection.live.mjs`(실제 주입 시험, `OFFICE_LIVE_TEST=1`) |
 | `xlsxExport.mjs` | 마크다운 산출물의 표 → 엑셀(.xlsx, 표 하나 = 시트 하나). 견적 단계처럼 `task.export` 에 xlsx 가 있는 작업만 |
 | `skillRegistry.mjs` | 문서·제안 스킬 등록부 — 이름·쓰임새·담당·넣는 방식(지시문/참고)·자동 부착·사용 가능 여부 |
@@ -213,20 +217,39 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 
 | # | 단계 | 담당 | 산출 폴더 | 스킬('a|b' = a 없으면 b) | 승인 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 제안 조사 — 고객·경쟁·페인포인트 | 김영업 | 00_sales | competitor-benchmark, strategy-proposal-analyzer | |
+| 1 | 제안 조사 — 고객·경쟁·페인포인트·근거표 | 김영업 | 00_sales | competitor-benchmark, strategy-proposal-analyzer | |
 | 2 | RFP 분석 — 요구·평가 대응표와 Go/No-Go | 한도전 | 01_rfp | rfp-analysis, wylie-proposal\|proposal-writing | **Go/No-Go** |
 | 3 | 제안 전략 — 승부 메시지·스토리·목차 | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | |
 | 4 | UX·디자인 제안 섹션 *(화면·서비스 과제일 때)* | 차도안 | 03_proposal | proposal-skills, wylie-proposal-visual\|ui-review | |
 | 5 | 성과 지표(KPI) 설계 *(성과·지표 언급 시)* | 고지표 | 03_proposal | kpi-event-tracking | |
-| 6 | 장표 구성안·근거표(구조 단계) | 차도안 | 03_proposal | wylie-proposal-visual\|ui-review, wylie-proposal\|proposal-writing | |
-| 7 | 제안서 본문(본문 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | 견적·인력 수치가 걸리면 **수치확정** |
-| 8 | 제안서 검수(정합 단계) | 고지표 | 03_proposal | wylie-proposal-review\|proposal-review | |
+| 6 | 견적·인력 투입 계획 — 견적기준표·인력투입계획·인력 카드·견적서(안)·갭 분석 | 정우선 | 03_proposal | proposal-estimate, xlsx | **수치확정** |
+| 7 | 장표 구성안·대응표 역채움(구조 단계) | 차도안 | 03_proposal | wylie-proposal-visual\|ui-review, wylie-proposal\|proposal-writing | |
+| 8 | 제안서 본문(본문 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | |
+| 9 | 발표본·발표 노트 *(결과·제약에 발표가 있을 때)* | 홍보라 | 03_proposal | wylie-proposal\|proposal-writing | |
+| 10 | 제안서 검수(정합 단계, AI 검수) | 고지표 | 03_proposal | wylie-proposal-review\|proposal-review | |
 
-- 담당은 한 사람이 하루 토큰 한도를 혼자 넘기지 않게 나눴다(한도전 RFP·전략·본문 3단계, 차도안 UX 섹션·장표 구성안, 고지표 KPI·검수). 고객사 전용 스킬은 2·3·6·7단계에 붙는다.
+- 담당은 한 사람이 하루 토큰 한도를 혼자 넘기지 않게 나눴다(한도전 RFP·전략·본문 3단계, 차도안 UX 섹션·장표 구성안, 고지표 KPI·검수, 정우선 견적, 홍보라 발표 노트). 고객사 전용 스킬은 2·3·7·8·9단계에 붙는다.
 - 단계별 스킬은 작업 원장(`tasks.json`)의 `skills` 에 남고, 실행기는 이 값이 있으면 담당의 기본 스킬 대신 씁니다. `process: 'proposal'`·`step` 도 함께 남습니다.
-- Go/No-Go 승인 전에는 3단계 이후가 시작되지 않습니다(반려하면 보류). 6단계는 3·4·5단계가 모두 끝나야 시작합니다.
+- Go/No-Go 승인 전에는 3단계 이후가 시작되지 않습니다(반려하면 보류). 6단계(견적)는 2·3단계 뒤, 7단계(장표)는 3·4·5단계가 끝나면 견적과 함께 돌고,
+  8단계(본문)는 견적이 승인('수치확정')되어야 시작합니다. 7단계는 견적 승인 전이라 금액·M/M·인원을 「확정 필요」로만 씁니다.
+- **사내 제안 스킬 규칙(일반 절차로 옮김)** — 근거표(첫 칸 EV-001…, 근거 상태 6종 verified_fact·source_claim·proposal·hypothesis·unresolved·placeholder)는
+  1단계에서 만들고 2·3·7·8·9단계는 같은 EV id 를 이어 씁니다(새 근거는 '근거표 추가분'에 다음 번호로). 7단계는 RFP 요구 id 마다 장표 id 를 역채운 표를 냅니다.
+  10단계는 'AI 검수'라고 밝히고 렌더·시각 항목은 not_run('시각 미평가', 점수로 채우지 않음)으로 둡니다.
+- **서버 검사(`proposalCheck.mjs`)** — 단계 정의의 `checks`·`sections` 를 따라 QA 에 더합니다. claude_code 에서는 판정에 넣고(fail 이면 1회 보완에 지적으로 붙음), mock 은 참고.
+
+  | 검사 | 단계 | 보는 것 |
+  | --- | --- | --- |
+  | `ev_table` | 1 | 근거표 행(EV-nnn)이 있고 행마다 근거 상태 6종 가운데 하나 |
+  | `ev_refs` | 2·3·7·8·9 | 인용한 EV id 가 앞 단계(또는 이 산출물의 추가분) 근거표에 있음. 9단계는 인용이 선택 |
+  | `req_coverage` | 7 | RFP 분석 표 첫 칸의 요구 id 가 장표 구성안에 모두 나옴(빠진 id 나열). RFP 산출물이 없으면 not_run |
+  | `unconfirmed_numbers` | 7 | 「확정 필요」 없는 금액·M/M·인원 수치(참고 — 판정에는 넣지 않음) |
+  | `sections` | 6·7·9 | 제목(#)에 「인력 카드」「갭 분석」/「대응표 역채움」/「발표 노트」 |
+  | `ai_label` | 10·견적 검수 | 'AI 검수' 표기가 있고 '검토 완료' 주장이 없음 |
+  | `render` | 10 | 항상 not_run(참고) — 실제 렌더링·시각은 앱이 확인하지 않음 |
+  | `chg_log` | QA 보완 재작업 뒤(모든 작업, 짧은 형식·기획 화면 제외) | 산출물 끝 변경 기록 표에 CHG-nn 행(참고) |
+- 사내 스킬이 붙은 작업은 지시문에 '지침이 다르면 고객사 전용 → 사내 → 공용 순, proposal-maker 는 목차 후보로만'이 들어갑니다(`agentRunner.skillPriorityLines`).
 - **고객사 전용 제안 스킬** — 사용자 스킬 폴더(`~/.claude/skills`, 동기화 폴더 포함)의 `<고객>-…-proposal` 가운데 브리핑에 그 고객사가 나오면
-  (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 제안 문서를 쓰는 단계(2·3·6·7)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
+  (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 제안 문서를 쓰는 단계(2·3·7·8·9)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
 - 사내 제안 스킬이 없는 PC 에서는 저장소의 공용 스킬(`proposal-writing`·`rfp-analysis`·`proposal-review`)로 대체됩니다. 공용 스킬은 사내 방법론을 옮기지 않고 일반 원칙으로 썼습니다.
 - `claude_code` 모드에서는 시작 전에 CLI·로그인을 확인하고, 없으면 브리핑을 시작하지 않습니다(분해에 모델을 쓰지 않아도 같은 규칙).
 
