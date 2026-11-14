@@ -12,6 +12,7 @@ directories:
   buildResources: desktop/build
 files:
   - main.cjs
+  - preload.cjs
   - package.json
   - assets/**
 # 앱 본체는 의존성이 없다. 이 훅이 없으면 루트의 화면용 의존성이 app.asar 에 들어간다(scripts/before-build.cjs 참고).

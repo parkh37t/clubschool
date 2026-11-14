@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { BookmarkPlus, FolderOpen, Paperclip, Send } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { BookmarkPlus, FolderOpen, LayoutTemplate, Mic, Paperclip, Send } from 'lucide-react';
 import { postJson } from './officeApi';
 import type { BriefingPrefill } from './officeApi';
 import { useOfficeLang } from './i18n';
-import { BAD_FG, GATE_NAMES, LINE, LINE_SOFT, MONO, MUTED, OK_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle } from './officeTheme';
+import { BAD_FG, GATE_NAMES, LINE, LINE_SOFT, MUTED, OK_FG, WYLIE, WYLIE_DARK, WYLIE_TINT } from './officeTheme';
 import { SIM_TEXT } from './simText';
 
 interface AttachedFile {
@@ -63,21 +64,24 @@ interface BriefingConsoleProps {
   onQueued?: () => void;
   /** 템플릿 탭의 [이 템플릿으로 쓰기] — nonce 가 바뀌면 브리핑 양식에 한 번 채운다(보내기는 사람이 누른다) */
   prefill?: BriefingPrefill | null;
+  /** 입력창 도구 막대의 [템플릿] — 템플릿 탭을 연다 */
+  onOpenTemplates?: () => void;
 }
 
-const field = { ...inputStyle, marginTop: 5, fontSize: 12.5, padding: '6px 9px' };
-const smallBtn = {
-  font: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer', padding: '4px 9px', borderRadius: 4,
-  border: `1px solid ${LINE}`, background: '#fff', color: '#24291F', display: 'inline-flex', alignItems: 'center', gap: 4,
-} as const;
+/** 한글 등 IME 조합 중의 Enter 는 글자 확정용이다 — 이때 보내면 마지막 글자가 잘리거나 두 번 보내진다. */
+const composing = (e: ReactKeyboardEvent) => e.nativeEvent.isComposing || e.key === 'Process' || e.keyCode === 229;
+const MAX_INPUT_PX = 168; // 입력칸 자동 높이 상한(약 7줄) — 넘으면 안에서 스크롤
+
 
 /**
- * 커맨드 센터 맨 아래 입력창(Munder Difflin 의 메시지 입력 자리). 두 가지 쓰임:
+ * 커맨드 센터 맨 아래 입력창 — 채팅 입력창(ChatGPT·Claude·Slack) 방식: 둥근 상자 안에 입력칸·첨부·도구·보내기를 함께 둔다.
+ * 메시지는 Enter 로 보내고 Shift+Enter 로 줄을 바꾼다(IME 조합 중 Enter 는 무시). 브리핑 양식은 칸이 여러 개라 Ctrl+Enter 로 보낸다.
+ * 두 가지 쓰임:
  *   메시지      팀장에게 보내는 말 — 대기열에 쌓여 팀장 상주 세션이 한 건씩 답한다. 일을 맡기는 말이면 팀장이 브리핑으로 정리한다
  *   브리핑 양식  4요소(과제명·결과·맥락·제약)를 직접 적어 바로 브리핑 대기열에 넣는다. 결과 줄이 없으면 팀장은 나누지 않고 되묻는다
  *               템플릿 탭에서 고르면 채워지고(prefill), 지금 양식은 [템플릿으로 저장]으로 남긴다
  */
-export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill }: BriefingConsoleProps) {
+export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill, onOpenTemplates }: BriefingConsoleProps) {
   const { t, lang } = useOfficeLang();
   const apiBase = instructUrl !== undefined ? instructUrl.replace(/\/api\/instruct$/, '') : undefined;
   const [mode, setMode] = useState<'message' | 'form'>(instructUrl ? 'message' : 'form');
@@ -285,13 +289,44 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill }:
     say(r.ok, r.ok ? t('bc.tplSaved', { id: tpl?.id ?? '' }) : String(r.error));
   };
 
-  const submit = () => (mode === 'message' ? sendMessage() : sendBriefing());
-  const tabBtn = (m: 'message' | 'form', label: string) => (
-    <button type="button" onClick={() => { setMode(m); setStatus(''); }} disabled={m === 'message' && !instructUrl} aria-pressed={mode === m}
-      style={{ font: 'inherit', fontSize: 11.5, fontWeight: 800, cursor: m === 'message' && !instructUrl ? 'not-allowed' : 'pointer', padding: '1px 8px', borderRadius: 999, border: `1px solid ${mode === m ? WYLIE : LINE}`, background: mode === m ? WYLIE_TINT : '#fff', color: mode === m ? WYLIE_DARK : MUTED, opacity: m === 'message' && !instructUrl ? 0.5 : 1 }}>
+  const canSend = !busy && (mode === 'message' ? Boolean(message.trim()) : Boolean(title.trim() && result.trim()));
+  const submit = () => { if (busy) return; if (mode === 'message') sendMessage(); else sendBriefing(); };
+
+  // 입력칸 자동 높이 — 글이 늘면 커지고 상한을 넘으면 안에서 스크롤
+  const msgRef = useRef<HTMLTextAreaElement>(null);
+  const resultRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    for (const el of [msgRef.current, resultRef.current]) {
+      if (!el) continue;
+      el.style.height = 'auto';
+      el.style.height = `${Math.min(el.scrollHeight, MAX_INPUT_PX)}px`;
+    }
+  }, [message, result, mode]);
+
+  // 키 — 메시지: Enter 보내기 · Shift+Enter 줄바꿈. 브리핑 양식: Ctrl/⌘+Enter 보내기, 과제명 칸의 Enter 는 결과 칸으로.
+  const onMessageKey = (e: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter' || composing(e) || e.shiftKey) return;
+    e.preventDefault();
+    if (canSend) submit();
+  };
+  const onFormKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Enter' || composing(e) || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    if (canSend) submit();
+  };
+  const onTitleKey = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter' || composing(e)) return;
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) { if (canSend) submit(); } else resultRef.current?.focus();
+  };
+
+  const segBtn = (m: 'message' | 'form', label: string, hint: string) => (
+    <button type="button" role="radio" aria-checked={mode === m} title={hint} disabled={m === 'message' && !instructUrl}
+      onClick={() => { setMode(m); setStatus(''); }}>
       {label}
     </button>
   );
+  const chip = { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: '#FCFAF5', border: `1px solid ${LINE_SOFT}`, borderRadius: 6, padding: '2px 7px', maxWidth: '100%' } as const;
 
   return (
     <section
@@ -299,103 +334,120 @@ export function BriefingConsole({ instructUrl, onSubmitted, onQueued, prefill }:
       onDragOver={(e) => { if (uploadUrl) { e.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => { if (uploadUrl) { e.preventDefault(); setDragOver(false); onDrop(e.dataTransfer); } }}
-      style={{ borderTop: `1px solid ${LINE}`, padding: '8px 10px 10px', background: dragOver ? WYLIE_TINT : 'transparent', transition: 'background .15s ease' }}
+      style={{ borderTop: `1px solid ${LINE}`, padding: '8px 10px 10px' }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11.5, fontWeight: 800, letterSpacing: '.08em', color: WYLIE_DARK, whiteSpace: 'nowrap' }}>{t('bc.title')} · {SIM_TEXT[lang].names.lead}</span>
-        {tabBtn('message', t('bc.modeMsg'))}
-        {tabBtn('form', t('bc.modeForm'))}
-      </div>
-      <div style={{ fontSize: 10.5, color: MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {!instructUrl ? t('bc.offline') : mode === 'message' ? t('bc.hintMsg') : t('bc.hintForm')}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 12, fontWeight: 800, color: WYLIE_DARK, whiteSpace: 'nowrap' }}>{t('bc.title')}</span>
+        <span role="radiogroup" aria-label={t('bc.title')} className="axo-seg">
+          {segBtn('message', t('bc.modeMsg'), t('bc.hintMsg'))}
+          {segBtn('form', t('bc.modeForm'), t('bc.hintForm'))}
+        </span>
+        {mode === 'form' && (
+          <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open}
+            style={{ marginLeft: 'auto', font: 'inherit', fontSize: 11.5, fontWeight: 700, color: WYLIE_DARK, background: 'none', border: 'none', cursor: 'pointer', padding: 0, whiteSpace: 'nowrap' }}>
+            {open ? t('bc.less') : t('bc.more')}
+          </button>
+        )}
       </div>
 
-      {mode === 'message' ? (
-        <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} aria-label={t('bc.modeMsg')}
-          onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit(); }}
-          placeholder={t('bc.msgPlaceholder')} style={field} />
-      ) : (
-        <>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('bc.titlePh')} aria-label={t('bc.titlePh')} style={{ ...field, resize: undefined }} />
-          <textarea value={result} onChange={(e) => setResult(e.target.value)} rows={2} aria-label={t('bc.resultPh')}
-            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit(); }}
-            placeholder={t('bc.resultPh')} style={field} />
-          {open && (
-            <div>
-              <textarea value={context} onChange={(e) => setContext(e.target.value)} rows={3} aria-label={t('bc.contextPh')} placeholder={t('bc.contextPh')} style={{ ...field, fontSize: 12 }} />
-              <textarea value={constraints} onChange={(e) => setConstraints(e.target.value)} rows={2} aria-label={t('bc.constraintsPh')} placeholder={t('bc.constraintsPh')} style={{ ...field, fontSize: 12 }} />
-              <input value={policy} onChange={(e) => setPolicy(e.target.value)} placeholder={`${t('bc.policyPh')} — ${t('bc.policyDefault')}`} aria-label={t('bc.policyPh')} style={{ ...field, fontSize: 12, resize: undefined }} />
-              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 5, alignItems: 'center' }}>
-                <span style={{ fontSize: 10.5, color: MUTED, marginRight: 2 }}>{t('bc.stages')}</span>
-                {GATE_NAMES.map((n, i) => (
-                  <button key={n} type="button" title={SIM_TEXT[lang].gates[i]} onClick={() => setGates((g) => g.map((v, j) => (j === i ? !v : v)))}
-                    style={{ font: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '1px 7px', borderRadius: 999, background: gates[i] ? WYLIE_TINT : '#F2EFE7', color: gates[i] ? WYLIE_DARK : '#9A968A', border: '1px solid ' + (gates[i] ? WYLIE : LINE) }}>
-                    {'G' + (i + 1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {!open && context.trim() && <p style={{ fontSize: 10.5, color: OK_FG, fontWeight: 600, margin: '3px 0 0' }}>{t('bc.contextLen', { n: context.trim().length.toLocaleString() })}</p>}
-        </>
-      )}
-      {attachments.length > 0 && (
-        <ul style={{ listStyle: 'none', margin: '5px 0 0', padding: 0, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {/* 폴더 첨부는 폴더 하나당 칩 하나(올린 수/전체·실패 수) */}
-          {[...new Set(attachments.filter((a) => a.folder).map((a) => a.folder as string))].map((folder) => {
-            const items = attachments.filter((a) => a.folder === folder);
-            const done = items.filter((a) => a.status === 'done').length;
-            const bad = items.filter((a) => a.status === 'error').length;
-            const label = items[0]?.folderName ?? folder;
-            return (
-              <li key={folder} title={items.map((a) => `${a.name}${a.status === 'error' ? ` — ${a.error ?? ''}` : ''}`).join('\n')}
-                style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: '#fff', border: `1px solid ${LINE_SOFT}`, borderRadius: 4, padding: '2px 6px', maxWidth: '100%' }}>
-                <FolderOpen size={12} aria-hidden />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140, fontWeight: 600 }}>{label}</span>
-                <span style={{ color: bad ? BAD_FG : done === items.length ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
-                  {t('bc.folderFiles', { done, n: items.length })}{bad ? ` · ${t('bc.folderBad', { n: bad })}` : ''}
+      <div className="axo-composer" data-drag={dragOver}>
+        {mode === 'message' ? (
+          <textarea ref={msgRef} value={message} onChange={(e) => setMessage(e.target.value)} onKeyDown={onMessageKey} rows={2}
+            aria-label={t('bc.modeMsg')} placeholder={t('bc.msgPlaceholder')} className="axo-composer-input" />
+        ) : (
+          <>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onTitleKey} placeholder={t('bc.titlePh')} aria-label={t('bc.titlePh')}
+              className="axo-composer-field" style={{ fontWeight: 700 }} />
+            <textarea ref={resultRef} value={result} onChange={(e) => setResult(e.target.value)} onKeyDown={onFormKey} rows={2}
+              aria-label={t('bc.resultPh')} placeholder={t('bc.resultPh')} className="axo-composer-field" />
+            {open && (
+              <>
+                <textarea value={context} onChange={(e) => setContext(e.target.value)} onKeyDown={onFormKey} rows={3} aria-label={t('bc.contextPh')} placeholder={t('bc.contextPh')} className="axo-composer-field" />
+                <textarea value={constraints} onChange={(e) => setConstraints(e.target.value)} onKeyDown={onFormKey} rows={2} aria-label={t('bc.constraintsPh')} placeholder={t('bc.constraintsPh')} className="axo-composer-field" />
+                <input value={policy} onChange={(e) => setPolicy(e.target.value)} onKeyDown={onFormKey} placeholder={`${t('bc.policyPh')} — ${t('bc.policyDefault')}`} aria-label={t('bc.policyPh')} className="axo-composer-field" />
+                <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', padding: '6px 12px', alignItems: 'center', borderBottom: `1px solid ${LINE_SOFT}` }}>
+                  <span style={{ fontSize: 10.5, color: MUTED, marginRight: 2 }}>{t('bc.stages')}</span>
+                  {GATE_NAMES.map((n, i) => (
+                    <button key={n} type="button" title={SIM_TEXT[lang].gates[i]} aria-pressed={gates[i]} onClick={() => setGates((g) => g.map((v, j) => (j === i ? !v : v)))}
+                      style={{ font: 'inherit', fontSize: 11, fontWeight: 700, cursor: 'pointer', padding: '1px 7px', borderRadius: 999, background: gates[i] ? WYLIE_TINT : '#F2EFE7', color: gates[i] ? WYLIE_DARK : '#9A968A', border: '1px solid ' + (gates[i] ? WYLIE : LINE) }}>
+                      {'G' + (i + 1)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {!open && context.trim() && <p style={{ fontSize: 10.5, color: OK_FG, fontWeight: 600, margin: 0, padding: '4px 12px' }}>{t('bc.contextLen', { n: context.trim().length.toLocaleString() })}</p>}
+          </>
+        )}
+
+        {attachments.length > 0 && (
+          <ul style={{ listStyle: 'none', margin: 0, padding: '6px 10px 0', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {/* 폴더 첨부는 폴더 하나당 칩 하나(올린 수/전체·실패 수) */}
+            {[...new Set(attachments.filter((a) => a.folder).map((a) => a.folder as string))].map((folder) => {
+              const items = attachments.filter((a) => a.folder === folder);
+              const done = items.filter((a) => a.status === 'done').length;
+              const bad = items.filter((a) => a.status === 'error').length;
+              const label = items[0]?.folderName ?? folder;
+              return (
+                <li key={folder} title={items.map((a) => `${a.name}${a.status === 'error' ? ` — ${a.error ?? ''}` : ''}`).join('\n')} style={chip}>
+                  <FolderOpen size={12} aria-hidden />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140, fontWeight: 600 }}>{label}</span>
+                  <span style={{ color: bad ? BAD_FG : done === items.length ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
+                    {t('bc.folderFiles', { done, n: items.length })}{bad ? ` · ${t('bc.folderBad', { n: bad })}` : ''}
+                  </span>
+                  <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.folder !== folder))} aria-label={`${label} ${t('bc.remove')}`} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                </li>
+              );
+            })}
+            {attachments.filter((a) => !a.folder).map((a) => (
+              <li key={a.id} style={chip}>
+                <Paperclip size={11} aria-hidden />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150, fontWeight: 600 }}>{a.name}</span>
+                <span style={{ color: a.status === 'error' ? BAD_FG : a.status === 'done' ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
+                  {a.status === 'uploading' ? t('bc.uploading') : a.status === 'error' ? (a.error || t('bc.uploadFailed')) : `${Math.max(1, Math.round(a.size / 1024)).toLocaleString()}KB`}
                 </span>
-                <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.folder !== folder))} aria-label={`${label} ${t('bc.remove')}`} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.id !== a.id))} aria-label={`${a.name} ${t('bc.remove')}`} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
               </li>
-            );
-          })}
-          {attachments.filter((a) => !a.folder).map((a) => (
-            <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, background: '#fff', border: `1px solid ${LINE_SOFT}`, borderRadius: 4, padding: '2px 6px', maxWidth: '100%' }}>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150, fontWeight: 600 }}>{a.name}</span>
-              <span style={{ color: a.status === 'error' ? BAD_FG : a.status === 'done' ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>
-                {a.status === 'uploading' ? t('bc.uploading') : a.status === 'error' ? (a.error || t('bc.uploadFailed')) : `${Math.max(1, Math.round(a.size / 1024)).toLocaleString()}KB`}
-              </span>
-              <button type="button" onClick={() => setAttachments((x) => x.filter((y) => y.id !== a.id))} aria-label={`${a.name} ${t('bc.remove')}`} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
-            </li>
-          ))}
-        </ul>
-      )}
+            ))}
+          </ul>
+        )}
+
+        {/* 도구 막대 — 첨부·폴더·템플릿(·템플릿으로 저장) | 단축키 안내 | 보내기 */}
+        <div className="axo-composer-bar">
+          <button type="button" className="axo-icon-btn" disabled={!uploadUrl} onClick={() => fileInputRef.current?.click()} title={uploadUrl ? t('bc.fileTitle') : t('bc.fileOff')} aria-label={t('bc.file')}>
+            <Paperclip size={16} aria-hidden />
+          </button>
+          <button type="button" className="axo-icon-btn" disabled={!uploadUrl} onClick={() => folderInputRef.current?.click()} title={uploadUrl ? t('bc.folderTitle') : t('bc.fileOff')} aria-label={t('bc.folder')}>
+            <FolderOpen size={16} aria-hidden />
+          </button>
+          {onOpenTemplates && (
+            <button type="button" className="axo-icon-btn" onClick={onOpenTemplates} title={t('bc.templates')} aria-label={t('bc.templates')}>
+              <LayoutTemplate size={16} aria-hidden />
+            </button>
+          )}
+          {mode === 'form' && (
+            <button type="button" className="axo-icon-btn" disabled={apiBase === undefined} onClick={saveTemplate} title={apiBase !== undefined ? t('bc.tplSaveTitle') : t('bc.tplOff')} aria-label={t('bc.tplSave')}>
+              <BookmarkPlus size={16} aria-hidden />
+            </button>
+          )}
+          <span className="axo-icon-btn" title={t('bc.voiceTitle')} aria-label={t('bc.voice')} role="img" style={{ cursor: 'help' }}>
+            <Mic size={15} aria-hidden />
+          </span>
+          <span className="axo-kbd-hint">{mode === 'message' ? t('bc.hintEnter') : t('bc.hintCtrlEnter')}</span>
+          <button type="button" className="axo-send" onClick={submit} disabled={!canSend} aria-label={t('bc.send')}>
+            {busy ? t('bc.sending') : t('bc.send')}<Send size={14} aria-hidden />
+          </button>
+        </div>
+      </div>
+
       <input ref={fileInputRef} type="file" multiple onChange={(e) => { handleFiles(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
       {/* webkitdirectory 는 React 속성 타입에 없어 ref 로 붙인다 — Electron·크롬에서 폴더 선택 창이 뜬다 */}
       <input
         ref={(el) => { folderInputRef.current = el; if (el) { el.setAttribute('webkitdirectory', ''); el.setAttribute('directory', ''); } }}
         type="file" multiple onChange={(e) => { onFolderPicked(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} aria-hidden tabIndex={-1}
       />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 7, flexWrap: 'wrap' }}>
-        {mode === 'form' && <button type="button" style={smallBtn} onClick={() => setOpen((v) => !v)} aria-expanded={open}>{open ? t('bc.less') : t('bc.more')}</button>}
-        {mode === 'form' && (
-          <button type="button" style={{ ...smallBtn, opacity: apiBase !== undefined ? 1 : 0.5 }} disabled={apiBase === undefined} onClick={saveTemplate} title={apiBase !== undefined ? t('bc.tplSaveTitle') : t('bc.tplOff')}>
-            <BookmarkPlus size={13} aria-hidden />{t('bc.tplSave')}
-          </button>
-        )}
-        <button type="button" style={{ ...smallBtn, opacity: uploadUrl ? 1 : 0.5 }} disabled={!uploadUrl} onClick={() => fileInputRef.current?.click()} title={uploadUrl ? t('bc.fileTitle') : t('bc.fileOff')}>
-          <Paperclip size={13} aria-hidden />{t('bc.file')}
-        </button>
-        <button type="button" style={{ ...smallBtn, opacity: uploadUrl ? 1 : 0.5 }} disabled={!uploadUrl} onClick={() => folderInputRef.current?.click()} title={uploadUrl ? t('bc.folderTitle') : t('bc.fileOff')}>
-          <FolderOpen size={13} aria-hidden />{t('bc.folder')}
-        </button>
-        <span style={{ fontSize: 10.5, color: MUTED }} title={t('bc.voiceTitle')}>{t('bc.voice')}</span>
-        <button type="button" onClick={submit} disabled={busy}
-          style={{ marginLeft: 'auto', font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: busy ? 'wait' : 'pointer', padding: '5px 12px', borderRadius: 4, border: `1px solid ${WYLIE_DARK}`, background: WYLIE, color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 5, opacity: busy ? 0.6 : 1 }}>
-          {busy ? t('bc.sending') : t('bc.send')}<Send size={13} aria-hidden />
-        </button>
-      </div>
-      {status && <p style={{ fontSize: 11.5, color: failed ? BAD_FG : OK_FG, fontWeight: 600, margin: '5px 0 0' }}>{status}</p>}
+      {!instructUrl && <p style={{ fontSize: 10.5, color: MUTED, margin: '5px 2px 0' }}>{t('bc.offline')}</p>}
+      {status && <p role="status" style={{ fontSize: 11.5, color: failed ? BAD_FG : OK_FG, fontWeight: 600, margin: '5px 2px 0' }}>{status}</p>}
     </section>
   );
 }

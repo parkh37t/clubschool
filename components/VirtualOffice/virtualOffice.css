@@ -87,12 +87,44 @@
 .axo-canvas svg{width:100%;height:100%;display:block;}
 /* 가로형 평면도(1440×860) — 남는 높이는 위아래 여백으로, 사무실이 창 폭을 최대한 쓴다 */
 .axo-cc{width:clamp(340px,24vw,420px);flex-shrink:0;min-height:0;display:flex;flex-direction:column;background:#FFFDF8;border:1px solid #DDD6C8;border-radius:6px;overflow:hidden;}
-.axo-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:3px;padding:0 10px 8px;}
-.axo-tab{position:relative;display:flex;align-items:center;justify-content:center;gap:4px;min-width:0;font:inherit;font-size:11.5px;font-weight:700;cursor:pointer;padding:4px 3px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#4A4A40;}
-.axo-tab:hover:not(:disabled){background:#F7F3FC;border-color:#C9B8E6;}
-.axo-tab[aria-selected="true"]{background:#EFEAF7;border-color:#6A4C9C;color:#43306B;box-shadow:inset 0 -2px 0 #6A4C9C;}
-.axo-tab:disabled{cursor:not-allowed;color:#B4AE9F;background:#F7F4EC;border-style:dashed;}
-.axo-tab-badge{position:absolute;top:-6px;right:-5px;min-width:16px;padding:0 4px;border-radius:999px;color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;}
+/* 탭 막대 — 주 탭 다섯(아이콘 위·이름 아래·건수) + 더보기 메뉴 */
+.axo-tabbar{display:flex;align-items:stretch;padding:0 6px;border-bottom:1px solid #E6E0D2;}
+.axo-tabbar-item{flex:1 1 0;min-width:0;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:inherit;font-size:11px;font-weight:700;color:#6B675C;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;padding:7px 2px 6px;cursor:pointer;}
+.axo-tabbar-item:hover{color:#43306B;background:#F7F3FC;}
+.axo-tabbar-item[aria-selected="true"],.axo-tabbar-item[data-active="true"]{color:#43306B;border-bottom-color:#6A4C9C;font-weight:800;}
+.axo-tabbar-item:focus-visible{outline:2px solid #6A4C9C;outline-offset:-2px;border-radius:4px;}
+.axo-tabbar-icon{position:relative;display:inline-flex;}
+.axo-tabbar-badge{position:absolute;top:-6px;left:11px;min-width:15px;padding:0 4px;border-radius:999px;color:#fff;font-size:9.5px;font-weight:800;line-height:15px;text-align:center;box-shadow:0 0 0 2px #FFFDF8;}
+.axo-tabbar-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.axo-more{position:relative;flex:1 1 0;min-width:0;display:flex;}
+.axo-more>.axo-tabbar-item{flex:1 1 auto;}
+.axo-more-menu{position:absolute;right:0;top:calc(100% + 4px);z-index:30;min-width:184px;background:#fff;border:1px solid #DDD6C8;border-radius:10px;box-shadow:0 12px 30px rgba(20,24,36,.18);padding:5px;display:flex;flex-direction:column;gap:1px;}
+.axo-more-item{display:flex;align-items:center;gap:9px;font:inherit;font-size:12.5px;font-weight:600;color:#24291F;background:none;border:none;border-radius:6px;padding:7px 9px;cursor:pointer;text-align:left;}
+.axo-more-item:hover,.axo-more-item:focus-visible{background:#F7F3FC;outline:none;}
+.axo-more-item[aria-checked="true"]{background:#EFEAF7;color:#43306B;font-weight:800;}
+.axo-more-count{min-width:16px;padding:0 5px;border-radius:999px;color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;}
+/* 입력창 — 둥근 상자 안에 입력칸·첨부·도구·보내기(채팅 입력창 방식) */
+.axo-seg{display:inline-flex;background:#F2EFE7;border-radius:999px;padding:2px;}
+.axo-seg button{font:inherit;font-size:11.5px;font-weight:800;border:none;background:none;color:#6B675C;padding:3px 10px;border-radius:999px;cursor:pointer;white-space:nowrap;}
+.axo-seg button[aria-checked="true"]{background:#fff;color:#43306B;box-shadow:0 1px 2px rgba(20,24,36,.16);}
+.axo-seg button:disabled{opacity:.5;cursor:not-allowed;}
+.axo-seg button:focus-visible{outline:2px solid #6A4C9C;outline-offset:1px;}
+.axo-composer{border:1px solid #DDD6C8;border-radius:12px;background:#fff;overflow:hidden;transition:border-color .15s ease,box-shadow .15s ease;}
+.axo-composer:focus-within{border-color:#6A4C9C;box-shadow:0 0 0 3px rgba(106,76,156,.14);}
+.axo-composer[data-drag="true"]{border-style:dashed;border-color:#6A4C9C;background:#F7F3FC;}
+.axo-composer-input{display:block;width:100%;box-sizing:border-box;border:none;outline:none;resize:none;font:inherit;font-size:13px;line-height:1.55;padding:10px 12px 4px;background:transparent;color:#24291F;max-height:168px;overflow-y:auto;}
+.axo-composer-field{display:block;width:100%;box-sizing:border-box;border:none;border-bottom:1px solid #F0EBE0;outline:none;resize:none;font:inherit;font-size:12.5px;line-height:1.5;padding:8px 12px;background:transparent;color:#24291F;max-height:168px;}
+.axo-composer-field:focus{background:#FCFAFF;}
+.axo-composer-input::placeholder,.axo-composer-field::placeholder{color:#A39F93;}
+.axo-composer-bar{display:flex;align-items:center;gap:1px;padding:4px 6px 6px;}
+.axo-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;border:none;background:none;border-radius:8px;color:#6B675C;cursor:pointer;}
+.axo-icon-btn:hover:not(:disabled){background:#F2EFE7;color:#43306B;}
+.axo-icon-btn:disabled{opacity:.4;cursor:not-allowed;}
+.axo-icon-btn:focus-visible,.axo-send:focus-visible{outline:2px solid #6A4C9C;outline-offset:1px;}
+.axo-kbd-hint{margin-left:auto;min-width:0;font-size:10.5px;color:#9A968A;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px;}
+.axo-send{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 12px;flex-shrink:0;border-radius:9px;border:none;background:#6A4C9C;color:#fff;font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;}
+.axo-send:hover:not(:disabled){background:#5A3F88;}
+.axo-send:disabled{background:#CFC6DE;cursor:not-allowed;}
 .axo-gates{flex-shrink:0;display:flex;gap:4px;}
 .axo-gate{flex:1;min-width:0;padding:3px 6px 4px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFDF8;}
 .axo-bottom{flex-shrink:0;padding:8px 12px 10px;}

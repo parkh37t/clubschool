@@ -23,12 +23,12 @@ import { exportDocx } from './docxExport.mjs';
 import { nameOf, AGENT_IDS } from './roster.mjs';
 import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths.mjs';
 import { effective as breakerEffective, recordOutcome, resetBreaker } from './breaker.mjs';
-import { getSettings, languageLine, stateText } from './settings.mjs';
+import { getSettings, languageLine, stateText, currentConcurrency } from './settings.mjs';
 import { liveNote } from './live.mjs';
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const APPROVAL_TIMEOUT_MS = Number(process.env.OFFICE_APPROVAL_TIMEOUT_MS || 0); // 0 = 재하가 누를 때까지 무한 대기
-export const CONCURRENCY = Math.max(1, Math.min(3, Math.floor(Number(process.env.OFFICE_CONCURRENCY || 2)) || 2));
+// 동시 작업 수는 설정(settings.concurrency, 기본 OFFICE_CONCURRENCY)에서 브리핑을 시작할 때 읽는다.
 const BASE_MAX_TURNS = Number(process.env.OFFICE_MAX_TURNS || 40); // 서킷 브레이커 '제한' 단계면 절반
 
 function slug(s) {
@@ -88,12 +88,12 @@ export async function officeState({ briefingId, phase, extra }) {
     phase: effPhase === 'reporting' ? 'working' : effPhase,
     progress: tasks.length ? done / tasks.length : 0,
     agents,
-    concurrency: { limit: CONCURRENCY, running: running.length },
+    concurrency: { limit: await currentConcurrency(), running: running.length },
     boards,
     ...rest,
     hive: {
       briefing: briefingId,
-      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0 })),
+      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0, docx: t.docx || '' })),
       // 승인 탭에는 지금 브리핑 밖의 승인(재시작 전에 남은 것 등)도 보여야 재하가 결정할 수 있다.
       pending: snap.pending,
       approvals: snap.approvals.filter((a) => tasks.some((t) => t.id === a.task)).slice(-20),
@@ -149,6 +149,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
 
   const { id: briefingId } = await hive.saveBriefing({ ...b, mode, outDir: outDirRel });
   await fs.writeFile(path.join(outDir, 'briefing.json'), JSON.stringify({ ...b, mode, briefingId }, null, 2), 'utf8');
+  const CONCURRENCY = await currentConcurrency();
   log(`브리핑 접수: "${b.title}" (${mode} 모드, 동시 ${CONCURRENCY}건) → ${briefingId}`);
   let costUsd = 0;
   const leftovers = [];

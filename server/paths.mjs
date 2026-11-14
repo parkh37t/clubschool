@@ -3,7 +3,8 @@
 //   APP_ROOT          server/ 의 상위. 개발 시 저장소 루트, 설치형 앱에서는 resources 폴더.
 //                     .claude/agents·.claude/skills·dist/ 를 여기서 읽는다(쓰지 않는다).
 //   HIVE_DIR          작업 원장·메일함·기억·이벤트. OFFICE_HIVE_DIR (기본 server/hive)
-//   DELIVERABLES_DIR  과제 산출물·첨부. OFFICE_DELIVERABLES_DIR (기본 <APP_ROOT>/DELIVERABLES)
+//   DELIVERABLES_DIR  과제 산출물·첨부. OFFICE_DELIVERABLES_DIR (기본 <APP_ROOT>/DELIVERABLES).
+//                     설정 화면에서 바꾸면 hive/settings.json 의 deliverables_dir 에 남고 시작할 때 이 값을 덮는다(storage.mjs).
 //   DIST_DIR          빌드된 화면. OFFICE_DIST_DIR (기본 <APP_ROOT>/dist)
 //
 // 설치 폴더(Program Files·AppData\Local\Programs)는 쓰기 권한이 없거나 업데이트 때 지워지므로,
@@ -25,11 +26,19 @@ export const SKILLS_DIR = path.join(APP_ROOT, '.claude', 'skills');
 const fromEnv = (name, fallback) => (process.env[name] ? path.resolve(process.env[name]) : fallback);
 
 export const HIVE_DIR = fromEnv('OFFICE_HIVE_DIR', path.join(HERE, 'hive'));
-export const DELIVERABLES_DIR = fromEnv('OFFICE_DELIVERABLES_DIR', path.join(APP_ROOT, 'DELIVERABLES'));
+export const DELIVERABLES_DEFAULT = fromEnv('OFFICE_DELIVERABLES_DIR', path.join(APP_ROOT, 'DELIVERABLES'));
+// 다른 모듈은 이 이름을 import 해 쓸 때마다 읽는다(ES 모듈 live binding) — 값을 지역 상수로 복사해 두지 말 것.
+export let DELIVERABLES_DIR = DELIVERABLES_DEFAULT;
 export const DIST_DIR = fromEnv('OFFICE_DIST_DIR', path.join(APP_ROOT, 'dist'));
 // office-state.json 은 hive 요약본. 기본 위치(server/)를 유지하되, hive 를 옮기면 hive 옆으로 함께 옮긴다.
 export const STATE_FILE = fromEnv('OFFICE_STATE_FILE', process.env.OFFICE_HIVE_DIR ? path.join(HIVE_DIR, 'office-state.json') : path.join(HERE, 'office-state.json'));
-export const INBOX_DIR = path.join(DELIVERABLES_DIR, '_inbox'); // 첨부 임시함(과제 실행 시 과제 폴더로 복사)
+export let INBOX_DIR = path.join(DELIVERABLES_DIR, '_inbox'); // 첨부 임시함(과제 실행 시 과제 폴더로 복사)
+
+/** 산출물 폴더를 바꾼다(storage.mjs 만 부른다). 진행 중인 브리핑이 없을 때만 — 원장 경로가 이 폴더 기준 상대경로라서. */
+export function setDeliverablesDir(dir) {
+  DELIVERABLES_DIR = path.resolve(dir);
+  INBOX_DIR = path.join(DELIVERABLES_DIR, '_inbox');
+}
 
 /** 산출물 폴더 기준 상대경로('/' 구분). 화면·원장·에이전트 지시문이 모두 이 형식을 쓴다. */
 export function relData(abs) {

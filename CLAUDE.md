@@ -143,6 +143,9 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **제안서 작성 프로세스**: 결과 줄이 제안서인 브리핑은 팀장 분해 대신 `server/proposal.mjs` 의 8단계(조사 → RFP 분석·Go/No-Go(승인) → 전략·목차 →
   [UX 섹션] [KPI] → 장표 구성안·근거표 → 본문(수치 걸리면 승인) → 검수)로 나눈다. 단계별 스킬은 `tasks.json` 의 `skills` 에 남고 실행기가 우선 쓴다.
   사내(`wylie-*` 등)·고객사 전용(`<고객>-…-proposal`) 제안 스킬은 사용자 스킬 폴더에만 두고 이름으로 찾는다(공개 저장소에 두지 않음).
+- **설정·산출물 위치**: 설정 창에서 산출물 폴더·비용 한도·QA 자동 보완·동시 작업 수(1~3)를 바꾼다. 산출물 폴더는 `server/storage.mjs` 가 쓰기 시험 후
+  `paths.mjs` 의 `DELIVERABLES_DIR`(live binding)를 바꾸고 `settings.json` 의 `deliverables_dir` 에 남긴다. 브리핑 진행 중에는 바꾸지 않고, 예전 폴더 파일은 지우지 않는다.
+  파일 열기(`/api/open`)는 산출물 폴더 안의 문서만, 이 PC 화면에서 온 요청만 받는다.
 - **인원 추가**: 역할 템플릿 12종(`server/agentTemplates.mjs`, 한·영)으로 최대 6명. 명단은 기본 12인 + `agents.json` 이며 `roster.mjs` 가 합친다.
 - **실시간 기록·터미널**: 역할 실행은 stream-json 으로 돌고 `live/<작업>.jsonl` 에 줄을 남긴다. 대화형 터미널은 node-pty(`server/pty.mjs`)이며
   상태를 바꾸는 API(설정·대기열·인원·브레이커·터미널)는 이 PC 화면(Origin 127.0.0.1·localhost)에서 온 요청만 받는다.

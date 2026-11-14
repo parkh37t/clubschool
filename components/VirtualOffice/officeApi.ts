@@ -48,7 +48,11 @@ export interface LiveLine {
 }
 
 /** auto_revise — QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(server/orchestrator.mjs) */
-export interface OfficeSettings { lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; auto_revise: boolean; leader_session: boolean; }
+/** 설정(GET /api/settings) — 저장된 값 + 지금 쓰는 산출물·hive 위치(이 PC 화면이 아니면 사용자 폴더는 ~). running=브리핑 진행 중 */
+export interface OfficeSettings {
+  lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; auto_revise: boolean; leader_session: boolean; concurrency: number;
+  deliverables_dir: string; deliverables_default: string; deliverables_custom: boolean; hive_dir: string; mode: string; desktop: boolean; running: boolean;
+}
 
 /** 대화 탭 — 에이전트끼리 주고받은 메시지(GET /api/mail). 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'. 최신순 */
 export interface MailMessage { id: string; from: string; to: string; type: string; task: string; ts: string; body: string; truncated: boolean; }

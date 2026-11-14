@@ -15,13 +15,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { readState, writeState, clearState } from './state.mjs';
-import { runBriefing, watchOrphanApprovals, CONCURRENCY } from './orchestrator.mjs';
+import { runBriefing, watchOrphanApprovals } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
 import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren } from './claudeCode.mjs';
 import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, loadCustomAgents, addCustomAgent, removeCustomAgent, agentById, nameOf } from './roster.mjs';
 import { resolveSkills } from './skills.mjs';
-import { DELIVERABLES_DIR, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
-import { getSettings, updateSettings, publicSettings, stateText } from './settings.mjs';
+import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
+import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
+import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency } from './settings.mjs';
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
 import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from './leaderSession.mjs';
@@ -110,6 +111,20 @@ function sameOrigin(req) {
   }
 }
 
+/**
+ * 이 PC 화면에서 온 읽기 요청인지 — 브라우저는 같은 오리진 GET 에 Origin 을 붙이지 않으므로
+ * Sec-Fetch-Site(same-origin)와 Host(루프백)로 본다. 설정 화면의 전체 경로 표시에만 쓴다(바꾸는 요청은 sameOrigin).
+ */
+function localViewer(req) {
+  if (sameOrigin(req)) return true;
+  if (req.headers.origin || req.headers['sec-fetch-site'] !== 'same-origin') return false;
+  try {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(`http://${req.headers.host}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── 화면(dist/) 정적 제공 ──
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -147,12 +162,28 @@ async function serveStatic(req, res, url) {
 
 // ── 대기 상태(브리핑 전) ──
 // 상태 파일이 없을 때 404 대신 빈 사무실 상태를 돌려준다. 화면이 데모 시나리오로 빠지지 않고 '연결됨·대기'로 보인다.
+/** 설정 화면에 보낼 값 — 저장된 설정 + 지금 쓰는 산출물·hive 위치. 이 PC 화면이 아니면 사용자 폴더를 ~ 로 줄인다. */
+async function settingsView(local) {
+  const s = await getSettings();
+  const shown = (p) => (local ? p : maskHome(p));
+  return {
+    ...publicSettings(s),
+    deliverables_dir: shown(DELIVERABLES_DIR),
+    deliverables_default: shown(DELIVERABLES_DEFAULT),
+    deliverables_custom: Boolean(s.deliverables_dir),
+    hive_dir: shown(HIVE_DIR),
+    mode: MODE,
+    desktop: process.env.OFFICE_DESKTOP === '1',
+    running: running(),
+  };
+}
+
 async function idleState() {
   const pending = await hive.pendingApprovals();
   return {
     stage: 0, phase: 'working', progress: 0, idle: true,
     agents: Object.fromEntries(AGENT_IDS.map((id) => [id, { state: 'idle', task: '' }])),
-    concurrency: { limit: CONCURRENCY, running: 0 },
+    concurrency: { limit: await currentConcurrency(), running: 0 },
     hive: { briefing: '', tasks: [], pending, approvals: [], mail: [], leader: { id: LEADER.id, name: LEADER.name, state: 'idle', task: '' } },
   };
 }
@@ -204,7 +235,7 @@ async function rosterView() {
       };
     }),
   ];
-  return { members, running: running(), mode: MODE, concurrency: CONCURRENCY, max_custom: MAX_CUSTOM };
+  return { members, running: running(), mode: MODE, concurrency: await currentConcurrency(), max_custom: MAX_CUSTOM };
 }
 
 // ── 로그인 상태 — CLI 호출이 1~2초 걸려 1분간 기억한다(화면은 자주 폴링) ──
@@ -271,7 +302,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      sendJson(res, 200, { ok: true, mode: MODE, running: running(), concurrency: CONCURRENCY, pending: (await hive.pendingApprovals()).length, desktop: process.env.OFFICE_DESKTOP === '1', pty: await ptyAvailable() });
+      sendJson(res, 200, { ok: true, mode: MODE, running: running(), concurrency: await currentConcurrency(), pending: (await hive.pendingApprovals()).length, desktop: process.env.OFFICE_DESKTOP === '1', pty: await ptyAvailable() });
       return;
     }
 
@@ -330,16 +361,43 @@ const server = http.createServer(async (req, res) => {
 
     // ── 설정(언어·작업당 상한·하루 예산) ──
     if (req.method === 'GET' && url.pathname === '/api/settings') {
-      sendJson(res, 200, publicSettings(await getSettings()));
+      sendJson(res, 200, await settingsView(localViewer(req)));
+      return;
+    }
+    // 산출물 저장 위치 바꾸기 — 진행 중인 브리핑이 없을 때만(원장 경로가 이 폴더 기준 상대경로라서)
+    if (req.method === 'POST' && url.pathname === '/api/settings/deliverables') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 바꿀 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      if (running()) { sendJson(res, 409, { error: '브리핑이 진행 중입니다. 끝난 뒤에 바꿔 주세요.' }); return; }
+      if (body?.check) { const c = await checkDeliverablesDir(body.dir); sendJson(res, c.ok ? 200 : 400, c); return; }
+      const r = await changeDeliverablesDir({ dir: body?.dir, reset: Boolean(body?.reset), copy: Boolean(body?.copy) });
+      if (!r.ok) { sendJson(res, 400, { error: r.error }); return; }
+      await updateSettings({ deliverables_dir: body?.reset ? '' : r.dir });
+      log(`산출물 위치 변경: ${r.from} → ${r.dir}${r.copied ? ' (기존 산출물 복사)' : ''}`);
+      await hive.appendEvent({ kind: 'settings', what: 'deliverables_dir', from: r.from, to: r.dir, copied: r.copied, by: OWNER.id });
+      sendJson(res, 200, { ...(await settingsView(true)), copied: r.copied });
+      return;
+    }
+    // 이 PC 에서 산출물 파일·폴더 열기(탐색기·기본 앱). 산출물 폴더 안의 문서만
+    if (req.method === 'POST' && url.pathname === '/api/open') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 열 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      const target = ['deliverables', 'hive'].includes(body?.target) ? body.target : 'path';
+      const r = await openLocal({ target, path: String(body?.path || ''), select: Boolean(body?.select) });
+      sendJson(res, r.ok ? 200 : 400, r);
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/settings') {
       if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 바꿀 수 있습니다.' }); return; }
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
-      const next = await updateSettings(body || {});
+      // 산출물 위치는 검사·복사가 필요해 /api/settings/deliverables 로만 바꾼다
+      const { deliverables_dir: _ignored, ...patch } = body || {};
+      const next = await updateSettings(patch);
       log(`설정 변경: ${JSON.stringify(publicSettings(next))}`);
-      sendJson(res, 200, publicSettings(next));
+      sendJson(res, 200, await settingsView(true));
       return;
     }
 
@@ -626,7 +684,7 @@ const server = http.createServer(async (req, res) => {
       const q = await loadQueue();
       const position = q.items.filter((i) => i.kind === 'briefing' && i.status === 'queued').findIndex((i) => i.id === item.id) + 1;
       log(`대기열: ${item.id} 브리핑 "${instruction.title}" (대기 ${position}번째${running() ? ', 앞 브리핑 실행 중' : ''})`);
-      sendJson(res, 202, { accepted: true, queued: item.id, position, running: running(), title: instruction.title, mode: MODE, concurrency: CONCURRENCY });
+      sendJson(res, 202, { accepted: true, queued: item.id, position, running: running(), title: instruction.title, mode: MODE, concurrency: await currentConcurrency() });
       return;
     }
 
@@ -733,7 +791,14 @@ server.listen(PORT, HOST, async () => {
   await startTriggers({ log });
   await attachPtySocket(server, { allow: sameOrigin, log });
   const shown = HOST && HOST !== '0.0.0.0' ? HOST : 'localhost';
-  log(`가동 — http://${shown}:${PORT}  (모드: ${MODE}, 동시 작업 ${CONCURRENCY}건${HOST ? `, 바인딩 ${HOST}` : ''})`);
+  log(`가동 — http://${shown}:${PORT}  (모드: ${MODE}, 동시 작업 ${await currentConcurrency()}건${HOST ? `, 바인딩 ${HOST}` : ''})`);
+  {
+    const saved = (await getSettings()).deliverables_dir;
+    if (saved) {
+      const r = await changeDeliverablesDir({ dir: saved });
+      if (!r.ok) log(`경고: 설정한 산출물 위치(${saved})를 쓸 수 없어 기본 위치로 돕니다 — ${r.error}`);
+    }
+  }
   log(`데이터: hive=${HIVE_DIR} · 산출물=${DELIVERABLES_DIR}`);
   log(`화면: ${DIST_DIR}${(await fs.stat(path.join(DIST_DIR, 'index.html')).then(() => true).catch(() => false)) ? '' : ' (없음 — npm run build 필요)'}`);
   if (MODE === 'mock') log('mock 모드: 키 없이 배선만 검증(산출물은 목업, QA 내용검토 not_run). 실제 실행은 OFFICE_MODE=claude_code.');

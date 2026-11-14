@@ -1,6 +1,7 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Activity, Brain, CalendarClock, Gauge, LayoutTemplate, ListChecks, MessageCircleQuestion, MessagesSquare, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
+import { Activity, Brain, CalendarClock, ChevronDown, Gauge, LayoutTemplate, ListChecks, MessageCircleQuestion, MessagesSquare, MoreHorizontal, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
 import type { FeedItem, HiveState } from './officeSimulator';
 import { usePolling } from './officeApi';
 import type { AgentStatus, BriefingPrefill, BriefingTemplate, HiveEvent, Question, QueueResponse, RosterMember } from './officeApi';
@@ -51,24 +52,26 @@ interface CommandCenterProps {
   onSubmitted: (title: string) => void;
 }
 
-// 탭 격자 — Munder Difflin 의 COMMAND CENTER 탭 자리(4칸 × 3줄, 열 수는 virtualOffice.css 의 .axo-tabs).
-const TABS: { key: CommandTab; label: string; icon: LucideIcon }[] = [
-  { key: 'terminal', label: 'tab.terminal', icon: SquareTerminal },
-  { key: 'monitor', label: 'tab.monitor', icon: Gauge },
-  { key: 'tasks', label: 'tab.tasks', icon: ListChecks },
-  { key: 'questions', label: 'tab.questions', icon: MessageCircleQuestion },
-  { key: 'talk', label: 'tab.talk', icon: MessagesSquare },
-  { key: 'approvals', label: 'tab.approvals', icon: Stamp },
-  { key: 'templates', label: 'tab.templates', icon: LayoutTemplate },
-  { key: 'triggers', label: 'tab.triggers', icon: CalendarClock },
-  { key: 'memory', label: 'tab.memory', icon: Brain },
-  { key: 'activity', label: 'tab.activity', icon: Activity },
-  { key: 'graph', label: 'tab.graph', icon: Network },
-  { key: 'skills', label: 'tab.skills', icon: Sparkles },
-];
+// 탭 — 자주 쓰는 다섯 개는 한 줄로 늘 보이고(아이콘 + 이름 + 건수), 나머지는 '더보기' 메뉴에 둔다(GitHub·Linear 의 탭 막대 방식).
+const TAB_META: Record<CommandTab, { label: string; icon: LucideIcon }> = {
+  tasks: { label: 'tab.tasks', icon: ListChecks },
+  approvals: { label: 'tab.approvals', icon: Stamp },
+  questions: { label: 'tab.questions', icon: MessageCircleQuestion },
+  talk: { label: 'tab.talk', icon: MessagesSquare },
+  terminal: { label: 'tab.terminal', icon: SquareTerminal },
+  monitor: { label: 'tab.monitor', icon: Gauge },
+  templates: { label: 'tab.templates', icon: LayoutTemplate },
+  triggers: { label: 'tab.triggers', icon: CalendarClock },
+  memory: { label: 'tab.memory', icon: Brain },
+  activity: { label: 'tab.activity', icon: Activity },
+  graph: { label: 'tab.graph', icon: Network },
+  skills: { label: 'tab.skills', icon: Sparkles },
+};
+const PRIMARY_TABS: CommandTab[] = ['tasks', 'approvals', 'questions', 'talk', 'terminal'];
+const MORE_TABS: CommandTab[] = ['monitor', 'templates', 'triggers', 'memory', 'activity', 'graph', 'skills'];
 
 /**
- * 오른쪽 커맨드 센터 — 머리(팀장·상태·자동 진행) → 탭 격자 → 상태 줄 → 탭 내용 → 대기열 → 입력창.
+ * 오른쪽 커맨드 센터 — 머리(팀장·상태·자동 진행) → 탭 막대(주 탭 다섯 + 더보기) → 상태 줄 → 탭 내용 → 대기열 → 입력창.
  * 사무실 시계가 0.1초마다 다시 그리므로 memo 로 감싼다.
  */
 export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, apiBase, selected, onSelect, roster, events, concurrency, mode, demo, instructUrl, onSubmitted }: CommandCenterProps) {
@@ -89,6 +92,27 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
   const applyTemplate = useCallback((tpl: BriefingTemplate) => {
     setPrefill({ nonce: Date.now(), title: tpl.title, result: tpl.result, context: tpl.context, constraints: [...tpl.constraints] });
   }, []);
+
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDown = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [moreOpen]);
+  const pickTab = (k: CommandTab) => { onTab(k); setMoreOpen(false); };
+  // 탭 목록 안에서 ←/→ 로 주 탭을 옮긴다(WAI-ARIA tabs 패턴)
+  const onTabKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const i = PRIMARY_TABS.indexOf(tab);
+    const next = PRIMARY_TABS[((i < 0 ? 0 : i) + (e.key === 'ArrowRight' ? 1 : PRIMARY_TABS.length - 1)) % PRIMARY_TABS.length];
+    e.preventDefault();
+    onTab(next);
+    requestAnimationFrame(() => document.getElementById(`axo-tab-${next}`)?.focus());
+  };
 
   const badge = (key: CommandTab): { n: number; color: string } => {
     if (key === 'approvals') return { n: connected ? pending.length : demo.showApproval ? 1 : 0, color: '#E8A33D' };
@@ -115,29 +139,49 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
         </span>
       </div>
 
-      {/* 탭 격자 */}
-      <div role="tablist" aria-label={t('cc.title')} className="axo-tabs">
-        {TABS.map((x) => {
-          const Icon = x.icon;
-          const on = tab === x.key;
-          const b = badge(x.key);
-          const label = t(x.label);
+      {/* 탭 — 주 탭 다섯 + 더보기 */}
+      <div role="tablist" aria-label={t('cc.title')} className="axo-tabbar" onKeyDown={onTabKey}>
+        {PRIMARY_TABS.map((k) => {
+          const { icon: Icon, label: lk } = TAB_META[k];
+          const on = tab === k;
+          const b = badge(k);
+          const label = t(lk);
           return (
-            <button
-              key={x.label}
-              role="tab"
-              type="button"
-              aria-selected={on}
-              title={label}
-              onClick={() => onTab(x.key)}
-              className="axo-tab"
-            >
-              <Icon size={13} aria-hidden />
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-              {b.n > 0 && <span className="axo-tab-badge" style={{ background: b.color }}>{b.n}</span>}
+            <button key={k} id={`axo-tab-${k}`} role="tab" type="button" aria-selected={on} aria-controls="axo-tabpanel"
+              tabIndex={on || (k === 'tasks' && !PRIMARY_TABS.includes(tab)) ? 0 : -1} title={label} onClick={() => pickTab(k)} className="axo-tabbar-item">
+              <span className="axo-tabbar-icon"><Icon size={16} aria-hidden />{b.n > 0 && <span className="axo-tabbar-badge" style={{ background: b.color }}>{b.n > 99 ? '99+' : b.n}</span>}</span>
+              <span className="axo-tabbar-label">{label}</span>
             </button>
           );
         })}
+        <div ref={moreRef} className="axo-more">
+          {(() => {
+            const cur = MORE_TABS.includes(tab) ? TAB_META[tab] : null;
+            const Icon = cur ? cur.icon : MoreHorizontal;
+            const moreBadge = MORE_TABS.reduce((n, k) => n + (k === tab ? 0 : badge(k).n), 0);
+            return (
+              <button type="button" className="axo-tabbar-item" data-active={Boolean(cur)} aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)} title={t('tab.more')}>
+                <span className="axo-tabbar-icon"><Icon size={16} aria-hidden />{moreBadge > 0 && <span className="axo-tabbar-badge" style={{ background: '#B24A3A' }}>{moreBadge}</span>}</span>
+                <span className="axo-tabbar-label">{cur ? t(cur.label) : t('tab.more')}<ChevronDown size={10} aria-hidden style={{ marginLeft: 1, verticalAlign: 'middle' }} /></span>
+              </button>
+            );
+          })()}
+          {moreOpen && (
+            <div role="menu" aria-label={t('tab.more')} className="axo-more-menu">
+              {MORE_TABS.map((k) => {
+                const { icon: Icon, label: lk } = TAB_META[k];
+                const b = badge(k);
+                return (
+                  <button key={k} type="button" role="menuitemradio" aria-checked={tab === k} className="axo-more-item" onClick={() => pickTab(k)}>
+                    <Icon size={15} aria-hidden />
+                    <span style={{ flex: 1 }}>{t(lk)}</span>
+                    {b.n > 0 && <span className="axo-more-count" style={{ background: b.color }}>{b.n}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 상태 줄 */}
@@ -154,8 +198,8 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
       </div>
 
       {/* 탭 내용 */}
-      <div role="tabpanel" style={{ flex: 1, minHeight: 90, overflowY: tab === 'terminal' || tab === 'graph' ? 'hidden' : 'auto', padding: '10px 12px 12px' }}>
-        {tab === 'tasks' && <TasksTab connected={connected} hive={hive} selected={selected} concurrency={concurrency} />}
+      <div id="axo-tabpanel" role="tabpanel" style={{ flex: 1, minHeight: 90, overflowY: tab === 'terminal' || tab === 'graph' ? 'hidden' : 'auto', padding: '10px 12px 12px' }}>
+        {tab === 'tasks' && <TasksTab connected={connected} hive={hive} selected={selected} concurrency={concurrency} apiBase={apiBase} />}
         {tab === 'approvals' && <ApprovalsTab connected={connected} apiBase={apiBase} tasks={tasks} pending={pending} approvals={hive?.approvals ?? []} demo={demo} />}
         {tab === 'questions' && <QuestionsTab connected={connected} apiBase={apiBase} selected={selected} />}
         {tab === 'memory' && <MemoryTab connected={connected} apiBase={apiBase} selected={selected} onSelect={onSelect} roster={roster} />}
@@ -170,7 +214,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
       </div>
 
       <QueueStrip apiBase={apiBase} queue={queue.data} onChange={queue.refresh} />
-      <BriefingConsole instructUrl={instructUrl} onSubmitted={onSubmitted} onQueued={queue.refresh} prefill={prefill} />
+      <BriefingConsole instructUrl={instructUrl} onSubmitted={onSubmitted} onQueued={queue.refresh} prefill={prefill} onOpenTemplates={() => onTab('templates')} />
     </section>
   );
 });

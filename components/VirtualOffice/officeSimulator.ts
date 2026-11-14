@@ -44,6 +44,7 @@ export interface OfficeAgentState { state: AgentState; task?: string; }
 export interface HiveTask {
   id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean;
   stage?: string; depends_on?: string[]; cost_usd?: number; qa_summary?: string;
+  docx?: string; // 산출물 Word 판(산출물 폴더 기준 상대경로)
 }
 export interface HiveApproval {
   id: string; task: string; kind: string; reason: string; status: string; payload?: { output?: string; gate?: string } | null;

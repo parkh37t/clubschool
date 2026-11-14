@@ -13,7 +13,7 @@
 
 'use strict';
 
-const { app, BrowserWindow, Tray, Menu, shell, dialog, nativeImage } = require('electron');
+const { app, BrowserWindow, Tray, Menu, shell, dialog, nativeImage, ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const net = require('node:net');
@@ -184,6 +184,25 @@ function stopServer() {
   }
 }
 
+/** 지금 쓰는 산출물 폴더 — 설정 화면에서 바꿨으면 hive/settings.json 의 deliverables_dir, 아니면 기본 위치. */
+function currentOutDir() {
+  try {
+    const s = JSON.parse(fs.readFileSync(path.join(hiveDir, 'settings.json'), 'utf8'));
+    if (typeof s.deliverables_dir === 'string' && s.deliverables_dir && path.isAbsolute(s.deliverables_dir)) return s.deliverables_dir;
+  } catch { /* 설정 파일이 없으면 기본 위치 */ }
+  return outDir;
+}
+
+// 설정 화면의 [폴더 고르기] — 웹 화면은 전체 경로를 알 수 없어 메인 프로세스의 선택 창을 쓴다.
+ipcMain.handle('axo:pick-folder', async (_e, defaultPath) => {
+  const r = await dialog.showOpenDialog(win, {
+    title: lang === 'en' ? 'Choose the deliverables folder' : '산출물 저장 폴더 고르기',
+    defaultPath: (typeof defaultPath === 'string' && defaultPath) || currentOutDir(),
+    properties: ['openDirectory', 'createDirectory'],
+  });
+  return r.canceled || !r.filePaths.length ? '' : r.filePaths[0];
+});
+
 function appUrl() {
   return `http://127.0.0.1:${port}/?view=virtual-office&shell=app`;
 }
@@ -192,7 +211,8 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1480, height: 960, minWidth: 1024, minHeight: 680,
     title: APP_NAME, icon: iconPath('icon.png'), backgroundColor: '#EFEAE0', show: false, autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+    // preload 는 설정 화면의 [폴더 고르기] 하나만 내보낸다(desktop/preload.cjs)
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   win.removeMenu();
   // 웹 화면의 <title>(대시보드 이름)이 창 제목을 덮지 않게 앱 이름으로 고정한다.
@@ -237,7 +257,7 @@ function buildTrayMenu() {
     { label: T().open, click: showWindow },
     {
       label: T().outputs,
-      click: () => { fs.mkdirSync(outDir, { recursive: true }); shell.openPath(outDir); },
+      click: () => { const d = currentOutDir(); fs.mkdirSync(d, { recursive: true }); shell.openPath(d); },
     },
     { type: 'separator' },
     {

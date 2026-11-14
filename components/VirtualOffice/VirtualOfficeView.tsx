@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pause, Play } from 'lucide-react';
+import { Pause, Play, Settings } from 'lucide-react';
 import { OfficeSimulator } from './officeSimulator';
 import type { RenderVals, HiveState, OfficeState } from './officeSimulator';
 import { normalizeBase, saveOfficeBackend } from './officeBackend';
@@ -9,6 +9,7 @@ import type { CommandTab } from './CommandCenter';
 import { AgentCards } from './AgentCards';
 import type { AgentCardData } from './AgentCards';
 import { AddAgentDialog } from './AddAgentDialog';
+import { SettingsDialog } from './SettingsDialog';
 import { postJson, useEventStream, usePolling } from './officeApi';
 import type { AgentStatus, AuthState, OfficeSettings, RosterResponse } from './officeApi';
 import { OfficeLangContext, breakerReason, displayName, makeT } from './i18n';
@@ -76,6 +77,8 @@ export function VirtualOfficeView({
   // ── 언어 — 서버가 있으면 서버 설정, 없으면 이 화면에서만 ──
   const settings = usePolling<OfficeSettings>(apiBase !== undefined ? `${apiBase}/api/settings` : undefined, 15000);
   const [localLang, setLocalLang] = useState<Lang>('ko');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const lang: Lang = settings.data?.lang ?? localLang;
   const t = useMemo(() => makeT(lang), [lang]);
   const changeLang = async (next: Lang) => {
@@ -274,6 +277,9 @@ export function VirtualOfficeView({
             </label>
           )}
           {!hive && <button type="button" className="axo-iconbtn" onClick={() => sim?.reset()}>{t('top.reset')}</button>}
+          <button type="button" className="axo-iconbtn" onClick={() => setSettingsOpen(true)} title={t('set.title')}>
+            <Settings size={13} aria-hidden />{t('set.title')}
+          </button>
           <span role="group" aria-label={t('top.lang')} style={{ display: 'inline-flex', flexShrink: 0, border: `1px solid ${LINE}`, borderRadius: 4, overflow: 'hidden' }}>
             {langBtn('ko', '한국어')}
             {langBtn('en', 'EN')}
@@ -373,6 +379,7 @@ export function VirtualOfficeView({
         </footer>
 
         {adding && <AddAgentDialog apiBase={apiBase} roster={members} onClose={() => setAdding(false)} onChanged={roster.refresh} />}
+        {settingsOpen && <SettingsDialog apiBase={apiBase} lang={lang} onLang={changeLang} onClose={closeSettings} onSaved={settings.refresh} />}
 
         <div role="status" style={{ position: 'fixed', left: '50%', bottom: 26, background: INK, color: '#fff', fontSize: 13.5, fontWeight: 700, padding: '10px 18px', borderRadius: 8, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease', opacity: rv.toastOpacity, transform: rv.toastTransform }}>{rv.toastMsg}</div>
       </div>
