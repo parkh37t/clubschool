@@ -134,6 +134,18 @@ export interface AuthState {
   account?: { email: string; org: string; plan: string; tier: string; method: string; provider: string; expires_at: string } | null;
 }
 
+/** 앱 안 로그인 진행(GET /api/auth/login). url 은 이 PC 화면에만 온다(메일 포함). */
+export interface LoginState {
+  state: 'idle' | 'starting' | 'waiting' | 'success' | 'failed' | 'cancelled' | 'expired';
+  needs_code?: boolean; message?: string; url?: string; started_at?: string; ended_at?: string;
+}
+
+/** Claude Code 설치 진행(GET /api/cli/install) */
+export interface CliInstallState {
+  state: 'idle' | 'running' | 'success' | 'failed';
+  log?: string[]; message?: string; version?: string; started_at?: string; ended_at?: string;
+}
+
 /** url 을 ms 마다 GET 해 JSON 을 돌려준다. url 이 없으면 멈춘다. refresh() 로 즉시 다시 읽는다. */
 export function usePolling<T>(url: string | undefined, ms: number): { data: T | null; error: boolean; refresh: () => void } {
   const [data, setData] = useState<T | null>(null);

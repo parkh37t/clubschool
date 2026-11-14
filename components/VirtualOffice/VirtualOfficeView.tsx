@@ -79,7 +79,8 @@ export function VirtualOfficeView({
   const settings = usePolling<OfficeSettings>(apiBase !== undefined ? `${apiBase}/api/settings` : undefined, 15000);
   const [localLang, setLocalLang] = useState<Lang>('ko');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const [autoLogin, setAutoLogin] = useState(false); // 로그인 배너에서 연 설정 창은 바로 로그인을 시작한다
+  const closeSettings = useCallback(() => { setSettingsOpen(false); setAutoLogin(false); }, []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const lang: Lang = settings.data?.lang ?? localLang;
   const t = useMemo(() => makeT(lang), [lang]);
@@ -182,29 +183,8 @@ export function VirtualOfficeView({
 
   const langValue = useMemo(() => ({ lang, t, name: (id: string | undefined) => displayName(lang, id, members) }), [lang, t, members]);
 
-  // [로그인] — 새 PowerShell 창을 띄우고, 로그인이 확인될 때까지 5초마다 다시 묻는다(최대 3분).
-  const [loginMsg, setLoginMsg] = useState('');
-  const [loginWatch, setLoginWatch] = useState(false);
-  const startLogin = async () => {
-    if (apiBase === undefined) return;
-    setLoginMsg(t('login.opening'));
-    const r = await postJson(`${apiBase}/api/auth/login`, {});
-    if (!r.ok) { setLoginMsg(t('login.failed', { e: r.error ?? '' })); return; }
-    setLoginMsg(t('login.opened'));
-    setLoginWatch(true);
-  };
-  const refreshAuth = auth.refresh;
-  useEffect(() => {
-    if (!loginWatch || apiBase === undefined) return;
-    const started = Date.now();
-    const iv = setInterval(async () => {
-      try { await fetch(`${apiBase}/api/auth?refresh=1`, { cache: 'no-store' }); } catch { /* 다음 주기 */ }
-      refreshAuth();
-      if (Date.now() - started > 180000) setLoginWatch(false);
-    }, 5000);
-    return () => clearInterval(iv);
-  }, [loginWatch, apiBase, refreshAuth]);
-  useEffect(() => { if (auth.data?.loggedIn) { setLoginWatch(false); setLoginMsg(''); } }, [auth.data?.loggedIn]);
+  // [로그인] — 설정 창을 열어 Claude 계정 칸이 바로 앱 안 로그인을 시작한다(따로 창이 뜨지 않음)
+  const startLogin = () => { setAutoLogin(true); setSettingsOpen(true); };
 
   const onSubmitted = useCallback((title: string) => simRef.current?.noteInstruction(title), []);
 
@@ -294,14 +274,15 @@ export function VirtualOfficeView({
         {showLoginBanner && (
           <section role="alert" style={{ ...bar, background: '#FBEFE9', border: '1px solid #E3B39F' }}>
             <strong style={{ color: BAD_FG }}>{t('login.title')}</strong>
-            <span style={{ flex: '1 1 320px', color: INK }}>{loginMsg || t('login.body')}</span>
+            <span style={{ flex: '1 1 320px', color: INK }}>{t('login.body')}</span>
             <button type="button" onClick={startLogin} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', padding: '5px 14px', borderRadius: 4, border: `1px solid ${WYLIE_DARK}`, background: WYLIE, color: '#fff' }}>{t('login.button')}</button>
           </section>
         )}
         {showCliBanner && (
           <section role="alert" style={{ ...bar, background: '#FBEFE9', border: '1px solid #E3B39F' }}>
             <strong style={{ color: BAD_FG }}>{t('cli.missing')}</strong>
-            <span>{t('cli.body')}</span>
+            <span style={{ flex: '1 1 320px', color: INK }}>{t('cli.body')}</span>
+            <button type="button" onClick={openSettings} style={{ font: 'inherit', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', padding: '5px 14px', borderRadius: 4, border: `1px solid ${WYLIE_DARK}`, background: WYLIE, color: '#fff' }}>{t('cli.button')}</button>
           </section>
         )}
         {/* API 키로 과금 중 — 환경에 키가 있고 OFFICE_ALLOW_API_KEY=1 일 때만(아니면 서버가 키를 빼고 구독으로 돌린다) */}
@@ -391,7 +372,7 @@ export function VirtualOfficeView({
         </footer>
 
         {adding && <AddAgentDialog apiBase={apiBase} roster={members} onClose={() => setAdding(false)} onChanged={roster.refresh} />}
-        {settingsOpen && <SettingsDialog apiBase={apiBase} lang={lang} onLang={changeLang} onClose={closeSettings} onSaved={settings.refresh} />}
+        {settingsOpen && <SettingsDialog apiBase={apiBase} lang={lang} onLang={changeLang} onClose={closeSettings} onSaved={settings.refresh} autoLogin={autoLogin} />}
 
         <div role="status" style={{ position: 'fixed', left: '50%', bottom: 26, background: INK, color: '#fff', fontSize: 13.5, fontWeight: 700, padding: '10px 18px', borderRadius: 8, pointerEvents: 'none', transition: 'opacity .25s ease, transform .25s ease', opacity: rv.toastOpacity, transform: rv.toastTransform }}>{rv.toastMsg}</div>
       </div>

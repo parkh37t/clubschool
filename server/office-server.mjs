@@ -30,6 +30,7 @@ import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from '.
 import { listTriggers, addTrigger, updateTrigger, removeTrigger, runTriggerNow, startTriggers, MAX_TRIGGERS } from './triggers.mjs';
 import { listTemplates, addTemplate, removeTemplate, MAX_TEMPLATES } from './templates.mjs';
 import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
+import { startLogin, loginState, submitLoginCode, cancelLogin, stopLogin, startInstall, installState } from './account.mjs';
 import { loadPersona } from './agentRunner.mjs';
 import { weighted, knownTokens } from './tokens.mjs';
 
@@ -432,18 +433,71 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // [로그인] 버튼 — 새 PowerShell 창에서 claude auth login. 이 PC 화면에서 온 요청만 받는다.
+    // [로그인] — 창 없이 앱 안에서 claude auth login --claudeai(account.mjs, 보이지 않는 가상 터미널).
+    // 브라우저 승인 뒤 바로 끝나거나, 브라우저에 나온 코드를 설정 창 입력 칸으로 받는다. node-pty 가 없을 때만 예전처럼 새 창을 연다.
+    // 이 PC 화면에서 온 요청만 받는다. 브리핑이 도는 중에는 계정을 바꾸지 않는다(진행 중인 작업이 다른 계정으로 이어지지 않게).
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
-      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 로그인 창을 열 수 있습니다.' }); return; }
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 로그인할 수 있습니다.' }); return; }
       let body = {};
       try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 빈 몸체 허용 */ }
       const email = String(body?.email || '').trim();
       if (email && !validLoginEmail(email)) { sendJson(res, 400, { error: '이메일 형식이 아닙니다.' }); return; }
-      const r = await openLoginWindow({ email });
-      authCache.at = 0; // 다음 확인 때 다시 묻는다
-      log(r.ok ? '로그인 창을 열었습니다(claude auth login --claudeai).' : `로그인 창 실패: ${r.message}`);
-      sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true } : { error: r.message });
+      if (running()) { sendJson(res, 409, { error: '브리핑이 진행 중입니다. 끝난 뒤에 로그인하세요(진행 중인 작업이 다른 계정으로 이어지지 않게).' }); return; }
+      const r = await startLogin({
+        email,
+        onDone: async (ok) => {
+          authCache.at = 0;
+          envCache.at = 0;
+          const a = await cachedAuth(true).catch(() => null);
+          await hive.appendEvent({ kind: 'auth', action: 'login', ok: Boolean(ok && a?.loggedIn), by: OWNER.id });
+          log(ok && a?.loggedIn ? 'Claude 로그인 완료(앱 안 로그인)' : '로그인이 끝나지 않음(취소·시간 초과·실패)');
+        },
+      });
+      if (r.ok) { log('앱 안 로그인 시작(claude auth login --claudeai)'); sendJson(res, 200, { ok: true, mode: 'inline', login: loginState() }); return; }
+      if (r.code === 'no_pty') {
+        const w = await openLoginWindow({ email });
+        authCache.at = 0;
+        log(w.ok ? '가상 터미널이 없어 로그인 창을 열었습니다.' : `로그인 창 실패: ${w.message}`);
+        sendJson(res, w.ok ? 200 : 400, w.ok ? { ok: true, mode: 'window' } : { error: w.message });
+        return;
+      }
+      sendJson(res, 400, { error: r.message || '로그인을 시작하지 못했습니다.' });
       return;
+    }
+    // 로그인 진행 상태 — 로그인 주소(메일 포함)는 이 PC 화면에만
+    if (req.method === 'GET' && url.pathname === '/api/auth/login') {
+      sendJson(res, 200, loginState({ withUrl: localViewer(req) }));
+      return;
+    }
+    // 브라우저에 나온 인증 코드를 넘긴다 / 로그인 취소
+    if (req.method === 'POST' && (url.pathname === '/api/auth/login/code' || url.pathname === '/api/auth/login/cancel')) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 할 수 있습니다.' }); return; }
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 아래에서 거절 */ }
+      const r = url.pathname.endsWith('/code') ? submitLoginCode(body?.code) : cancelLogin();
+      sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true, login: loginState() } : { error: r.message });
+      return;
+    }
+    // Claude Code 설치(새 PC) — 공식 설치 스크립트를 창 없이. 이 PC 화면에서, 확인(confirm:true)을 받아.
+    if (url.pathname === '/api/cli/install') {
+      if (req.method === 'GET') { sendJson(res, 200, installState()); return; }
+      if (req.method === 'POST') {
+        if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 설치할 수 있습니다.' }); return; }
+        let body = {};
+        try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 아래에서 거절 */ }
+        if (body?.confirm !== true) { sendJson(res, 400, { error: '설치하려면 확인이 필요합니다(confirm:true).' }); return; }
+        const r = startInstall({
+          onDone: async (ok) => {
+            authCache.at = 0;
+            envCache.at = 0;
+            await hive.appendEvent({ kind: 'cli_install', ok, by: OWNER.id });
+            log(ok ? 'Claude Code 설치 완료' : `Claude Code 설치 실패: ${installState().message}`);
+          },
+        });
+        if (r.ok) log('Claude Code 설치 시작(공식 설치 스크립트)');
+        sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true, install: installState() } : { error: r.message });
+        return;
+      }
     }
     // 로그아웃 — 이 PC 의 Claude Code 로그인을 푼다. 이 PC 화면에서, 확인(confirm:true)을 받아, 브리핑이 돌지 않을 때만.
     // 다른 사람이 자기 계정으로 로그인하기 전에 쓴다. 계정 메일은 기록에 남기지 않는다.
@@ -929,6 +983,7 @@ let stopping = false;
 function shutdown(why) {
   if (stopping) return;
   stopping = true;
+  stopLogin();
   const n = killAllChildren();
   const t = killAllPty();
   log(`종료(${why}) — claude 자식 프로세스 ${n}개 · 터미널 ${t}개 정리`);
@@ -937,7 +992,7 @@ function shutdown(why) {
 }
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
-process.on('exit', () => { killAllChildren(); killAllPty(); });
+process.on('exit', () => { stopLogin(); killAllChildren(); killAllPty(); });
 // 설치형 앱: 부모(Electron)가 비정상 종료돼 stdin 파이프가 끊기면 같이 내려간다(고아 서버 방지).
 if (process.env.OFFICE_EXIT_ON_STDIN_CLOSE === '1') {
   process.stdin.on('end', () => shutdown('부모 종료'));

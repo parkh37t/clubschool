@@ -20,11 +20,25 @@ and opens the virtual office in a window. The layout and the way of working foll
 3. It installs for your user account only, so no administrator rights are needed (default `%LOCALAPPDATA%\Programs\Wylie AX Office`).
 4. Start **Wylie AX Office** from the Start menu or the desktop.
 
-## Before you start — sign in to Claude
+## Before you start — Claude Code and sign-in
 
-The app calls the Claude Code CLI (`claude.exe`) that ships with the Claude desktop app on this PC (no API key; it uses your subscription).
-If you are signed out, a banner appears at the top. Click **[Sign in]**: a PowerShell window opens; approve in the browser and paste
-the code shown into that window. The banner disappears once it is confirmed.
+The app calls Claude Code (`claude.exe`) with no API key; usage counts against the Claude subscription signed in on that PC. It looks for the executable in this order:
+the one bundled with the Claude desktop app → one installed by the official script (`%USERPROFILE%\.local\bin\claude.exe`) → PATH.
+
+- **No Claude Code on the PC**: a banner says Claude Code is not installed. Click **[Go to install]** → **Claude account** at the top of Settings → **[Install Claude Code]**.
+  It runs the official Anthropic install script (`irm https://claude.ai/install.ps1 | iex`) without a window and installs into your user folder (no admin rights). Installing by hand works too.
+- **Sign-in**: when signed out, a banner appears. **[Sign in]** opens Settings and starts signing in right away; a Claude sign-in page opens in the browser.
+  Approve with the Claude account you want and it finishes inside the app. **No extra window opens.** If the browser shows a code, paste it into the code field in Settings.
+- **Another Claude account**: if the browser is already signed in to a different claude.ai account, that account gets approved. Sign out of claude.ai in the browser first, or use [Copy link] and approve in a private window.
+- A subscription that includes Claude Code (Pro, Max and so on) is required.
+
+## Installing on another PC
+
+Copy the installer to the other PC, install it, and have the person using that PC sign in with their own Claude account. Steps for the recipient are in [INSTALL.md](INSTALL.md) (Korean).
+
+- Task records and deliverables stay on each PC (`Documents\Wylie AX Office`); PCs do not share them.
+- Company proposal skills (wylie-* and so on) and the planning kit are not in the installer. If the Claude account on that PC syncs such skills they are used; otherwise the public skills apply (see the Skills tab).
+- The decision-maker name in the screens and prompts is still fixed as Jaeha.
 
 When the Claude desktop app updates, its bundled Claude Code changes version and **you may be signed out.** If the banner comes back, sign in the same way.
 AX Office finds the new Claude Code without a restart. Briefings sent while signed out don't start; the queue shows them as failed with a note.

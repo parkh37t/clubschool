@@ -81,14 +81,39 @@ function findDesktopBundledClaude() {
 // 실행 파일은 부를 때마다 정한다. 데스크톱 앱이 업데이트되면 내장 CLI 폴더(<버전>\<해시>)가 바뀌고 옛 폴더는 지워지므로,
 // 서버 시작 때 찾은 경로를 계속 쓰면 업데이트 뒤 모든 실행이 cli_missing 으로 실패한다(2.1.321 → 2.1.325 에서 실제로 겪음).
 // 기억한 경로가 아직 있으면 그대로 쓰고, 사라졌으면 다시 찾는다.
+// 그다음은 공식 설치 스크립트(claude.ai/install.ps1)의 설치 위치(%USERPROFILE%\.local\bin\claude.exe) — 새 PC 에서
+// 설정 창의 [Claude Code 설치]로 깐 경우다. 설치 직후에는 서버의 PATH 가 옛값이라 위치를 직접 본다.
+// 마지막으로 PATH 의 claude.exe·claude.cmd(npm 설치).
+function findNativeClaude() {
+  const exe = path.join(os.homedir(), '.local', 'bin', 'claude.exe');
+  return fsSync.existsSync(exe) ? exe : null;
+}
+function findOnPath(name) {
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    const f = path.join(dir.replace(/^"|"$/g, ''), name);
+    try { if (fsSync.statSync(f).isFile()) return f; } catch { /* 다음 폴더 */ }
+  }
+  return null;
+}
 let cachedBin = '';
 function bin() {
   if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
   if (process.platform !== 'win32') return 'claude';
   if (cachedBin && fsSync.existsSync(cachedBin)) return cachedBin;
-  const found = findDesktopBundledClaude();
+  const found = findDesktopBundledClaude() || findNativeClaude() || findOnPath('claude.exe');
   if (found && found !== cachedBin) cachedBin = found;
-  return found || 'claude.cmd'; // 데스크톱 앱이 없으면 PATH 의 claude.cmd(다음 호출 때 다시 찾아본다)
+  return found || 'claude.cmd'; // 아무것도 없으면 PATH 의 claude.cmd(다음 호출 때 다시 찾아본다)
+}
+/** 기억한 실행 파일 경로를 버린다 — 설치 직후 다시 찾게. */
+export function forgetBin() { cachedBin = ''; }
+// 실행 파일이 실제로 있는지 — 아무것도 못 찾아 'claude.cmd' 로 셸을 부르면 cmd 가 "인식할 수 없는 명령"(9009)으로 끝나
+// ENOENT 가 나지 않는다. 새 PC 에서 '로그인 여부 모름'이 아니라 'Claude Code 없음'으로 보이게 미리 본다.
+function binExists() {
+  const b = bin();
+  if (process.platform !== 'win32') return true; // 맥·리눅스는 ENOENT 로 안다
+  if (path.isAbsolute(b)) return fsSync.existsSync(b);
+  return Boolean(findOnPath(b));
 }
 // .cmd/.bat 는 셸이 필요하지만, .exe 를 셸로 돌리면 cmd.exe 가 JSON 인용부호를 깨뜨린다.
 const needsShell = (b) => process.platform === 'win32' && /\.(cmd|bat)$/i.test(b);
@@ -97,6 +122,7 @@ export function claudeBinPath() { return bin(); }
 
 /** CLI 가 PATH 에 있는지. 없으면 null 대신 버전 문자열을 돌려주지 않고 false. */
 export async function claudeAvailable() {
+  if (!binExists()) return false;
   const r = await run([bin(), '--version'], { timeoutMs: 15000 });
   return r.code === 0 && !r.error ? r.stdout.trim() : false;
 }
@@ -154,6 +180,7 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine, stopWhen } = {
  * @returns {Promise<{cli:boolean, loggedIn:boolean|null, account?:object}>}  loggedIn=null 은 판단 불가(시간 초과 등)
  */
 export async function authStatus() {
+  if (!binExists()) return { cli: false, loggedIn: null };
   const r = await run([bin(), 'auth', 'status'], { timeoutMs: 20000 });
   if (r.error && r.error.code === 'ENOENT') return { cli: false, loggedIn: null };
   if (r.error) return { cli: false, loggedIn: null };
@@ -218,8 +245,8 @@ export async function openLoginWindow({ email = '' } = {}) {
 
 /** 실패 코드 → 재하가 읽을 안내. 화면(대기열·작업 실패 사유)과 기록에 같은 문구를 쓴다. */
 export function failureHint(code) {
-  if (code === 'cli_missing') return 'Claude Code 실행 파일을 찾지 못했습니다. Claude 데스크톱 앱이 설치돼 있는지 확인하세요(앱이 막 업데이트됐다면 잠시 뒤 다시 보내 주세요).';
-  if (code === 'not_logged_in') return 'Claude 로그인이 풀려 있습니다. 화면 위 [로그인]으로 다시 로그인한 뒤 다시 보내 주세요.';
+  if (code === 'cli_missing') return 'Claude Code 실행 파일을 찾지 못했습니다. 설정 창 맨 위 \'Claude 계정\'에서 [Claude Code 설치]를 누르세요(데스크톱 앱이 막 업데이트됐다면 잠시 뒤 다시 보내 주세요).';
+  if (code === 'not_logged_in') return 'Claude 로그인이 풀려 있습니다. 설정 창 맨 위 \'Claude 계정\'에서 다시 로그인한 뒤 다시 보내 주세요.';
   if (code === 'rate_limit') return '사용량 한도에 걸렸습니다. 잠시 뒤 다시 보내 주세요.';
   if (code === 'overloaded') return 'Claude 서버가 붐벼 응답하지 못했습니다(한 번 다시 시도한 뒤). 잠시 뒤 다시 보내 주세요.';
   if (code === 'timeout') return '시간 안에 끝나지 않았습니다.';
@@ -254,6 +281,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function classify(r) {
   if (r.error && r.error.code === 'ENOENT') return 'cli_missing';
+  if (r.code === 9009) return 'cli_missing'; // cmd: 인식할 수 없는 명령(.cmd 를 셸로 불렀는데 없음)
   if (/\[timeout\]/.test(r.stderr)) return 'timeout';
   const text = (r.stdout + '\n' + r.stderr).toLowerCase();
   if (/not logged in|please run \/login|authentication error|failed to authenticate|oauth session expired|invalid api key|log in/.test(text)) return 'not_logged_in';

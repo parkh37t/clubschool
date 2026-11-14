@@ -15,7 +15,8 @@ const SESSIONS = new Map(); // id → { pty, agent, cwd, title, buf, clients:Set
 const MAX_BUF = 256 * 1024; // 다시 붙을 때 보여 줄 최근 출력
 
 let ptyMod = null;
-async function loadPty() {
+/** node-pty 모듈 — 터미널 탭과 앱 안 로그인(account.mjs)이 같이 쓴다. 없으면 예외. */
+export async function loadPty() {
   if (ptyMod) return ptyMod;
   const m = await import('@lydell/node-pty');
   ptyMod = m.default || m;

@@ -13,6 +13,8 @@ interface SettingsDialogProps {
   onLang: (l: Lang) => void;
   onClose: () => void;
   onSaved: () => void;
+  /** 화면 위 로그인 배너에서 열었으면 Claude 계정 칸이 바로 로그인을 시작한다 */
+  autoLogin?: boolean;
 }
 
 /** 설치형 앱(desktop/preload.cjs)만 내보내는 폴더 선택 창. 브라우저에서는 없다. */
@@ -33,7 +35,7 @@ const pathBox = { fontFamily: MONO, fontSize: 12, background: '#fff', border: `1
  * 설정 — 산출물 저장 위치(바꾸기·열기·기존 산출물 복사), 비용 한도, QA 자동 보완·동시 작업 수, 언어, 환경 점검, 작업 기록 위치.
  * 값은 서버의 hive/settings.json 에 남는다(산출물 위치는 /api/settings/deliverables 가 쓰기 시험을 한 뒤에만 바꾼다).
  */
-export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: SettingsDialogProps) {
+export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLogin = false }: SettingsDialogProps) {
   const { t } = useOfficeLang();
   const connected = apiBase !== undefined;
   const { data, error, refresh } = usePolling<OfficeSettings>(connected ? `${apiBase}/api/settings` : undefined, 4000);
@@ -160,7 +162,7 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
         {connected && apiBase !== undefined && (
           <section style={section} aria-label={t('acc.title')}>
             <h3 style={h3}>{t('acc.title')}</h3>
-            <AccountSection apiBase={apiBase} running={Boolean(data?.running)} />
+            <AccountSection apiBase={apiBase} running={Boolean(data?.running)} autoLogin={autoLogin} />
           </section>
         )}
 
