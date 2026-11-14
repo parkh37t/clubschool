@@ -208,7 +208,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
         {tab === 'questions' && <QuestionsTab connected={connected} apiBase={apiBase} selected={selected} />}
         {tab === 'memory' && <MemoryTab connected={connected} apiBase={apiBase} selected={selected} onSelect={onSelect} roster={roster} />}
         {tab === 'activity' && <ActivityTab connected={connected} events={events} selected={selected} feed={demo.feed} />}
-        {tab === 'skills' && <SkillsTab connected={connected} roster={roster} selected={selected} />}
+        {tab === 'skills' && <SkillsTab connected={connected} apiBase={apiBase} roster={roster} selected={selected} />}
         {tab === 'terminal' && <TerminalTab connected={connected} apiBase={apiBase} selected={selected} roster={roster} />}
         {tab === 'monitor' && <MonitorTab connected={connected} apiBase={apiBase} roster={roster} selected={selected} />}
         {tab === 'triggers' && <TriggersTab connected={connected} apiBase={apiBase} />}

@@ -1,12 +1,12 @@
 // 실시간 기록 — Claude Code stream-json 이벤트를 '터미널' 탭에 보일 짧은 줄로 바꿔 hive/live/<stream>.jsonl 에 남긴다.
 // 원문(파일 내용·긴 응답)은 저장하지 않는다. 읽은 파일·쓴 파일·도구 호출·글 앞부분·끝 상태만 남긴다.
 //
-// 줄 종류(k): start | text | tool | tool_result | note | end | error
+// 줄 종류(k): start | text | tool | tool_result | note | usage(실행 중 사용 토큰) | end | error
 // 화면(TerminalTab)이 k 를 보고 색과 머리말을 붙인다(언어 전환도 화면에서).
 
 import path from 'node:path';
 import { appendLive } from './hive.mjs';
-import { fromUsage, weighted } from './tokens.mjs';
+import { fromUsage, weighted, streamMeter } from './tokens.mjs';
 
 function shortPath(p, cwd) {
   const s = String(p || '');
@@ -65,10 +65,24 @@ export function liveEntries(ev, { cwd } = {}) {
   }
 }
 
+// 실행 중 사용 토큰 줄(k:'usage')을 남기는 간격 — 화면 위 사용량 막대가 마지막 줄을 읽는다.
+const USAGE_STEP = 20000;
+
 /** 실행 1건의 기록기 — onEvent 로 넘기면 줄마다 hive 에 쓴다. meta 는 줄마다 붙는다(agent·task). */
 export function liveSink(stream, meta = {}, { cwd } = {}) {
+  const meter = streamMeter();
+  let shown = 0;
   return (ev) => {
+    meter.push(ev);
     for (const e of liveEntries(ev, { cwd })) appendLive(stream, { ...meta, ...e }).catch(() => {});
+    // 첫 응답은 바로, 그다음은 2만 토큰마다 — 끝나면 'end' 줄이 최종 값을 갖는다
+    if (ev?.type === 'assistant') {
+      const w = meter.weighted();
+      if (w > 0 && (shown === 0 || w - shown >= USAGE_STEP)) {
+        shown = w;
+        appendLive(stream, { ...meta, k: 'usage', tokens: w }).catch(() => {});
+      }
+    }
   };
 }
 

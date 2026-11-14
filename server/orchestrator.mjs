@@ -21,6 +21,7 @@ import { runTask } from './agentRunner.mjs';
 import { judge, combineGate } from './qa.mjs';
 import { planningBefore, planningChecks, planningOnApproved } from './planning.mjs';
 import { exportDocx } from './docxExport.mjs';
+import { exportXlsx } from './xlsxExport.mjs';
 import { nameOf, AGENT_IDS } from './roster.mjs';
 import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths.mjs';
 import { effective as breakerEffective, recordOutcome, resetBreaker } from './breaker.mjs';
@@ -95,7 +96,7 @@ export async function officeState({ briefingId, phase, extra }) {
     ...rest,
     hive: {
       briefing: briefingId,
-      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0, docx: t.docx || '', tokens: weighted(t.tokens), qa_tokens: weighted(t.qa?.tokens) })),
+      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0, docx: t.docx || '', xlsx: t.xlsx || '', process: t.process || '', step: t.step || '', tokens: weighted(t.tokens), qa_tokens: weighted(t.qa?.tokens) })),
       // 승인 탭에는 지금 브리핑 밖의 승인(재시작 전에 남은 것 등)도 보여야 재하가 결정할 수 있다.
       pending: snap.pending,
       approvals: snap.approvals.filter((a) => tasks.some((t) => t.id === a.task)).slice(-20),
@@ -390,7 +391,9 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       }
       const outRel = relData(r.file);
       const docx = await exportDocx(r.file, log).catch(() => null);
-      await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? relData(docx) : '', tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso() });
+      // 표가 본체인 산출물(견적 단계 등)은 엑셀로도 — 에이전트가 스크립트를 못 돌리므로 서버가 만든다
+      const xlsx = task.export?.includes('xlsx') ? await exportXlsx(r.file, log).catch(() => null) : null;
+      await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? relData(docx) : '', ...(xlsx ? { xlsx: relData(xlsx) } : {}), tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso() });
       await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, stage: task.stage, body: r.reply || `산출물: ${outRel}` });
       await hive.routeMail();
       if (r.memory?.length) await hive.appendMemory(task.owner, r.memory, { taskId: task.id });

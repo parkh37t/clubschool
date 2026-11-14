@@ -17,9 +17,9 @@ import { promises as fs } from 'node:fs';
 import { readState, writeState, clearState } from './state.mjs';
 import { runBriefing, watchOrphanApprovals } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
-import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren } from './claudeCode.mjs';
+import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren, onRateLimit, probeLimits, failureHint } from './claudeCode.mjs';
 import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, loadCustomAgents, addCustomAgent, removeCustomAgent, agentById, nameOf } from './roster.mjs';
-import { resolveSkills } from './skills.mjs';
+import { resolveSkills, registryStatus } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
 import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
 import { kitStatus, listPacks, packDetail, kitFile } from './planning.mjs';
@@ -218,6 +218,34 @@ async function skillsByAgent() {
   return data;
 }
 
+// ── 화면 위 사용량 막대(/api/usage/top) ──
+// 구독 사용 한도(Claude 가 실행마다 알려 준 주간·5시간 창 사용률), 오늘 사용 토큰(끝난 작업 + 실행 중), 하루 한도에 가까운 담당, 실행 중 작업.
+onRateLimit((info) => hive.recordLimits(info));
+let lastProbeAt = 0;
+
+async function usageTop() {
+  const [u, st, ledger, limits] = await Promise.all([hive.usageSummary({ qaAgent: QA_AGENT }), getSettings(), hive.loadTasks(), hive.loadLimits()]);
+  const today = hive.localDay();
+  const running = [];
+  for (const t of ledger.tasks) {
+    if (t.status !== '진행') continue;
+    running.push({ id: t.id, owner: t.owner, title: t.title, tokens: await hive.liveTokens(t.id), cap: t.cap_tokens || st.max_task_tokens });
+  }
+  const live = running.reduce((n, r) => n + r.tokens, 0);
+  const byAgent = new Map(Object.entries(u.byAgentDay).map(([id, days]) => [id, days[today] || 0]));
+  for (const r of running) byAgent.set(r.owner, (byAgent.get(r.owner) || 0) + r.tokens);
+  const agents = [...byAgent.entries()].filter(([, used]) => used > 0)
+    .map(([id, used]) => ({ id, used, ratio: st.agent_daily_tokens ? used / st.agent_daily_tokens : 0 }))
+    .sort((a, b) => b.used - a.used).slice(0, 8);
+  return {
+    mode: MODE,
+    today: (u.byDay[today] || 0) + live, today_done: u.byDay[today] || 0, live,
+    parts_today: u.parts_today, agents, running,
+    agent_daily_tokens: st.agent_daily_tokens, max_task_tokens: st.max_task_tokens,
+    limits, probe_ready: MODE === 'claude_code' && Date.now() - lastProbeAt >= 60000,
+  };
+}
+
 const STATUS_RANK = { '진행': 3, '검수': 2, '승인대기': 1 };
 
 /** 팀장 + 12인의 현재 상태. 작업 원장에서 유도한다(진행 > 검수 > 승인대기 > 대기). */
@@ -396,6 +424,29 @@ const server = http.createServer(async (req, res) => {
         cap_tokens: t.cap_tokens || st.max_task_tokens, at: t.cost_at || t.updated || t.created,
       }));
       sendJson(res, 200, { ...u, tasks, max_task_tokens: st.max_task_tokens, agent_daily_tokens: st.agent_daily_tokens });
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/skills/registry') {
+      // 문서·제안 스킬 등록부 — 이 PC 에서 찾은 위치(저장소·사용자·동기화·플러그인)와 붙는 곳. 스킬 경로는 보내지 않는다
+      sendJson(res, 200, await registryStatus());
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/usage/top') {
+      sendJson(res, 200, await usageTop());
+      return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/usage/probe') {
+      // 구독 사용 한도 지금 확인 — 이 호출도 구독 사용량이라 이 PC 화면에서만, 1분에 한 번만 받는다
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 확인할 수 있습니다.' }); return; }
+      if (MODE !== 'claude_code') { sendJson(res, 400, { error: `claude_code 모드에서만 확인할 수 있습니다(지금 ${MODE}).` }); return; }
+      if (Date.now() - lastProbeAt < 60000) { sendJson(res, 429, { error: '방금 확인했습니다. 1분 뒤 다시 누르세요.' }); return; }
+      lastProbeAt = Date.now();
+      const r = await probeLimits();
+      await hive.recordUsage({ agent: LEADER.id, tokens: r.tokens, usd: r.costUsd, what: '구독 사용량 확인' });
+      if (r.info) await hive.recordLimits(r.info);
+      log(`구독 사용량 확인: ${r.ok ? '받음' : `실패(${r.code})`} · 사용 토큰 ${weighted(r.tokens)}`);
+      if (!r.ok) { sendJson(res, 502, { error: failureHint(r.code) || '사용 한도 정보를 받지 못했습니다.', code: r.code, tokens: weighted(r.tokens) }); return; }
+      sendJson(res, 200, { ok: true, tokens: weighted(r.tokens), limits: await hive.loadLimits() });
       return;
     }
 

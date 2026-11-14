@@ -13,8 +13,9 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runStructured, failureHint, claudeAvailable, authStatus } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
-import { proposalPlan } from './proposal.mjs';
+import { proposalPlan, estimatePlan } from './proposal.mjs';
 import { planningPlan } from './planning.mjs';
+import { registryStatus } from './skills.mjs';
 import { AGENTS_DIR } from './paths.mjs';
 import { getSettings, languageLine } from './settings.mjs';
 import { weighted, fmtTokens } from './tokens.mjs';
@@ -42,8 +43,8 @@ export function normalizeBriefing(raw) {
     gates: Array.isArray(b.gates) ? b.gates.map((g) => String(g).toUpperCase()) : [],
     attachmentPaths: Array.isArray(b.attachmentPaths) ? b.attachmentPaths : [],
     deliverables: Array.isArray(b.deliverables) ? b.deliverables : [],
-    // 'proposal' = 표준 제안 절차를 쓴다 · 'free' = 쓰지 않는다 · '' = 결과 줄로 판단(server/proposal.mjs)
-    process: ['proposal', 'planning', 'free'].includes(b.process) ? b.process : '',
+    // 'proposal'·'estimate'·'planning' = 그 표준 절차를 쓴다 · 'free' = 쓰지 않는다 · '' = 결과 줄로 판단(server/proposal.mjs)
+    process: ['proposal', 'estimate', 'planning', 'free'].includes(b.process) ? b.process : '',
   };
 }
 
@@ -108,7 +109,7 @@ async function decomposeByRules(b) {
 
 // ── claude_code 분해 ──
 // 담당 enum 은 호출할 때마다 현재 명단(추가 인원 포함)으로 만든다.
-const decomposeSchema = () => ({
+const decomposeSchema = (skillNames = []) => ({
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -130,6 +131,8 @@ const decomposeSchema = () => ({
           depends_on: { type: 'array', items: { type: 'integer' }, description: '선행 작업의 순번(0부터)' },
           needs_approval: { type: 'boolean' },
           approval_reason: { type: 'string', description: '외부발송|비용|삭제|범위변경|수치확정 중 하나, 아니면 빈 문자열' },
+          // 등록 스킬(문서·제안) 가운데 이 작업에 꼭 맞는 것 — 담당의 기본 스킬에 더해진다. 이 PC 에 있는 것만 enum 에 넣는다
+          ...(skillNames.length ? { skills: { type: 'array', maxItems: 2, items: { type: 'string', enum: skillNames }, description: '등록 스킬 중 이 작업에 꼭 맞는 것(없으면 빈 배열)' } } : {}),
         },
         required: ['title', 'owner', 'stage', 'input', 'done_when', 'depends_on', 'needs_approval', 'approval_reason'],
       },
@@ -149,7 +152,7 @@ async function loadLeaderPersona() {
   }
 }
 
-function decomposePrompt(b) {
+function decomposePrompt(b, skills = []) {
   return [
     '# 브리핑',
     `제목: ${b.title}`,
@@ -163,6 +166,11 @@ function decomposePrompt(b) {
     '# 명단',
     rosterTable(),
     '',
+    ...(skills.length ? [
+      '# 등록 스킬(문서·제안) — 작업에 꼭 맞는 것이 있으면 skills 에 최대 2개(담당의 기본 스킬에 더해진다)',
+      ...skills.map((s) => `- ${s.spec}: ${s.ko} — ${s.use_ko}`),
+      '',
+    ] : []),
     '# 규칙',
     '- 작업은 3~8건. 각 작업은 한 사람이 하루 안에 끝낼 크기. 결과 줄의 산출물로 수렴해야 한다.',
     '- 요구사항 단위로 쪼개고, 선행 작업은 depends_on 에 순번으로 적는다. 같은 사람에게 병렬 작업을 주지 않는다.',
@@ -201,6 +209,14 @@ export async function decompose(briefing, { mode, model, log }) {
     log(`팀장: 제안서 브리핑 — ${proposal.summary}${proposal.client.length ? ` · 고객사 전용 스킬 ${proposal.client.join(', ')}` : ''}`);
     return { tasks: proposal.tasks, questions: [], summary: proposal.summary, via: 'proposal', costUsd: 0 };
   }
+  // 견적만 내는 브리핑 — 범위 → 견적기준표·인력투입계획·견적서(안) → 검수(수치확정 승인)
+  const estimate = await estimatePlan(b, { lang });
+  if (estimate) {
+    const blocked = await cliBlocked('견적 프로세스');
+    if (blocked) return blocked;
+    log(`팀장: 견적 브리핑 — ${estimate.summary}`);
+    return { tasks: estimate.tasks, questions: [], summary: estimate.summary, via: 'estimate', costUsd: 0 };
+  }
   // 화면설계 브리핑 — 표준 기획 프로세스(server/planning.mjs, 기획 에이전트 패키지가 설정돼 있을 때)
   const planning = await planningPlan(b, { lang, log });
   if (planning) {
@@ -213,9 +229,15 @@ export async function decompose(briefing, { mode, model, log }) {
   if (mode === 'claude_code') {
     const system = await loadLeaderPersona();
     const lang = languageLine(settings);
-    const r = await runStructured({ system, prompt: decomposePrompt(b) + lang, schema: decomposeSchema(), model });
+    // 팀장이 골라 붙일 수 있는 등록 스킬 — 이 PC 에 있고 에이전트 실행에서 쓸 수 있는 것만
+    const pickable = (await registryStatus()).entries.filter((e) => e.available && e.usable);
+    const names = new Set(pickable.map((e) => e.spec));
+    const r = await runStructured({ system, prompt: decomposePrompt(b, pickable) + lang, schema: decomposeSchema([...names]), model });
     if (r.ok) {
-      const tasks = (r.data.tasks || []).map((t) => ({ ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '' }));
+      const tasks = (r.data.tasks || []).map(({ skills: picked, ...t }) => ({
+        ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '',
+        ...(Array.isArray(picked) && picked.length ? { extra_skills: picked.filter((n) => names.has(n)).slice(0, 2) } : {}),
+      }));
       return { tasks, questions: r.data.questions || [], summary: r.data.summary, via: 'claude_code', tokens: r.tokens, costUsd: r.costUsd };
     }
     // CLI 가 없거나 로그인이 풀렸으면 작업을 만들어도 전부 같은 이유로 실패한다 — 더미로 바꿔 돌리지 않고 멈춘다(CLAUDE.md §8).

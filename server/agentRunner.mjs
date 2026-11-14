@@ -10,6 +10,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { resolveSkills } from './skills.mjs';
+import { autoSkills } from './skillRegistry.mjs';
 import { mockClarifyBlock } from './planning.mjs';
 import { runAgent as runClaudeCodeAgent, failureHint } from './claudeCode.mjs';
 import { ROSTER, nameOf } from './roster.mjs';
@@ -257,7 +258,12 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
   const name = nameOf(task.owner);
   const agent = ROSTER.find((a) => a.id === task.owner);
   // 표준 절차(제안 프로세스 등)가 단계별 스킬을 정해 둔 작업은 그 스킬을, 아니면 담당의 기본 스킬을 붙인다.
-  const specs = Array.isArray(task.skills) && task.skills.length ? task.skills : (agent ? agent.skills : []);
+  // 여기에 팀장이 골라 붙인 등록 스킬(extra_skills)과, 작업 글에 맞는 등록부의 자동 스킬(형식·보고 지침)을 더한다.
+  const base = Array.isArray(task.skills) && task.skills.length ? task.skills : (agent ? agent.skills : []);
+  const extra = Array.isArray(task.extra_skills) ? task.extra_skills : [];
+  // (구 live 경로는 참고 스킬을 구분하지 못하고 본문을 다 넣으므로 자동 스킬을 붙이지 않는다)
+  const auto = mode === 'live' ? [] : autoSkills(`${task.title}\n${task.done_when || ''}`);
+  const specs = [...new Set([...base, ...extra, ...auto])];
   const skills = await resolveSkills(specs);
   const used = skills.applied.map((s) => s.name);
   const stageDir = path.join(outDir, task.stage || '00_sales');
@@ -317,7 +323,11 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
     '',
   ].join('\n');
   // 기획 ② 목업은 화면 목록 JSON 을 남겨 뼈대 생성·린트까지 배선을 시험한다(planning.mjs)
-  const extra = !broken && task.process === 'planning' && task.step === 'clarify' ? await mockClarifyBlock(task) : '';
+  // 엑셀로 함께 저장하는 단계(견적 등)의 목업은 표를 하나 남겨 엑셀 변환까지 배선을 시험한다
+  const table = !broken && task.export?.includes('xlsx')
+    ? '\n## 견적서(안) — 목업\n| 업무구분 | 등급 | 인원 | 수량(M/M) | 단가(원) | 금액(원) |\n| --- | --- | ---: | ---: | ---: | ---: |\n| 기획 | 고급 | 1 | 2.5 | 10,000,000 | 25,000,000 |\n| 합계 |  | 1 | 2.5 |  | 25,000,000 |\n'
+    : '';
+  const extra = (!broken && task.process === 'planning' && task.step === 'clarify' ? await mockClarifyBlock(task) : '') + table;
   await fs.writeFile(file, md + extra, 'utf8');
   sink({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: file, content: md } }] } });
   sink({ type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } });
@@ -338,6 +348,8 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   // 에이전트는 산출물 폴더(DELIVERABLES_DIR)를 작업 폴더로 돈다. 원장·지시문의 경로가 모두 그 기준이다.
   const rel = relData(stageDir) || '.';
   const applied = skills?.applied || [];
+  const inline = applied.filter((sk) => sk.inline !== false);
+  const refOnly = applied.filter((sk) => sk.inline === false);
   const prompt = [
     assignText,
     '',
@@ -345,9 +357,12 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
     '',
     applied.length ? ['# 업무 지침(스킬) — 아래 <skill> 안의 절차·형식·금지선을 따른다',
       '- 지침이 이 저장소(프로젝트 관리 대시보드) 전용 언급(VIEW_NAMES·components/ui·useDataStore 등)을 담고 있으면 무시하고 이번 고객 과제 기준으로 적용한다.',
-      '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않는다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술한다.',
+      '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않는다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술한다. Word 사본은 서버가 만들고, 엑셀이 필요한 단계는 마크다운 표를 서버가 엑셀로 옮긴다.',
       '- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행이다. 질문 대신 "가정"·"미해결"로 표시하고, 꼭 필요한 것만 회신의 "재하에게 질문"에 적는다.',
-      ...applied.flatMap((sk) => ['', `<skill name="${sk.name}">`, ...(sk.refs ? [`(참고자료 폴더: ${sk.refs} — 필요하면 Read)`] : []), sk.body, '</skill>'])].join('\n') : '',
+      ...inline.flatMap((sk) => ['', `<skill name="${sk.name}">`, ...(sk.refs ? [`(참고자료 폴더: ${sk.refs} — 필요하면 Read)`] : []), sk.body, '</skill>']),
+      ...(refOnly.length ? ['', '## 참고 스킬 — 본문은 넣지 않았다. 이번 작업에 꼭 필요할 때만 지침 파일을 Read 로 읽는다(길어서 사용 토큰이 많이 든다)',
+        ...refOnly.map((sk) => `- ${sk.name}: ${sk.desc || '(설명 없음)'}${sk.note ? ` — ${sk.note}` : ''} · 지침 파일: ${path.join(sk.dir, 'SKILL.md')}`)] : []),
+    ].join('\n') : '',
     '',
     '# 지시',
     priorFiles.length ? '- 작업 시작 전, 앞 산출물을 Read 도구로 모두 읽는다.' : '',
@@ -361,7 +376,8 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   ].filter((l) => l !== '').join('\n');
 
   // 스킬 참고자료 폴더 + 표준 절차(기획 팩 등)가 넘긴 폴더 — 산출물 폴더 밖이라 --add-dir 로 연다
-  const addDirs = [...new Set([...applied.map((sk) => sk.refs).filter(Boolean), ...extraDirs])];
+  // 참고 스킬은 지침 파일을 읽을 수 있게 스킬 폴더 자체를 연다
+  const addDirs = [...new Set([...inline.map((sk) => sk.refs).filter(Boolean), ...refOnly.map((sk) => sk.dir), ...extraDirs])];
   const before = new Set(await listDir(stageDir));
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
   const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, tokenCap: capTokens, onEvent: sink });

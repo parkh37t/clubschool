@@ -21,6 +21,7 @@ hive/
 ├── questions.json      "나에게 질문" — 팀장·역할 에이전트가 재하에게 물은 것과 답(Q-0001…). 답은 행위자(by)가 있어야 기록
 ├── breakers.json       서킷 브레이커 — 에이전트별 연속 문제 횟수·단계(normal · steer · constrain · stop)·사유
 ├── agents.json         역할 템플릿으로 추가한 인원(최대 6명) — 이름(한·영)·템플릿·페르소나
+├── limits.json         구독 사용 한도 — 창(주간·5시간)별 사용률·재설정 시각·상태(실행마다 갱신, 계정·세션 정보 없음)
 ├── settings.json       화면 언어·작업당·하루 사용 토큰 한도·QA 자동 보완·동시 작업 수·산출물 폴더(deliverables_dir)·기획 에이전트 패키지(plan_kit_dir)·팀장 상주 세션 id
 ├── live/<작업>.jsonl   실시간 기록 줄(시작·글·도구·결과·QA·완료). 팀장 상주 세션은 live/lead.jsonl
 ├── triggers.json       예약(R-0001…) — 일정(매주·매일·한 번)·브리핑 4요소·켜짐·다음/지난 실행·놓침. 앱이 켜져 있을 때만 돈다
@@ -41,6 +42,9 @@ hive/
 | 메시지 유형 | assign · result · question · answer · approval · report |
 | `task.revised` | 1 = QA 반려 뒤 1회 자동 보완함(`task.revise` 에 지적·요약·앞 산출물). 없으면 보완 안 함 |
 | `approval.kind` | 외부발송 · 비용(실제 결제·구매) · 삭제 · 범위변경 · 수치확정 · 산출물승인 · 사용량 · 재개 · 가이드확정 · 컨펌 · Go/No-Go. 사용 토큰 한도 초과는 `사용량`(`payload.kind: budget`, `cap`·`used` 는 토큰), 서킷 브레이커 재개는 `payload.kind: resume` |
+| `task.export` · `task.xlsx` | 함께 저장할 형식(`['xlsx']` — 견적 단계)과 만든 엑셀 경로(산출물 폴더 기준) |
+| `task.extra_skills` | 팀장이 골라 붙인 등록 스킬(최대 3, 담당의 기본 스킬에 더해짐) |
+| live `k:'usage'` | 실행 중 사용 토큰(2만 토큰마다 한 줄) — 화면 위 사용량 막대가 마지막 실행의 마지막 줄을 읽는다 |
 | `task.tokens` · `task.qa.tokens` | 사용 토큰 네 갈래 `{in, cw, cr, out}`(입력·캐시 생성·캐시 읽기·출력) — 보완 재작업까지 더한 값. `cost_usd` 는 API 환산 참고값으로만 남는다 |
 
 ## 규칙

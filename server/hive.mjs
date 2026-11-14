@@ -202,6 +202,10 @@ export async function addTasks(briefingId, drafts) {
         ...(d.pack ? { pack: String(d.pack) } : {}),
         ...(Number.isInteger(d.slice) ? { slice: d.slice } : {}),
         ...(Number(d.cap_tokens) > 0 ? { cap_tokens: Math.round(Number(d.cap_tokens)) } : {}),
+        // 팀장이 골라 붙인 등록 스킬(담당의 기본 스킬에 더해진다, 최대 3개)
+        ...(Array.isArray(d.extra_skills) && d.extra_skills.length ? { extra_skills: d.extra_skills.map(String).slice(0, 3) } : {}),
+        // 산출물을 함께 저장할 형식(견적 단계의 표 → 엑셀). 정해 둔 형식만 받는다
+        ...(Array.isArray(d.export) && d.export.some((x) => x === 'xlsx') ? { export: ['xlsx'] } : {}),
         output: '',
         qa: null,
         created: nowIso(),
@@ -499,6 +503,70 @@ export async function readLive(stream, after = 0, limit = 400) {
   } catch {
     return { lines: [], next: 0, total: 0 };
   }
+}
+
+/**
+ * 실행 중인 작업의 지금까지 사용 토큰 — live 파일 끝의 마지막 'usage' 줄(live.mjs 가 실행 중에 남긴다).
+ * 같은 작업이 여러 번 돌았을 수 있으므로 마지막 실행(마지막 'start' 뒤)만 본다. 끝난 실행이면 0.
+ * 파일 전체가 아니라 끝 32KB 만 읽는다(화면 위 막대가 몇 초마다 부른다).
+ */
+export async function liveTokens(stream) {
+  let fh;
+  try {
+    fh = await fs.open(p('live', safeStream(stream) + '.jsonl'), 'r');
+    const { size } = await fh.stat();
+    const len = Math.min(size, 32768);
+    const buf = Buffer.alloc(len);
+    await fh.read(buf, 0, len, size - len);
+    const lines = buf.toString('utf8').split('\n').reverse();
+    for (const l of lines) {
+      if (!/"k":"(usage|start|end)"/.test(l)) continue;
+      try {
+        const e = JSON.parse(l);
+        if (e.k === 'usage') return Number(e.tokens) || 0;
+        return 0; // start(아직 응답 전) 또는 end(끝난 실행)
+      } catch { /* 잘린 첫 줄 */ }
+    }
+    return 0;
+  } catch {
+    return 0;
+  } finally {
+    await fh?.close().catch(() => {});
+  }
+}
+
+// ── 구독 사용 한도 — Claude Code 가 실행마다 알려 주는 rate_limit_event 의 마지막 값(limits.json) ──
+// 창(window)마다 따로 남긴다: 한 이벤트에 주간 창만 오고 다음 이벤트에 5시간 창이 와도 둘 다 보이게. 계정·세션 정보는 남기지 않는다.
+const limitsLock = makeLock();
+const isoFromEpoch = (s) => (Number(s) > 0 ? new Date(Number(s) * 1000).toISOString() : '');
+
+export function recordLimits(info) {
+  if (!info || typeof info !== 'object') return Promise.resolve(null);
+  return limitsLock(async () => {
+    const prev = await readJson(p('limits.json'), { windows: {} });
+    const at = nowIso();
+    const windows = { ...(prev.windows || {}) };
+    for (const [k, w] of Object.entries(info.unifiedWindows || {})) {
+      if (!w || typeof w !== 'object' || !/^[a-z0-9_]{1,40}$/i.test(k)) continue;
+      const u = Number(w.utilization);
+      windows[k] = { utilization: Number.isFinite(u) ? Math.max(0, Math.min(u, 2)) : null, resets_at: isoFromEpoch(w.resetsAt), status: String(w.status || '').slice(0, 30), at };
+    }
+    // 창 정보가 없는 옛 형식 — 대표 창 하나만 상태·재설정 시각으로 남긴다
+    if (!Object.keys(info.unifiedWindows || {}).length && info.rateLimitType && /^[a-z0-9_]{1,40}$/i.test(info.rateLimitType)) {
+      windows[info.rateLimitType] = { ...(windows[info.rateLimitType] || {}), utilization: windows[info.rateLimitType]?.utilization ?? null, resets_at: isoFromEpoch(info.resetsAt), status: String(info.status || '').slice(0, 30), at };
+    }
+    const rec = {
+      at, status: String(info.status || '').slice(0, 30), type: String(info.rateLimitType || '').slice(0, 40),
+      resets_at: isoFromEpoch(info.resetsAt), overage: Boolean(info.isUsingOverage), windows,
+    };
+    await fs.mkdir(HIVE_DIR, { recursive: true });
+    await writeJson(p('limits.json'), rec);
+    return rec;
+  });
+}
+
+export async function loadLimits() {
+  return readJson(p('limits.json'), null);
 }
 
 // ── 승인 큐 ──

@@ -45,6 +45,9 @@ export interface HiveTask {
   id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean;
   stage?: string; depends_on?: string[]; tokens?: number; qa_tokens?: number; qa_summary?: string; // tokens = 사용 토큰
   docx?: string; // 산출물 Word 판(산출물 폴더 기준 상대경로)
+  xlsx?: string; // 산출물의 표를 옮긴 엑셀 판(견적 단계 등)
+  process?: string; // 표준 절차(proposal·estimate·planning)
+  step?: string;
 }
 export interface HiveApproval {
   id: string; task: string; kind: string; reason: string; status: string; payload?: { output?: string; gate?: string } | null;

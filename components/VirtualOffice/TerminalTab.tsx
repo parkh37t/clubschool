@@ -36,7 +36,8 @@ function formatLine(l: LiveLine, t: TFn): string {
     case 'tool_result': return `${time}${l.error ? C.red : C.dim}  ↳ ${t('tl.resultText', { size: Number(l.size ?? 0).toLocaleString(), err: l.error ? ' ✗' : '' })}${C.reset}`;
     case 'text': return `${time}${C.white}${body(l.text)}${C.reset}`;
     case 'note': return `${time}${C.dim}· ${body(l.text)}${C.reset}`;
-    case 'end': return `${time}${l.status === 'success' ? C.green : C.red}■ ${t('tl.endText', { status: l.status ?? '', tokens: tok(Number(l.tokens ?? 0)), turns: l.turns ?? 0 })}${C.reset}`;
+    case 'usage': return `${time}${C.dim}· ${t('tl.usage', { tokens: tok(Number(l.tokens ?? 0)) })}${C.reset}`;
+    case 'end': return `${time}${l.status === 'success' ? C.green : C.red}■${t('tl.endText', { status: l.status ?? '', tokens: tok(Number(l.tokens ?? 0)), turns: l.turns ?? 0 })}${C.reset}`;
     case 'qa_start': return `${time}${C.yellow}◇ ${t('tl.qaStart')}${C.reset}`;
     case 'qa': return `${time}${l.gate === 'FAIL' ? C.red : l.gate === 'PASS' ? C.green : C.yellow}◇ ${t('tl.qa')} ${l.gate}${C.reset} ${C.dim}${body(l.text).slice(0, 200)}${C.reset}`;
     case 'approval': return `${time}${C.yellow}◆ ${t('tl.approval')} ${l.text ?? ''}${C.reset}`;

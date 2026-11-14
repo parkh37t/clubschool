@@ -38,6 +38,26 @@ export function activeChildCount() {
   return ACTIVE.size;
 }
 
+// 구독 사용 한도 — stream-json 실행마다 CLI 가 rate_limit_event(주간·5시간 창의 사용률·재설정 시각)를 한 줄 보낸다.
+// 받아 갈 곳은 서버가 정한다(hive/limits.json). 이 모듈은 hive 를 모른다.
+let rateLimitSink = null;
+export function onRateLimit(fn) { rateLimitSink = typeof fn === 'function' ? fn : null; }
+
+/** stdout 에서 마지막 rate_limit_info 를 찾아 넘긴다. 없으면 null. */
+function captureRateLimit(stdout) {
+  if (!stdout || !stdout.includes('rate_limit_event')) return null;
+  let last = null;
+  for (const l of stdout.split('\n')) {
+    if (!l.includes('"rate_limit_event"')) continue;
+    try {
+      const ev = JSON.parse(l);
+      if (ev.type === 'rate_limit_event' && ev.rate_limit_info) last = ev.rate_limit_info;
+    } catch { /* 깨진 줄 무시 */ }
+  }
+  if (last && rateLimitSink) Promise.resolve().then(() => rateLimitSink(last)).catch(() => {});
+  return last;
+}
+
 // 실행 파일 결정 순서: CLAUDE_BIN → PATH 의 claude → (Windows) Claude 데스크톱 앱이 내장한 claude.exe.
 // 데스크톱 앱(%APPDATA%\Claude\claude-code\<버전>\<해시>\claude.exe)으로만 Claude Code 를 쓰는 PC 가 있어서 그 경로를 찾아 준다.
 function findDesktopBundledClaude() {
@@ -272,6 +292,7 @@ export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000,
   };
   const stopWhen = tokenCap > 0 ? () => meter.weighted() > tokenCap : undefined;
   const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine, stopWhen });
+  captureRateLimit(r.stdout);
   const { res, lastText } = streamResult(r.stdout);
   const tokens = res?.usage ? fromUsage(res.usage) : meter.tokens();
   const costUsd = Number(res?.total_cost_usd || 0);
@@ -302,6 +323,7 @@ export async function runLeaderTurn({ system, prompt, schema, sessionId, resume,
   if (model) argv.push('--model', model);
   const onLine = onEvent ? (l) => { try { onEvent(JSON.parse(l)); } catch { /* 무시 */ } } : undefined;
   const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine });
+  captureRateLimit(r.stdout);
   const { res } = streamResult(r.stdout);
   const costUsd = Number(res?.total_cost_usd || 0);
   const tokens = fromUsage(res?.usage);
@@ -311,6 +333,28 @@ export async function runLeaderTurn({ system, prompt, schema, sessionId, resume,
   const data = extractStructured(res);
   if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', tokens, costUsd };
   return { ok: true, data, tokens, costUsd, sessionId: res.session_id || sessionId };
+}
+
+/**
+ * 구독 사용 한도만 확인하는 가장 작은 호출 — 화면 위 사용량 막대의 [지금 확인].
+ * 도구·설정·MCP 없이 빈 임시 폴더에서 1턴만 돈다. 이 호출도 구독 사용량이므로 쓴 토큰을 돌려준다(호출한 쪽이 기록).
+ * @returns {Promise<{ok:boolean, code?:string, info:object|null, tokens, costUsd}>}
+ */
+export async function probeLimits({ timeoutMs = 90000 } = {}) {
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'ax-office-'));
+  const argv = [
+    bin(), '-p', '--output-format', 'stream-json', '--verbose',
+    '--tools', '', '--setting-sources', '', '--strict-mcp-config',
+    '--no-session-persistence', '--max-turns', '1', '--system-prompt', 'Reply with the single word OK.',
+  ];
+  const r = await run(argv, { cwd, stdin: 'OK', timeoutMs });
+  await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
+  const info = captureRateLimit(r.stdout);
+  const { res } = streamResult(r.stdout);
+  const tokens = fromUsage(res?.usage);
+  const costUsd = Number(res?.total_cost_usd || 0);
+  if (r.code !== 0 || r.error) return { ok: false, code: classify(r), info, tokens, costUsd };
+  return { ok: Boolean(info), code: info ? undefined : 'no_info', info, tokens, costUsd };
 }
 
 /** 대화형 터미널(node-pty)에서 띄울 실행 파일과 셸 필요 여부. */

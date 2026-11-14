@@ -10,6 +10,7 @@ import { AgentCards } from './AgentCards';
 import type { AgentCardData } from './AgentCards';
 import { AddAgentDialog } from './AddAgentDialog';
 import { SettingsDialog } from './SettingsDialog';
+import { UsageMeter } from './UsageMeter';
 import { postJson, useEventStream, usePolling } from './officeApi';
 import type { AgentStatus, AuthState, OfficeSettings, RosterResponse } from './officeApi';
 import { OfficeLangContext, breakerReason, displayName, makeT } from './i18n';
@@ -266,6 +267,8 @@ export function VirtualOfficeView({
               ? <span style={{ ...chip, color: '#A14A2A', background: '#FBEFE9', border: '1px solid #E3B39F' }}>{t('top.noServer')}{backendBase ? ` · ${backendBase.replace(/^https?:\/\//, '')}` : ''}</span>
               : <span style={{ ...chip, color: MUTED, background: '#fff', border: `1px solid ${LINE}` }}>{t('top.demo')}</span>
           )}
+          {/* 구독 사용량 — 주간·5시간 창 사용률 · 오늘 사용 토큰 · 실행 중 작업(누르면 자세히) */}
+          {connected && apiBase !== undefined && <UsageMeter apiBase={apiBase} onOpenMonitor={() => setTab('monitor')} />}
           <span style={{ marginLeft: 'auto', fontSize: 12, color: MUTED, fontWeight: 600, fontFamily: MONO, letterSpacing: '.06em', whiteSpace: 'nowrap' }}>{rv.clock}</span>
           <button type="button" className="axo-iconbtn" onClick={() => sim?.togglePlay()} title={t('top.pauseTitle')}>
             {playing ? <Pause size={13} aria-hidden /> : <Play size={13} aria-hidden />}{playing ? t('top.pause') : t('top.play')}

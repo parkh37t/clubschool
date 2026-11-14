@@ -94,6 +94,9 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
 | `GET /api/auth` | `claude auth status` 중 `loggedIn` 만(계정 메일·조직 정보는 버림). 1분 기억, `?refresh=1` 로 다시 확인 |
 | `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login`. 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
+| `GET /api/usage/top` | 화면 위 사용량 막대 — 구독 사용 한도 창(`limits.json`), 오늘 사용 토큰(끝난 작업 + 실행 중), 담당별 하루 한도 대비, 실행 중 작업의 토큰/한도 |
+| `POST /api/usage/probe` | 구독 사용 한도 지금 확인 — claude_code 모드·이 PC 화면·1분에 한 번. 작은 호출 1번(사용 토큰 기록) |
+| `GET /api/skills/registry` | 문서·제안 스킬 등록부와 이 PC 에서 찾은 위치(저장소·사용자·동기화·플러그인), 고객사 전용 제안 스킬 이름. 경로는 보내지 않음 |
 | `GET /api/usage` | 사용 토큰 합계 — 에이전트별·일별·작업별(실행·QA·작업 한도), 네 갈래 합계(`parts`·`parts_today`), 한도 설정값. `usd_ref` 는 API 단가 환산 참고값(청구 아님), `untracked` 는 토큰 기록 전이라 합계에서 빠진 기록 수 |
 
 ## 흐름
@@ -180,6 +183,8 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `docxExport.mjs` | 마크다운 산출물 → Word |
 | `state.mjs` | `office-state.json` 읽기/쓰기 |
 | `leaderSession.mjs` | 팀장 상주 세션과 대기열(`queue.json`) — 메시지 처리·브리핑 등록·두 줄 실행 |
+| `xlsxExport.mjs` | 마크다운 산출물의 표 → 엑셀(.xlsx, 표 하나 = 시트 하나). 견적 단계처럼 `task.export` 에 xlsx 가 있는 작업만 |
+| `skillRegistry.mjs` | 문서·제안 스킬 등록부 — 이름·쓰임새·담당·넣는 방식(지시문/참고)·자동 부착·사용 가능 여부 |
 | `settings.mjs` | 언어·작업당·하루 사용 토큰 한도·자동 보완·동시 작업 수·산출물 폴더·기획 패키지·팀장 세션 id(`settings.json`), 서버가 만드는 상태 문구의 한·영 |
 | `tokens.mjs` | 사용 토큰 계산(입력·캐시 생성·캐시 읽기·출력 → 한 숫자), 실행 중 스트림 집계(한도 판정), 표기 |
 | `breaker.mjs` | 서킷 브레이커(조정·제한·중지)와 하루 토큰 한도 판정(`breakers.json`) |

@@ -141,6 +141,8 @@
 .axo-agent--add-on:hover{background:#EFEAF7;}
 .axo-iconbtn{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0;font:inherit;font-size:12px;font-weight:700;cursor:pointer;padding:4px 9px;border-radius:4px;border:1px solid #DDD6C8;background:#FFFFFF;color:#24291F;}
 .axo-iconbtn:hover{background:#F7F4EC;}
+.axo-iconbtn:disabled{opacity:.5;cursor:not-allowed;}
+.axo-iconbtn:disabled:hover{background:#FFFFFF;}
 @media (max-width: 1180px){ .axo-cc{width:360px;} }
 @media (max-width: 880px){
   .axo-app{height:auto;overflow:visible;}

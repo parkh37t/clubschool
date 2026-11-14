@@ -127,6 +127,7 @@ function TaskCard({ task, dim, apiBase }: { task: HiveTask; dim: boolean; apiBas
           <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
             <button type="button" style={action} onClick={() => open(task.output || '')} title={file}><FileText size={12} aria-hidden />{t('tasks.open')}</button>
             {task.docx && <button type="button" style={action} onClick={() => open(task.docx || '')} title={task.docx.split('/').pop()}>{t('tasks.word')}</button>}
+            {task.xlsx && <button type="button" style={action} onClick={() => open(task.xlsx || '')} title={task.xlsx.split('/').pop()}>{t('tasks.excel')}</button>}
             <button type="button" style={action} onClick={() => open(task.output || '', true)} aria-label={t('tasks.folder')} title={t('tasks.folder')}><FolderOpen size={12} aria-hidden /></button>
           </span>
         )}

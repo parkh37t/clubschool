@@ -31,6 +31,30 @@ export interface Question {
 }
 
 export interface UsageTask { id: string; owner: string; title: string; status: string; gate: string; tokens: number; qa_tokens: number; parts: { in: number; cw: number; cr: number; out: number } | null; cap_tokens: number; at: string; }
+/** 문서·제안 스킬 등록부 항목(/api/skills/registry, server/skillRegistry.mjs) */
+export interface RegistrySkill {
+  spec: string; name: string | null; available: boolean; source: 'repo' | 'user' | 'synced' | 'kit' | 'plugin' | null;
+  cat: 'proposal' | 'document'; inline: boolean; exec: boolean; usable: boolean; auto: boolean; agents: string[];
+  ko: string; en: string; use_ko: string; use_en: string; note_ko: string; note_en: string; why_ko: string; why_en: string;
+}
+export interface SkillRegistryResponse { entries: RegistrySkill[]; client: { name: string; source: string }[] }
+
+/** 구독 사용 한도의 창 하나(주간·5시간 등). utilization 은 0~1, Claude Code 가 실행마다 알려 준 마지막 값 */
+export interface LimitWindow { utilization: number | null; resets_at: string; status: string; at: string }
+export interface SubscriptionLimits { at: string; status: string; type: string; resets_at: string; overage: boolean; windows: Record<string, LimitWindow> }
+/** 화면 위 사용량 막대(/api/usage/top) */
+export interface UsageTop {
+  mode: string;
+  /** 오늘 사용 토큰 = 끝난 작업(today_done) + 실행 중(live) */
+  today: number; today_done: number; live: number;
+  parts_today: { in: number; cw: number; cr: number; out: number };
+  agents: { id: string; used: number; ratio: number }[];
+  running: { id: string; owner: string; title: string; tokens: number; cap: number }[];
+  agent_daily_tokens: number; max_task_tokens: number;
+  limits: SubscriptionLimits | null;
+  probe_ready: boolean;
+}
+
 export interface UsageResponse {
   total: number; byAgent: Record<string, number>; byDay: Record<string, number>; byAgentDay: Record<string, Record<string, number>>;
   tasks: UsageTask[]; max_task_tokens: number; agent_daily_tokens: number;

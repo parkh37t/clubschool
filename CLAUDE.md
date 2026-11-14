@@ -116,7 +116,8 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **브리핑 4요소**: 결과(끝나면 손에 쥘 것) · 맥락 · 제약 · 질문 기준. 결과 줄이 없으면 팀장은 분해하지 않고 되묻는다.
 - **hive(기본 `server/hive/`, `OFFICE_HIVE_DIR`)가 단일 진실**: 작업 원장 `tasks.json`, 승인 큐 `approvals.json`, 메일함 `inbox/outbox`,
   기억 `memory/`, 현황판 `blackboard.md`, 미확정 `open_items.md`, 이벤트 `events.log`, 대기열 `queue.json`, 질문 `questions.json`,
-  서킷 브레이커 `breakers.json`, 추가 인원 `agents.json`, 설정 `settings.json`, 실시간 기록 `live/`, 예약 `triggers.json`, 사용자 템플릿 `templates.json`. 메모리 상태를 두지 않는다.
+  서킷 브레이커 `breakers.json`, 추가 인원 `agents.json`, 설정 `settings.json`, 실시간 기록 `live/`, 예약 `triggers.json`, 사용자 템플릿 `templates.json`,
+  구독 사용 한도 `limits.json`(Claude Code 가 실행마다 알려 주는 rate_limit_event 의 마지막 값). 메모리 상태를 두지 않는다.
   경로는 `server/paths.mjs` 한 곳에서 정한다(산출물 `OFFICE_DELIVERABLES_DIR`, 화면 `OFFICE_DIST_DIR`).
 - **작업 풀**: 브리핑 안의 작업은 선행이 끝나면 `OFFICE_CONCURRENCY`(기본 2, 최대 3)건까지 동시에 돈다. 같은 담당자는 동시에 돌리지 않고,
   승인 대기는 그 작업만 멈춘다. `tasks.json`·`approvals.json` 갱신은 `hive.mjs` 의 쓰기 잠금 안에서만 한다.
@@ -143,13 +144,20 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   하루 토큰 한도(`agent_daily_tokens`, 기본 120만) 80% 제한·100% 중지. 중지는 재하가 '재개' 승인이나 모니터 탭 초기화(행위자·사유 필수)로만 풀린다.
   작업당 토큰 한도(`max_task_tokens`, 기본 40만 — 작업의 `cap_tokens` 가 먼저, 기획 ②·③ 은 80만)를 넘으면 앱이 스트림의 토큰을 세다 끊고 '사용량' 승인 카드(승인 시 한도 두 배)를 띄운다.
   '비용' 승인 종류는 실제 돈이 드는 일(유료 결제·구매)에만 쓴다.
-- **제안서 작성 프로세스**: 결과 줄이 제안서인 브리핑은 팀장 분해 대신 `server/proposal.mjs` 의 8단계(조사 → RFP 분석·Go/No-Go(승인) → 전략·목차 →
-  [UX 섹션] [KPI] → 장표 구성안·근거표 → 본문(수치 걸리면 승인) → 검수)로 나눈다. 담당은 한도전 3단계(RFP·전략·본문)·차도안 2단계(UX 섹션·장표)·고지표 2단계(KPI·검수)·김영업 1단계로 나눠
+- **제안서 작성 프로세스**: 결과 줄이 제안서인 브리핑은 팀장 분해 대신 `server/proposal.mjs` 의 9단계(조사 → RFP 분석·Go/No-Go(승인) → 전략·목차 →
+  [UX 섹션] [KPI] → 견적·인력 투입 계획(승인 '수치확정') ∥ 장표 구성안·근거표 → 본문(승인된 견적 값만) → 검수)로 나눈다. 담당은 한도전 3단계(RFP·전략·본문)·차도안 2단계(UX 섹션·장표)·고지표 2단계(KPI·검수)·김영업 1단계·정우선 1단계(견적)로 나눠
   한 사람이 하루 토큰 한도를 혼자 넘기지 않게 한다. 단계별 스킬은 `tasks.json` 의 `skills` 에 남고 실행기가 우선 쓴다.
+- **견적 프로세스**: 결과 줄이 견적서·인력투입계획(제안서 없이 견적만)인 브리핑은 `ESTIMATE_STEPS` 3단계(범위·가정 → 견적기준표·인력투입계획·견적서(안) → 견적 검수(승인 '수치확정')).
+  견적 단계(`task.export: ['xlsx']`)의 마크다운 표는 서버가 엑셀로도 저장한다(`server/xlsxExport.mjs`, 표 하나 = 시트 하나, `task.xlsx`). 방법은 공용 스킬 `proposal-estimate`.
   사내(`wylie-*` 등)·고객사 전용(`<고객>-…-proposal`) 제안 스킬은 사용자 스킬 폴더에만 두고 이름으로 찾는다(공개 저장소에 두지 않음).
 - **표준 기획 프로세스**: 화면설계 브리핑은 설정의 기획 에이전트 패키지(`plan_kit_dir`, 이 PC 폴더 — 저장소에 두지 않음)가 있으면 `server/planning.mjs` 의 6단계
   (요구 원장 → 작업가이드·IA(승인 '가이드확정' → 팩 계층 confirmed) → 화면 생성 ×2(서버가 new_screen 뼈대) → 리뷰 → 추적·3키 인계(승인 '컨펌'))로 나눈다.
   패키지 스크립트는 서버가 돌리고(에이전트는 명령 실행 금지), 화면 생성 QA 에 verify(L01~L13·V01~V08)를 넣는다. 기획 탭·`/plan-files`(CSP sandbox)로 본다.
+- **문서·제안 스킬 등록부**: `server/skillRegistry.mjs` 에 이 PC 의 문서·제안 스킬(사내·계정 동기화·플러그인 `플러그인:스킬`)을 이름·쓰임새·담당·넣는 방식으로 등록한다(스킬 파일은 저장소에 두지 않음).
+  짧은 지침은 지시문에 본문을 넣고, 긴 지침·스크립트 전제 스킬(docx·pptx·xlsx·pdf)은 '참고 스킬'로 경로만 알려 필요할 때 읽게 한다(스킬 폴더를 --add-dir).
+  표준 절차 단계·작업 글 자동 부착(`auto`)·팀장 분해의 선택(`extra_skills`, 작업당 최대 2개)으로 붙는다. 외부 도구·웹·데이터 연결이 필요한 스킬은 `usable:false`(보이되 붙이지 않음). 스킬 탭에서 본다.
+- **사용량 막대(화면 위)**: `/api/usage/top` — 구독 사용 한도(주간·5시간 창 사용률·재설정 시각, `limits.json`), 오늘 사용 토큰(끝난 작업 + 실행 중), 하루 한도에 가까운 담당,
+  실행 중 작업(live 의 `k:'usage'` 줄, 2만 토큰마다)을 보여 준다. [지금 확인]은 claude_code 모드에서 1분에 한 번 작은 호출로 한도를 새로 받는다(그 사용 토큰도 기록).
 - **설정·산출물 위치**: 설정 창에서 산출물 폴더·비용 한도·QA 자동 보완·동시 작업 수(1~3)를 바꾼다. 산출물 폴더는 `server/storage.mjs` 가 쓰기 시험 후
   `paths.mjs` 의 `DELIVERABLES_DIR`(live binding)를 바꾸고 `settings.json` 의 `deliverables_dir` 에 남긴다. 브리핑 진행 중에는 바꾸지 않고, 예전 폴더 파일은 지우지 않는다.
   파일 열기(`/api/open`)는 산출물 폴더 안의 문서만, 이 PC 화면에서 온 요청만 받는다.
