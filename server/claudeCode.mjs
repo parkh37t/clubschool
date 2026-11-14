@@ -11,6 +11,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fsSync, { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fromUsage, streamMeter, fmtTokens } from './tokens.mjs';
 
 // 지금 돌고 있는 claude 자식 프로세스. 서버가 꺼질 때 남기지 않고 정리한다(이름이 아니라 pid 로).
 const ACTIVE = new Set();
@@ -81,11 +82,12 @@ export async function claudeAvailable() {
 }
 
 /** onLine 이 있으면 stdout 을 줄 단위로 넘긴다(stream-json 실시간 처리). */
-function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine } = {}) {
+function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine, stopWhen } = {}) {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let partial = '';
+    let stopped = false;
     let child;
     try {
       child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: needsShell(argv[0]), windowsHide: true });
@@ -102,10 +104,12 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine } = {}) {
       const lines = partial.split('\n');
       partial = lines.pop();
       for (const l of lines) if (l.trim()) { try { onLine(l); } catch { /* 기록 실패가 실행을 멈추지 않게 */ } }
+      // 사용 토큰 한도 — 넘으면 그 자리에서 끊는다(호출한 쪽이 stopped 로 알아본다)
+      if (stopWhen && !stopped && stopWhen()) { stopped = true; killTree(child); }
     });
     child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (e) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code: -1, stdout, stderr, error: e }); });
-    child.on('close', (code) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code, stdout, stderr, error: null }); });
+    child.on('error', (e) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code: -1, stdout, stderr, error: e, stopped }); });
+    child.on('close', (code) => { clearTimeout(timer); ACTIVE.delete(child); resolve({ code, stdout, stderr, error: null, stopped }); });
     if (stdin) child.stdin.end(stdin); else child.stdin.end();
   });
 }
@@ -197,7 +201,7 @@ function extractStructured(res) {
 
 /**
  * 도구 없는 구조화 호출(팀장 분해·QA 판정용).
- * @returns {Promise<{ok:true, data, costUsd, raw}|{ok:false, code, message, raw}>}
+ * @returns {Promise<{ok:true, data, tokens, costUsd, raw}|{ok:false, code, message, tokens, raw}>}  tokens = {in,cw,cr,out}, costUsd 는 API 환산 참고값
  */
 export async function runStructured({ system, prompt, schema, model, timeoutMs = 240000, maxTurns = 3 }) {
   // 빈 임시 디렉터리에서 돌린다 — cwd 의 CLAUDE.md·훅·MCP 가 섞이지 않게(con-ai 와 같은 이유).
@@ -214,12 +218,13 @@ export async function runStructured({ system, prompt, schema, model, timeoutMs =
   const r = await run(argv, { cwd, stdin: prompt, timeoutMs });
   await fs.rm(cwd, { recursive: true, force: true }).catch(() => {});
   const res = parseResultJson(r.stdout);
+  const tokens = fromUsage(res?.usage);
   if (r.code !== 0 || r.error || !res || res.is_error) {
-    return { ok: false, code: classify(r), message: (res?.result || r.stderr || r.stdout || '').toString().slice(0, 600), raw: res };
+    return { ok: false, code: classify(r), message: (res?.result || r.stderr || r.stdout || '').toString().slice(0, 600), tokens, raw: res };
   }
   const data = extractStructured(res);
-  if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', raw: res };
-  return { ok: true, data, costUsd: Number(res.total_cost_usd || 0), raw: res };
+  if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', tokens, raw: res };
+  return { ok: true, data, tokens, costUsd: Number(res.total_cost_usd || 0), raw: res };
 }
 
 /** stream-json 출력에서 마지막 result 이벤트와 마지막 assistant 글을 찾는다. */
@@ -242,10 +247,11 @@ function streamResult(stdout) {
  * 파일을 읽고 쓰는 역할 에이전트 호출(산출물 작성용).
  * 출력은 stream-json 으로 받아 onEvent 로 한 줄씩 넘긴다(가상 사무실 '터미널' 탭의 실시간 기록).
  * 허용 도구: Read, Write, Edit, Grep, Glob. Bash·Skill 은 막는다(무인 실행에서 명령 실행 금지).
- * maxBudgetUsd 를 넘으면 CLI 가 멈추고 code:'budget' 으로 돌려준다(그때까지 쓴 비용 포함) — 호출한 쪽이 승인 카드로 올린다.
- * @returns {Promise<{ok:true, text, costUsd, raw}|{ok:false, code, message, costUsd, text, raw}>}
+ * tokenCap(사용 토큰)을 넘으면 앱이 스트림의 토큰을 세다가 그 자리에서 끊고 code:'budget' 으로 돌려준다(그때까지 쓴 토큰 포함)
+ * — 호출한 쪽이 승인 카드로 올린다. CLI 의 금액 상한(--max-budget-usd)은 쓰지 않는다(구독 사용량은 금액이 아니다).
+ * @returns {Promise<{ok:true, text, tokens, costUsd, raw}|{ok:false, code, message, tokens, costUsd, text, raw}>}
  */
-export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000, maxTurns = 40, addDirs = [], maxBudgetUsd, onEvent }) {
+export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000, maxTurns = 40, addDirs = [], tokenCap, onEvent }) {
   const argv = [
     bin(), '-p', '--output-format', 'stream-json', '--verbose',
     '--allowedTools', 'Read', 'Write', 'Edit', 'Grep', 'Glob',
@@ -254,27 +260,34 @@ export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000,
     '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence',
     '--max-turns', String(maxTurns),
   ];
-  if (maxBudgetUsd > 0) argv.push('--max-budget-usd', String(Number(maxBudgetUsd).toFixed(2)));
   for (const d of addDirs) argv.push('--add-dir', d);
   if (system) argv.push('--system-prompt', system);
   if (model) argv.push('--model', model);
-  const onLine = onEvent ? (l) => { try { onEvent(JSON.parse(l)); } catch { /* JSON 아닌 줄 무시 */ } } : undefined;
-  const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine });
+  const meter = streamMeter();
+  const onLine = (l) => {
+    let ev;
+    try { ev = JSON.parse(l); } catch { return; /* JSON 아닌 줄 무시 */ }
+    meter.push(ev);
+    if (onEvent) onEvent(ev);
+  };
+  const stopWhen = tokenCap > 0 ? () => meter.weighted() > tokenCap : undefined;
+  const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine, stopWhen });
   const { res, lastText } = streamResult(r.stdout);
+  const tokens = res?.usage ? fromUsage(res.usage) : meter.tokens();
   const costUsd = Number(res?.total_cost_usd || 0);
-  if (res?.subtype === 'error_max_budget_usd') {
-    return { ok: false, code: 'budget', message: `비용 상한($${Number(maxBudgetUsd).toFixed(2)}) 도달`, costUsd, text: lastText, raw: res };
+  if (r.stopped) {
+    return { ok: false, code: 'budget', message: `사용 토큰 한도(${fmtTokens(tokenCap)}) 도달`, tokens, costUsd, text: lastText, raw: res };
   }
   if (r.code !== 0 || r.error || !res || res.is_error) {
-    return { ok: false, code: res?.subtype === 'error_max_turns' ? 'max_turns' : classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), costUsd, text: lastText, raw: res };
+    return { ok: false, code: res?.subtype === 'error_max_turns' ? 'max_turns' : classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), tokens, costUsd, text: lastText, raw: res };
   }
-  return { ok: true, text: String(res.result || lastText || ''), costUsd, raw: res };
+  return { ok: true, text: String(res.result || lastText || ''), tokens, costUsd, raw: res };
 }
 
 /**
  * 팀장 상주 세션 1턴 — 같은 세션을 이어 가며(--session-id 로 시작, 이후 --resume) 재하의 메시지를 한 건씩 처리한다.
  * hive 를 읽기만 한다(Read·Grep·Glob). 답은 구조화 출력(schema)으로 받는다.
- * @returns {Promise<{ok:true, data, costUsd, sessionId}|{ok:false, code, message, costUsd}>}
+ * @returns {Promise<{ok:true, data, tokens, costUsd, sessionId}|{ok:false, code, message, tokens, costUsd}>}
  */
 export async function runLeaderTurn({ system, prompt, schema, sessionId, resume, cwd, addDirs = [], model, onEvent, timeoutMs = 300000, maxTurns = 12 }) {
   const argv = [
@@ -291,12 +304,13 @@ export async function runLeaderTurn({ system, prompt, schema, sessionId, resume,
   const r = await run(argv, { cwd, stdin: prompt, timeoutMs, onLine });
   const { res } = streamResult(r.stdout);
   const costUsd = Number(res?.total_cost_usd || 0);
+  const tokens = fromUsage(res?.usage);
   if (r.code !== 0 || r.error || !res || res.is_error) {
-    return { ok: false, code: classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), costUsd };
+    return { ok: false, code: classify(r), message: (res?.result || (res?.errors || []).join('; ') || r.stderr || r.stdout || '').toString().slice(0, 600), tokens, costUsd };
   }
   const data = extractStructured(res);
-  if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', costUsd };
-  return { ok: true, data, costUsd, sessionId: res.session_id || sessionId };
+  if (!data) return { ok: false, code: 'parse', message: '구조화 출력을 JSON 으로 읽지 못했습니다.', tokens, costUsd };
+  return { ok: true, data, tokens, costUsd, sessionId: res.session_id || sessionId };
 }
 
 /** 대화형 터미널(node-pty)에서 띄울 실행 파일과 셸 필요 여부. */

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { HiveApproval, HiveTask } from './officeSimulator';
 import { postJson } from './officeApi';
 import { gateLabel, kindLabel, useOfficeLang } from './i18n';
-import { BAD_FG, GATE_COLOR, LINE, LINE_SOFT, MONO, MUTED, OK_FG, WARN_FG, clock, h2Style, inputStyle, smallMuted, usd } from './officeTheme';
+import { BAD_FG, GATE_COLOR, LINE, LINE_SOFT, MONO, MUTED, OK_FG, WARN_FG, clock, h2Style, inputStyle, smallMuted, tok } from './officeTheme';
 
 interface DemoApproval {
   showApproval: boolean;
@@ -21,7 +21,7 @@ interface ApprovalsTabProps {
   demo: DemoApproval;
 }
 
-/** 승인 탭 — 재하 결정 대기 카드(사유 필수)와 결정 기록. 비용 상한·재개(서킷 브레이커) 카드도 여기로 온다. */
+/** 승인 탭 — 재하 결정 대기 카드(사유 필수)와 결정 기록. 사용 토큰 한도 초과('사용량')·재개(서킷 브레이커) 카드도 여기로 온다. */
 export function ApprovalsTab({ connected, apiBase, tasks, pending, approvals, demo }: ApprovalsTabProps) {
   const { t, lang, name } = useOfficeLang();
   const [by, setBy] = useState(lang === 'en' ? 'Jaeha' : '재하');
@@ -67,7 +67,8 @@ export function ApprovalsTab({ connected, apiBase, tasks, pending, approvals, de
           </div>
           {pending.map((a) => {
             const task = taskOf(a.task);
-            const payload = (a.payload ?? {}) as { output?: string; gate?: string; kind?: string; cap?: number; cost?: number };
+            // 사용량 카드(kind:'budget') — cap·used 는 사용 토큰. 예전 카드는 cost(금액)만 있을 수 있다
+            const payload = (a.payload ?? {}) as { output?: string; gate?: string; kind?: string; cap?: number; used?: number; cost?: number };
             return (
               <div key={a.id} style={{ background: '#FFF8EA', border: '1px solid #E8A33D', borderRadius: 9, padding: '9px 12px', fontSize: 13 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -76,7 +77,7 @@ export function ApprovalsTab({ connected, apiBase, tasks, pending, approvals, de
                   {payload.gate && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: GATE_COLOR[payload.gate] ?? MUTED }}>QA {gateLabel(lang, payload.gate)}</span>}
                 </div>
                 <div style={{ fontSize: 12.5, marginTop: 3 }}>{task ? `${task.id} ${name(task.owner)} · ${task.title}` : a.reason || a.task}</div>
-                {payload.kind === 'budget' && <div style={{ fontSize: 11.5, color: WARN_FG, marginTop: 2 }}>{t('ap.budgetNote', { cap: usd(payload.cap), cost: usd(payload.cost) })}</div>}
+                {payload.kind === 'budget' && <div style={{ fontSize: 11.5, color: WARN_FG, marginTop: 2 }}>{t('ap.budgetNote', { cap: tok(payload.cap), used: tok(payload.used ?? payload.cost) })}</div>}
                 {payload.kind === 'resume' && <div style={{ fontSize: 11.5, color: BAD_FG, marginTop: 2 }}>{t('ap.resumeNote')} — {a.reason}</div>}
                 {payload.output && <div style={{ fontSize: 11.5, color: MUTED, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={payload.output}>{payload.output}</div>}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>

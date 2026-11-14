@@ -6,7 +6,7 @@ import { deleteJson, postJson } from './officeApi';
 import type { LiveLine, RosterMember } from './officeApi';
 import { useOfficeLang } from './i18n';
 import type { TFn } from './i18n';
-import { BAD_FG, INK, MONO, MUTED, WYLIE, WYLIE_DARK, inputStyle, smallMuted } from './officeTheme';
+import { BAD_FG, INK, MONO, MUTED, WYLIE, WYLIE_DARK, inputStyle, smallMuted, tok } from './officeTheme';
 
 interface TerminalTabProps {
   connected: boolean;
@@ -31,17 +31,17 @@ function formatLine(l: LiveLine, t: TFn): string {
   const body = (s?: string) => String(s ?? '').replace(/\r?\n/g, '\r\n          ');
   switch (l.k) {
     case 'start': return `${time}${label(C.dim, 'start')} ${C.dim}${l.text ?? ''}${C.reset}`;
-    case 'assign': return `${time}${C.magenta}◆ ${t('tl.assign')}${C.reset} ${t('tl.assignText', { msg: l.text ?? '', cap: Number(l.cap ?? 0).toFixed(2), level: l.level && l.level !== 'normal' ? ` · ${t(`lv.${l.level}`)}` : '' })}`;
+    case 'assign': return `${time}${C.magenta}◆ ${t('tl.assign')}${C.reset} ${t('tl.assignText', { msg: l.text ?? '', cap: tok(Number(l.cap ?? 0)), level: l.level && l.level !== 'normal' ? ` · ${t(`lv.${l.level}`)}` : '' })}`;
     case 'tool': return `${time}${C.cyan}▶ ${l.tool}${C.reset} ${l.text ?? ''}`;
     case 'tool_result': return `${time}${l.error ? C.red : C.dim}  ↳ ${t('tl.resultText', { size: Number(l.size ?? 0).toLocaleString(), err: l.error ? ' ✗' : '' })}${C.reset}`;
     case 'text': return `${time}${C.white}${body(l.text)}${C.reset}`;
     case 'note': return `${time}${C.dim}· ${body(l.text)}${C.reset}`;
-    case 'end': return `${time}${l.status === 'success' ? C.green : C.red}■ ${t('tl.endText', { status: l.status ?? '', cost: Number(l.cost ?? 0).toFixed(2), turns: l.turns ?? 0 })}${C.reset}`;
+    case 'end': return `${time}${l.status === 'success' ? C.green : C.red}■ ${t('tl.endText', { status: l.status ?? '', tokens: tok(Number(l.tokens ?? 0)), turns: l.turns ?? 0 })}${C.reset}`;
     case 'qa_start': return `${time}${C.yellow}◇ ${t('tl.qaStart')}${C.reset}`;
     case 'qa': return `${time}${l.gate === 'FAIL' ? C.red : l.gate === 'PASS' ? C.green : C.yellow}◇ ${t('tl.qa')} ${l.gate}${C.reset} ${C.dim}${body(l.text).slice(0, 200)}${C.reset}`;
     case 'approval': return `${time}${C.yellow}◆ ${t('tl.approval')} ${l.text ?? ''}${C.reset}`;
     case 'approval_done': return `${time}${l.text === 'approved' ? C.green : C.red}◆ ${t('tl.approval_done')} ${l.text ?? ''}${C.reset}`;
-    case 'budget_stop': return `${time}${C.red}■ ${t('tl.budgetText', { cap: Number(l.cap ?? 0).toFixed(2), msg: l.text ?? '' })}${C.reset}`;
+    case 'budget_stop': return `${time}${C.red}■ ${t('tl.budgetText', { cap: tok(Number(l.cap ?? 0)), msg: l.text ?? '' })}${C.reset}`;
     case 'revise': return `${time}${C.yellow}↻ ${t('tl.revise')}${C.reset} ${C.dim}${body(l.text).slice(0, 200)}${C.reset}`;
     case 'done': return `${time}${C.green}✓ ${t('tl.done')}${C.reset}`;
     case 'user_msg': return `${time}${C.pink}${t('tl.user_msg')} ›${C.reset} ${body(l.text)}`;

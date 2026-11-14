@@ -26,6 +26,7 @@ import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths
 import { effective as breakerEffective, recordOutcome, resetBreaker } from './breaker.mjs';
 import { getSettings, languageLine, stateText, currentConcurrency } from './settings.mjs';
 import { liveNote } from './live.mjs';
+import { addTokens, weighted, fmtTokens } from './tokens.mjs';
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 const APPROVAL_TIMEOUT_MS = Number(process.env.OFFICE_APPROVAL_TIMEOUT_MS || 0); // 0 = 재하가 누를 때까지 무한 대기
@@ -94,7 +95,7 @@ export async function officeState({ briefingId, phase, extra }) {
     ...rest,
     hive: {
       briefing: briefingId,
-      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0, docx: t.docx || '' })),
+      tasks: tasks.map((t) => ({ id: t.id, title: t.title, owner: t.owner, stage: t.stage, status: t.status, gate: t.gate, output: t.output, needs_approval: t.needs_approval, depends_on: t.depends_on, cost_usd: t.cost_usd || 0, qa_summary: t.qa?.summary || '', revised: t.revised || 0, docx: t.docx || '', tokens: weighted(t.tokens), qa_tokens: weighted(t.qa?.tokens) })),
       // 승인 탭에는 지금 브리핑 밖의 승인(재시작 전에 남은 것 등)도 보여야 재하가 결정할 수 있다.
       pending: snap.pending,
       approvals: snap.approvals.filter((a) => tasks.some((t) => t.id === a.task)).slice(-20),
@@ -152,7 +153,8 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   await fs.writeFile(path.join(outDir, 'briefing.json'), JSON.stringify({ ...b, mode, briefingId }, null, 2), 'utf8');
   const CONCURRENCY = await currentConcurrency();
   log(`브리핑 접수: "${b.title}" (${mode} 모드, 동시 ${CONCURRENCY}건) → ${briefingId}`);
-  let costUsd = 0;
+  let costUsd = 0; // API 환산 참고값(보고서 각주) — 판단은 사용 토큰으로
+  let tokensAll = { in: 0, cw: 0, cr: 0, out: 0 };
   const leftovers = [];
 
   // 상태 쓰기는 한 줄로 — 계산(스냅샷)과 쓰기 사이에 다른 작업의 더 새 상태가 끼어들어 옛 상태로 덮이지 않게.
@@ -168,8 +170,9 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   await delay(1200);
   const plan = await decompose(b, { mode, model: process.env.OFFICE_MODEL, log });
   costUsd += plan.costUsd || 0;
-  await hive.recordUsage({ agent: LEADER.id, usd: plan.costUsd, briefing: briefingId, what: '브리핑 분해' });
-  log(`팀장 분해: 작업 ${plan.tasks.length}건 · 되물음 ${plan.questions?.length || 0}건 (${plan.via}, 비용 $${(plan.costUsd || 0).toFixed(2)})`);
+  tokensAll = addTokens(tokensAll, plan.tokens);
+  await hive.recordUsage({ agent: LEADER.id, tokens: plan.tokens, usd: plan.costUsd, briefing: briefingId, what: '브리핑 분해' });
+  log(`팀장 분해: 작업 ${plan.tasks.length}건 · 되물음 ${plan.questions?.length || 0}건 (${plan.via}, 사용 토큰 ${fmtTokens(weighted(plan.tokens))})`);
   // 팀장이 되물은 것은 질문(ask me) 탭에도 올린다. 작업이 있으면 진행하고, 없으면 여기서 멈춘다.
   for (const text of plan.questions || []) {
     const q = await hive.addQuestion({ from: LEADER.id, task: '', text, briefing: briefingId });
@@ -194,7 +197,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   }
   const tasks = await hive.addTasks(briefingId, plan.tasks);
   log(`팀장 분해(${plan.via}): 작업 ${tasks.length}건 — ${tasks.map((t) => `${t.id} ${nameOf(t.owner)}·${t.title}`).join(' / ')}`);
-  await hive.writeBlackboard(buildReport(b, tasks, { outDirRel, mode, costUsd }));
+  await hive.writeBlackboard(buildReport(b, tasks, { outDirRel, mode, costUsd, tokens: tokensAll }));
 
   const produced = []; // 완료 산출물(산출물 폴더 기준 상대경로). 선행이 없는 뒤 작업이 이어받는다.
 
@@ -216,20 +219,20 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     await publish();
   }
 
-  // 비용 상한 초과 — 승인하면 상한을 두 배로 올려 같은 작업을 다시 대기열에 넣고(앞에서 쓴 파일을 이어서 완성),
+  // 사용 토큰 한도 초과 — 승인하면 한도를 두 배로 올려 같은 작업을 다시 대기열에 넣고(앞에서 쓴 파일을 이어서 완성),
   // 반려하면 보류로 닫는다. 그 사이 다른 작업은 계속 돈다.
   async function awaitBudgetDecision(task, a, cap, outRel) {
     const decision = await hive.waitForApproval(a.id, { pollMs: 2000, timeoutMs: APPROVAL_TIMEOUT_MS });
     if (decision === 'approved') {
-      const next = Number((cap * 2).toFixed(2));
+      const next = Math.round(cap * 2);
       await hive.updateTask(task.id, {
-        status: '대기', cap_usd: next,
-        resume_note: `앞 실행이 비용 상한($${cap.toFixed(2)})으로 멈췄다. ${outRel ? `이미 쓴 파일(${outRel})을 먼저 Read 로 읽고 이어서 완성한다.` : '처음부터 다시 쓰되 범위를 줄인다.'}`,
+        status: '대기', cap_tokens: next,
+        resume_note: `앞 실행이 사용 토큰 한도(${fmtTokens(cap)})로 멈췄다. ${outRel ? `이미 쓴 파일(${outRel})을 먼저 Read 로 읽고 이어서 완성한다.` : '처음부터 다시 쓰되 범위를 줄인다.'}`,
       });
-      log(`상한 초과 승인: ${a.id} — ${task.id} 상한 $${next.toFixed(2)} 로 다시 대기`);
+      log(`한도 초과 승인: ${a.id} — ${task.id} 한도 ${fmtTokens(next)} 토큰으로 다시 대기`);
     } else {
-      await hive.updateTask(task.id, { status: '보류', qa: { summary: `비용 상한 초과 — 승인 ${decision}` } });
-      leftovers.push(`${task.id}: 비용 상한 초과로 멈춤(승인 ${decision})`);
+      await hive.updateTask(task.id, { status: '보류', qa: { summary: `사용 토큰 한도 초과 — 승인 ${decision}` } });
+      leftovers.push(`${task.id}: 사용 토큰 한도 초과로 멈춤(승인 ${decision})`);
       log(`상한 초과 ${decision}: ${a.id} — ${task.id} 보류`);
     }
     liveNote(task.id, { agent: task.owner, task: task.id }, decision, 'approval_done');
@@ -286,8 +289,9 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     const meta = { agent: task.owner, task: task.id };
     const settings = await getSettings();
     const eff = await breakerEffective(task.owner);
-    // 보완 재작업도 같은 상한으로 돈다(따로 늘리지 않는다). 두 번 쓴 비용은 cost_usd 에 더해진다.
-    const cap = Number(((task.cap_usd || settings.max_task_usd) * eff.factor).toFixed(2));
+    // 작업 1건 실행의 사용 토큰 한도 — 작업에 따로 정해진 값(cap_tokens, 표준 절차·승인으로 늘린 값)이 먼저, 없으면 설정값.
+    // 보완 재작업도 같은 한도로 돈다(따로 늘리지 않는다). 두 번 쓴 토큰은 tokens 에 더해진다.
+    const cap = Math.round((task.cap_tokens || settings.max_task_tokens) * eff.factor);
     const maxTurns = Math.max(8, Math.floor(BASE_MAX_TURNS * eff.factor));
 
     // 2-1) 배정 — 팀장 → 담당 assign 메시지(봉투)
@@ -331,7 +335,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       if (plan.planFiles?.length) await hive.updateTask(task.id, { plan_files: plan.planFiles });
     }
 
-    // 보완 재작업 중 비용 상한으로 멈췄다가 승인으로 다시 들어온 작업이면 QA 지적을 이어 붙이고, 더는 보완하지 않는다.
+    // 보완 재작업 중 사용 토큰 한도로 멈췄다가 승인으로 다시 들어온 작업이면 QA 지적을 이어 붙이고, 더는 보완하지 않는다.
     let revision = task.revised && Array.isArray(task.revise?.issues) && task.revise.issues.length ? task.revise : null;
     const asked = new Set(); // 보완 재작업에서 같은 질문을 또 올리지 않게
 
@@ -340,29 +344,31 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       const runContext = [context, plan?.context, revision ? reviseNote(revision) : ''].filter(Boolean).join('\n\n');
       let r;
       try {
-        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capUsd: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [] });
+        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capTokens: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [] });
       } catch (e) {
-        r = { file: null, summary: '', costUsd: 0, reply: '', leftovers: [`실행 예외: ${e.message}`], memory: [], questions: [], failure: 'exception' };
+        r = { file: null, summary: '', tokens: null, costUsd: 0, reply: '', leftovers: [`실행 예외: ${e.message}`], memory: [], questions: [], failure: 'exception' };
       }
       costUsd += r.costUsd || 0;
-      const prevCost = Number((await hive.getTask(task.id))?.cost_usd || 0);
-      const totalCost = Number((prevCost + (r.costUsd || 0)).toFixed(4));
+      tokensAll = addTokens(tokensAll, r.tokens);
+      const prevRec = await hive.getTask(task.id);
+      const totalCost = Number((Number(prevRec?.cost_usd || 0) + (r.costUsd || 0)).toFixed(4)); // API 환산 참고
+      const totalTokens = addTokens(prevRec?.tokens, r.tokens);
       await hive.markInboxDone(task.owner, readIds);
 
-      // 2-2a) 비용 상한 초과 — 멈추고 승인 카드
+      // 2-2a) 사용 토큰 한도 초과 — 멈추고 '사용량' 승인 카드
       if (r.budgetExceeded) {
         const outRel = r.file ? relData(r.file) : '';
-        await hive.updateTask(task.id, { cost_usd: totalCost, cost_at: hive.nowIso(), ...(outRel ? { output: outRel } : {}) });
-        await recordOutcome(task.owner, 'cap', `$${cap.toFixed(2)}`);
+        await hive.updateTask(task.id, { tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso(), ...(outRel ? { output: outRel } : {}) });
+        await recordOutcome(task.owner, 'cap', `${fmtTokens(cap)} 토큰`);
         const a = await hive.requestApproval({
-          task: task.id, kind: '비용',
-          reason: `${nameOf(task.owner)} · ${task.title} — 작업당 상한 $${cap.toFixed(2)} 초과로 멈춤${revision ? '(보완 재작업 중)' : ''}. 승인하면 상한 $${(cap * 2).toFixed(2)} 로 이어서 실행, 반려하면 보류`,
-          payload: { output: outRel, cap, cost: totalCost, kind: 'budget' },
+          task: task.id, kind: '사용량',
+          reason: `${nameOf(task.owner)} · ${task.title} — 작업당 사용 토큰 한도 ${fmtTokens(cap)} 토큰을 넘겨 멈춤${revision ? '(보완 재작업 중)' : ''}(구독 사용량, 청구 아님). 승인하면 한도 ${fmtTokens(cap * 2)} 토큰으로 이어서 실행, 반려하면 보류`,
+          payload: { output: outRel, cap, used: weighted(totalTokens), kind: 'budget' },
         });
         await hive.updateTask(task.id, { status: '승인대기' });
-        await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'approval', task: task.id, body: `승인 요청 ${a.id} — 비용 상한 초과\n\n- 작업: ${task.id} ${task.title}\n- 상한: $${cap.toFixed(2)} · 지금까지 $${totalCost.toFixed(2)}\n- 승인: 상한 $${(cap * 2).toFixed(2)} 로 이어서 실행 / 반려: 보류` });
+        await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'approval', task: task.id, body: `승인 요청 ${a.id} — 사용 토큰 한도 초과\n\n- 작업: ${task.id} ${task.title}\n- 한도: ${fmtTokens(cap)} 토큰 · 지금까지 ${fmtTokens(weighted(totalTokens))} 토큰(구독 사용량, 청구 아님)\n- 승인: 한도 ${fmtTokens(cap * 2)} 토큰으로 이어서 실행 / 반려: 보류` });
         await hive.routeMail();
-        log(`비용 상한 초과: ${task.id} ($${cap.toFixed(2)}) → 승인 대기 ${a.id}`);
+        log(`사용 토큰 한도 초과: ${task.id} (${fmtTokens(cap)}) → 승인 대기 ${a.id}`);
         liveNote(task.id, { ...meta, cap }, a.id, 'budget_stop');
         await publish();
         const wait = awaitBudgetDecision(task, a, cap, outRel).catch((e) => log(`상한 승인 대기 오류(${task.id}): ${e.message}`)).finally(() => waiting.delete('b:' + task.id));
@@ -371,7 +377,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       }
 
       if (!r.file) {
-        await hive.updateTask(task.id, { status: '실패', gate: 'FAIL', cost_usd: totalCost, cost_at: hive.nowIso(), qa: { summary: r.leftovers?.[0] || '산출물 없음' } });
+        await hive.updateTask(task.id, { status: '실패', gate: 'FAIL', tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso(), qa: { summary: r.leftovers?.[0] || '산출물 없음' } });
         await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, body: `실패: ${r.leftovers?.[0] || '산출물 없음'}` });
         await hive.routeMail();
         // CLI 없음·로그인 풀림은 PC 환경 문제라 담당자의 연속 문제(서킷 브레이커)로 세지 않는다.
@@ -384,7 +390,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       }
       const outRel = relData(r.file);
       const docx = await exportDocx(r.file, log).catch(() => null);
-      await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? relData(docx) : '', cost_usd: totalCost, cost_at: hive.nowIso() });
+      await hive.updateTask(task.id, { status: '검수', output: outRel, docx: docx ? relData(docx) : '', tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso() });
       await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, stage: task.stage, body: r.reply || `산출물: ${outRel}` });
       await hive.routeMail();
       if (r.memory?.length) await hive.appendMemory(task.owner, r.memory, { taskId: task.id });
@@ -411,10 +417,12 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
         }
       }
       costUsd += verdict.costUsd || 0;
-      // QA 비용도 두 번 판정했으면 더한다(사용량 합계는 qa.cost_usd 를 고지표에게 더한다).
+      tokensAll = addTokens(tokensAll, verdict.tokens);
+      // QA 도 두 번 판정했으면 더한다(사용량 합계는 qa.tokens 를 고지표에게 더한다).
       const qaCost = Number(((revision?.qa_cost_usd || 0) + (verdict.costUsd || 0)).toFixed(4));
-      await hive.updateTask(task.id, { gate: verdict.gate, qa: { summary: verdict.summary, checks: verdict.checks, issues: verdict.issues, via: verdict.via, cost_usd: qaCost, at: hive.nowIso(), ...(revision ? { round: 2 } : {}) } });
-      log(`QA ${task.id}${revision ? '(보완 후)' : ''}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}${c.required === false ? '(참고)' : ''}`).join(' ')} (QA 비용 $${(verdict.costUsd || 0).toFixed(2)})`);
+      const qaTokens = addTokens(revision?.qa_tokens, verdict.tokens);
+      await hive.updateTask(task.id, { gate: verdict.gate, qa: { summary: verdict.summary, checks: verdict.checks, issues: verdict.issues, via: verdict.via, tokens: qaTokens, cost_usd: qaCost, at: hive.nowIso(), ...(revision ? { round: 2 } : {}) } });
+      log(`QA ${task.id}${revision ? '(보완 후)' : ''}: ${verdict.gate} — ${verdict.checks.map((c) => `${c.id}:${c.status}${c.required === false ? '(참고)' : ''}`).join(' ')} (QA 사용 토큰 ${fmtTokens(weighted(verdict.tokens))})`);
       liveNote(task.id, { ...meta, gate: verdict.gate }, verdict.summary || '', 'qa');
 
       if (verdict.gate === 'FAIL') {
@@ -422,7 +430,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
         if (!blocked) {
           // 2-3a) 1회 보완 — 같은 담당에게 QA 지적을 붙여 다시 실행하고 다시 판정한다. 서킷 브레이커는 최종 결과에서만 센다.
           const issues = (verdict.issues.length ? verdict.issues : [verdict.summary || '게이트 FAIL']).slice(0, 8).map((i) => String(i).slice(0, 300));
-          revision = { round: 1, at: hive.nowIso(), issues, summary: String(verdict.summary || '').slice(0, 300), output: outRel, qa_cost_usd: qaCost };
+          revision = { round: 1, at: hive.nowIso(), issues, summary: String(verdict.summary || '').slice(0, 300), output: outRel, qa_cost_usd: qaCost, qa_tokens: qaTokens };
           await hive.updateTask(task.id, { status: '진행', gate: '미점검', revised: 1, revise: revision });
           const note = await hive.sendMessage({ from: QA_AGENT, to: task.owner, type: 'answer', task: task.id, body: `게이트 FAIL — 보완 재작업 1회\n\n${issues.map((i) => `- ${i}`).join('\n')}` });
           await hive.routeMail();
@@ -530,7 +538,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   await publish('reporting');
   const finalTasks = await hive.tasksOf(briefingId);
   const approvals = (await hive.loadApprovals()).approvals.filter((a) => finalTasks.some((t) => t.id === a.task));
-  const report = buildReport(b, finalTasks, { approvals, leftovers, outDirRel, mode, costUsd });
+  const report = buildReport(b, finalTasks, { approvals, leftovers, outDirRel, mode, costUsd, tokens: tokensAll });
   await hive.writeBlackboard(report);
   await fs.writeFile(path.join(outDir, '_index.md'), report, 'utf8');
   await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'report', task: '', body: report });
@@ -563,8 +571,8 @@ export async function watchOrphanApprovals(log) {
     if (!t || t.status !== '승인대기') continue;
     log(`재시작 후 승인 대기 이어 보기: ${a.id} (${t.id})`);
     hive.waitForApproval(a.id, { pollMs: 3000 }).then(async (decision) => {
-      // 비용 상한 초과 승인은 '이어서 실행'이 필요하지만 브리핑 루프가 없으므로 보류로 두고 사실을 적는다.
-      if (decision === 'approved' && kind === 'budget') await hive.updateTask(t.id, { status: '보류', qa: { ...(t.qa || {}), summary: '비용 상한 초과 승인(서버 재시작 후) — 이어서 하려면 브리핑을 다시 보낼 것' } });
+      // 사용 토큰 한도 초과 승인은 '이어서 실행'이 필요하지만 브리핑 루프가 없으므로 보류로 두고 사실을 적는다.
+      if (decision === 'approved' && kind === 'budget') await hive.updateTask(t.id, { status: '보류', qa: { ...(t.qa || {}), summary: '사용 토큰 한도 초과 승인(서버 재시작 후) — 이어서 하려면 브리핑을 다시 보낼 것' } });
       else if (decision === 'approved') { await planningOnApproved(t, { log }).catch(() => {}); await hive.updateTask(t.id, { status: '완료' }); }
       else await hive.updateTask(t.id, { status: '보류', qa: { ...(t.qa || {}), summary: `승인 ${decision}` } });
       log(`승인 ${decision}: ${a.id} — ${t.id} 마감(재시작 후)`);

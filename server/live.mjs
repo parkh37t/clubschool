@@ -6,6 +6,7 @@
 
 import path from 'node:path';
 import { appendLive } from './hive.mjs';
+import { fromUsage, weighted } from './tokens.mjs';
 
 function shortPath(p, cwd) {
   const s = String(p || '');
@@ -58,7 +59,7 @@ export function liveEntries(ev, { cwd } = {}) {
       return out;
     }
     case 'result':
-      return [{ k: 'end', status: ev.subtype || (ev.is_error ? 'error' : 'success'), cost: Number(ev.total_cost_usd || 0), turns: ev.num_turns || 0 }];
+      return [{ k: 'end', status: ev.subtype || (ev.is_error ? 'error' : 'success'), tokens: weighted(fromUsage(ev.usage)), turns: ev.num_turns || 0 }];
     default:
       return [];
   }

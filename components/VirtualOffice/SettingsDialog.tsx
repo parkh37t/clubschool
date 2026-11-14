@@ -57,8 +57,8 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
   useEffect(() => {
     if (!data || loaded.current) return;
     loaded.current = true;
-    setCap(String(data.max_task_usd));
-    setDaily(String(data.agent_daily_usd));
+    setCap(String(Math.round(data.max_task_tokens / 1000)));
+    setDaily(String(Math.round(data.agent_daily_tokens / 1000)));
   }, [data]);
 
   const open = async (body: Record<string, unknown>, setMsg: (m: Msg) => void) => {
@@ -102,10 +102,11 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
 
   const saveCost = async () => {
     setCostMsg(null);
-    const r = await postJson(`${apiBase}/api/settings`, { max_task_usd: Number(cap), agent_daily_usd: Number(daily) });
+    // 입력은 천 토큰 단위 — 서버에는 토큰으로 보낸다
+    const r = await postJson(`${apiBase}/api/settings`, { max_task_tokens: Math.round(Number(cap) * 1000), agent_daily_tokens: Math.round(Number(daily) * 1000) });
     if (!r.ok) { setCostMsg({ ok: false, text: String(r.error) }); return; }
-    setCap(String(r.data?.max_task_usd ?? cap));
-    setDaily(String(r.data?.agent_daily_usd ?? daily));
+    setCap(String(Math.round(Number(r.data?.max_task_tokens ?? Number(cap) * 1000) / 1000)));
+    setDaily(String(Math.round(Number(r.data?.agent_daily_tokens ?? Number(daily) * 1000) / 1000)));
     setCostMsg({ ok: true, text: t('set.saved') });
     refresh();
     onSaved();
@@ -195,11 +196,11 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, flex: '1 1 160px' }}>
                 {t('set.cap')}
-                <input type="number" min={0.05} max={100} step={0.5} value={cap} onChange={(e) => setCap(e.target.value)} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
+                <input type="number" min={20} max={20000} step={50} value={cap} onChange={(e) => setCap(e.target.value)} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
               </label>
               <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, flex: '1 1 160px' }}>
                 {t('set.daily')}
-                <input type="number" min={0.1} max={1000} step={1} value={daily} onChange={(e) => setDaily(e.target.value)} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
+                <input type="number" min={50} max={200000} step={100} value={daily} onChange={(e) => setDaily(e.target.value)} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
               </label>
               <button type="button" style={primary} onClick={saveCost}>{t('set.save')}</button>
             </div>

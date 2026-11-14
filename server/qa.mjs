@@ -104,7 +104,7 @@ export function combineGate(mechChecks, modelGate) {
 /**
  * @param task  작업 레코드(title, done_when, input)
  * @param file  산출물 절대경로
- * @returns {Promise<{gate, checks, issues, summary, costUsd, via}>}
+ * @returns {Promise<{gate, checks, issues, summary, tokens, costUsd, via}>}  tokens = {in,cw,cr,out}
  */
 export async function judge({ task, file, briefing, priorFiles = [], mode, model, log }) {
   const short = shortFormHint(task, briefing);
@@ -117,11 +117,11 @@ export async function judge({ task, file, briefing, priorFiles = [], mode, model
     if (nm) nm.required = false;
     checks.push({ id: 'claude_review', status: 'not_run', evidence: `${mode} 모드 — 내용 검토 미실행`, required: true });
     const gate = gateFromChecks(checks);
-    return { gate, checks, issues: gate === 'FAIL' ? checks.filter((c) => c.status === 'fail' && c.required !== false).map((c) => `${c.id}: ${c.evidence}`) : [], summary: `기계 검사만 수행(${mode})`, costUsd: 0, via: 'rule' };
+    return { gate, checks, issues: gate === 'FAIL' ? checks.filter((c) => c.status === 'fail' && c.required !== false).map((c) => `${c.id}: ${c.evidence}`) : [], summary: `기계 검사만 수행(${mode})`, tokens: null, costUsd: 0, via: 'rule' };
   }
 
   if (checks.some((c) => c.id === 'file_exists' && c.status === 'fail')) {
-    return { gate: 'FAIL', checks, issues: ['산출물 파일이 없습니다.'], summary: '파일 없음', costUsd: 0, via: 'rule' };
+    return { gate: 'FAIL', checks, issues: ['산출물 파일이 없습니다.'], summary: '파일 없음', tokens: null, costUsd: 0, via: 'rule' };
   }
 
   let persona = '';
@@ -151,9 +151,9 @@ export async function judge({ task, file, briefing, priorFiles = [], mode, model
     log(`QA: Claude Code 판정 실패(${r.code}) — ${r.message}`);
     checks.push({ id: 'claude_review', status: 'error', evidence: `${r.code}: ${r.message.slice(0, 120)}`, required: true });
     // failure: 판정 자체가 실패한 이유(cli_missing·not_logged_in·timeout 등). 오케스트레이터는 이 경우 산출물 보완 재작업을 하지 않는다.
-    return { gate: 'FAIL', checks, issues: ['QA 내용 검토가 오류로 끝났습니다. 재실행이 필요합니다.'], summary: 'QA 오류', costUsd: 0, via: `claude_code(error:${r.code})`, failure: r.code };
+    return { gate: 'FAIL', checks, issues: ['QA 내용 검토가 오류로 끝났습니다. 재실행이 필요합니다.'], summary: 'QA 오류', tokens: r.tokens || null, costUsd: 0, via: `claude_code(error:${r.code})`, failure: r.code };
   }
   const all = [...checks, ...(r.data.checks || []).map((c) => ({ ...c, required: true }))];
   const gate = combineGate(checks, r.data.gate);
-  return { gate, checks: all, issues: r.data.issues || [], summary: r.data.summary || '', costUsd: r.costUsd, via: 'claude_code' };
+  return { gate, checks: all, issues: r.data.issues || [], summary: r.data.summary || '', tokens: r.tokens || null, costUsd: r.costUsd, via: 'claude_code' };
 }

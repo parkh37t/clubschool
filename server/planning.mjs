@@ -32,7 +32,7 @@ export const PLAN_STEPS = [
     deps: [],
   },
   {
-    key: 'clarify', owner: 'na', stage: '05_plan', kit: 'pack-onboarder',
+    key: 'clarify', owner: 'na', stage: '05_plan', kit: 'pack-onboarder', capTokens: 800000,
     ko: '기획 ② 작업가이드·규칙·IA 확정안', en: 'Planning ② Work guide, rules and IA',
     skills: [SPEC, 'ia-flow-design'],
     done: '팩의 규칙.md·작업가이드.md(권한·상태값·정책·용어·메시지 톤)·IA.md(메뉴 트리·화면 목록·요구↔화면ID 추적표)를 채우고, 보고서에 화면 목록 JSON 블록을 남김. 빈칸은 [확인 필요]',
@@ -40,7 +40,7 @@ export const PLAN_STEPS = [
     deps: ['understand'], approval: '가이드확정',
   },
   {
-    key: 'build', owner: 'na', stage: '05_plan', kit: 'plan-builder', slice: 0,
+    key: 'build', owner: 'na', stage: '05_plan', kit: 'plan-builder', slice: 0, capTokens: 800000,
     ko: '기획 ③ 2단 화면설계서 생성 (앞쪽 화면)', en: 'Planning ③ Two-pane screen specs (first half)',
     skills: [SPEC],
     done: '맡은 화면의 2단 화면설계서(좌 화면 · 우 사양) — 린트·verify 위반 0, 화면ID = 파일명 = data-screen = h2, 좌우 마커 1:1, 메시지 표 전수',
@@ -48,7 +48,7 @@ export const PLAN_STEPS = [
     deps: ['clarify'],
   },
   {
-    key: 'build', owner: 'pyo', stage: '05_plan', kit: 'plan-builder', slice: 1,
+    key: 'build', owner: 'pyo', stage: '05_plan', kit: 'plan-builder', slice: 1, capTokens: 800000,
     ko: '기획 ③ 2단 화면설계서 생성 (뒤쪽 화면)', en: 'Planning ③ Two-pane screen specs (second half)',
     skills: [SPEC],
     done: '맡은 화면의 2단 화면설계서(좌 화면 · 우 사양) — 린트·verify 위반 0, 화면ID = 파일명 = data-screen = h2, 좌우 마커 1:1, 메시지 표 전수',
@@ -179,6 +179,8 @@ export async function planningPlan(b, { lang = 'ko', log = () => {} } = {}) {
       step: s.key,
       pack,
       ...(s.slice !== undefined ? { slice: s.slice } : {}),
+      // 큰 SSOT·골든 HTML 을 읽고 쓰는 ②·③ 은 공통 한도로는 거의 항상 멈춘다(2026-11-14 실측) — 단계별 한도를 둔다
+      ...(s.capTokens ? { cap_tokens: s.capTokens } : {}),
     };
   });
   return { tasks, pack, kit: kit.dir, summary: en ? `Standard planning process, ${tasks.length} steps · pack ${pack}` : `표준 기획 프로세스 ${tasks.length}단계 · 팩 ${pack}` };

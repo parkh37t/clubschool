@@ -66,7 +66,23 @@ export const panelStyle = { background: '#FFFFFF', border: `1px solid ${LINE}`, 
 export const h2Style = { fontSize: 13, fontWeight: 800, letterSpacing: '.08em', color: MUTED, margin: 0 } as const;
 export const inputStyle = { width: '100%', boxSizing: 'border-box' as const, font: 'inherit', fontSize: 13, padding: '8px 10px', border: `1px solid ${LINE}`, borderRadius: 8, outline: 'none', marginTop: 7, resize: 'vertical' as const, lineHeight: 1.5 };
 
-/** 달러 추정치 표기. 0 이면 '—'. */
+/**
+ * 사용 토큰 표기(구독 사용량) — 0 이면 '—'. 1,234 → 1.2천, 12,345 → 1만, 1,234,567 → 123만.
+ * 사용 토큰 = 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10(server/tokens.mjs). 금액이 아니다.
+ */
+export function tok(v: number | undefined | null): string {
+  const n = Math.max(0, Math.round(Number(v) || 0));
+  if (!n) return '—';
+  if (n >= 100000000) return `${(n / 100000000).toFixed(1)}억`;
+  if (n >= 10000) return `${Math.round(n / 10000).toLocaleString('ko-KR')}만`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}천`;
+  return String(n);
+}
+
+/** 사용 토큰 네 갈래(입력·캐시 생성·캐시 읽기·출력) */
+export interface TokenParts { in: number; cw: number; cr: number; out: number }
+
+/** API 단가 환산 참고값 표기(청구액 아님 — 모니터 탭 각주에만). 0 이면 '—'. */
 export function usd(v: number | undefined): string {
   if (!v) return '—';
   return v < 0.01 ? '<$0.01' : `$${v.toFixed(2)}`;

@@ -2,7 +2,7 @@ import type { AgentLookLite, AgentStatus, BreakerLevel } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
 import { statusLabel, useOfficeLang } from './i18n';
 import { SIM_TEXT } from './simText';
-import { BREAKER_COLOR, FONT, INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT, usd } from './officeTheme';
+import { BREAKER_COLOR, FONT, INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT, tok } from './officeTheme';
 
 export interface AgentCardData {
   id: string;
@@ -10,7 +10,7 @@ export interface AgentCardData {
   role: string;
   status: AgentStatus;
   task: string;
-  usd: number;
+  tokens: number; // 사용 토큰(누적)
   custom?: boolean;
   look?: AgentLookLite | null;
   level?: BreakerLevel;
@@ -42,7 +42,7 @@ export function AgentCards({ members, selected, onSelect, connected, onAdd, canA
   const { t, lang } = useOfficeLang();
   const B = SIM_TEXT[lang].bar;
   const titleOf = (m: AgentCardData, lv: string | null) =>
-    `${m.name} · ${m.role}${m.task ? `\n${m.task}` : ''}${lv ? `\n${t(`lv.${lv}`)}: ${m.levelReason ?? ''}` : ''}${connected ? `\n${t('ag.usage', { v: usd(m.usd) })}` : ''}`;
+    `${m.name} · ${m.role}${m.task ? `\n${m.task}` : ''}${lv ? `\n${t(`lv.${lv}`)}: ${m.levelReason ?? ''}` : ''}${connected ? `\n${t('ag.usage', { v: tok(m.tokens) })}` : ''}`;
   const toggle = (
     <button type="button" className="axo-iconbtn axo-bar-toggle" onClick={onToggleCompact} aria-pressed={compact} title={compact ? B.fullTitle : B.compactTitle}>
       {compact ? B.full : B.compact}
@@ -106,7 +106,7 @@ export function AgentCards({ members, selected, onSelect, connected, onAdd, canA
               <span style={{ fontSize: 11, color: MUTED, display: 'flex', gap: 6, minWidth: 0 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.role}</span>
                 {lv && bc && <span style={{ fontSize: 10, fontWeight: 800, color: bc.fg, background: bc.bg, borderRadius: 3, padding: '0 4px', whiteSpace: 'nowrap' }}>{t(`lv.${lv}`)}</span>}
-                <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 10.5, whiteSpace: 'nowrap' }}>{connected ? usd(m.usd) : ''}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: MONO, fontSize: 10.5, whiteSpace: 'nowrap' }}>{connected ? tok(m.tokens) : ''}</span>
               </span>
               <span style={{ fontSize: 11.5, color: m.task ? INK : MUTED, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.task || (connected ? t('ag.idle') : t('ag.demo'))}</span>
               <span aria-hidden style={{ display: 'flex', gap: 2, marginTop: 1 }}>

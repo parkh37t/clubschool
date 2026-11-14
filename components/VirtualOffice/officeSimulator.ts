@@ -43,7 +43,7 @@ export interface OfficeAgentState { state: AgentState; task?: string; }
 /** hive(server/hive) 요약 — 작업 원장·승인 큐·메일 이벤트. 서버 orchestrator.officeState()가 만든다. */
 export interface HiveTask {
   id: string; title: string; owner: string; status: string; gate: string; output?: string; needs_approval?: boolean;
-  stage?: string; depends_on?: string[]; cost_usd?: number; qa_summary?: string;
+  stage?: string; depends_on?: string[]; tokens?: number; qa_tokens?: number; qa_summary?: string; // tokens = 사용 토큰
   docx?: string; // 산출물 Word 판(산출물 폴더 기준 상대경로)
 }
 export interface HiveApproval {

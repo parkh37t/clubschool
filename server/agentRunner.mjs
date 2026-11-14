@@ -16,12 +16,14 @@ import { ROSTER, nameOf } from './roster.mjs';
 import { APP_ROOT, AGENTS_DIR, DELIVERABLES_DIR, relData, absData } from './paths.mjs';
 import { getSettings } from './settings.mjs';
 import { liveSink } from './live.mjs';
+import { fmtTokens, weighted } from './tokens.mjs';
 
 const REPO_ROOT = APP_ROOT; // live(SDK) 경로는 저장소 규칙(CLAUDE.md)을 읽으려고 저장소 루트에서 돈다
 
 // 작업 1건당 안전장치 — 에이전트가 헤매도 요금·시간이 무한정 늘지 않게 한다(환경변수로 조정).
 const MAX_TURNS = Number(process.env.OFFICE_MAX_TURNS || 40);
-const MAX_USD = Number(process.env.OFFICE_MAX_USD || 2); // 작업 1건 예상 비용 상한(달러)
+// live(API 키) 경로 전용 — API 요금이 실제로 청구되는 경로라 달러 상한을 둔다. claude_code(구독) 경로는 사용 토큰 한도(capTokens)만 쓴다.
+const MAX_USD = Number(process.env.OFFICE_MAX_USD || 2);
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -53,7 +55,7 @@ export async function runWorker({ worker, gate, instruction, outDir, mode, log, 
   if (skills.missing.length) log(`${name}: 이 PC에 없는 스킬은 건너뜀 — ${skills.missing.join(', ')}`);
   const ctx = { worker, gate, instruction, outDir, log, skills, priorFiles };
   const result = mode === 'live' ? await runLive(ctx) : await runMock(ctx);
-  const cost = result.costUsd ? ` (예상 비용 $${result.costUsd.toFixed(2)})` : '';
+  const cost = result.costUsd ? ` (API 환산 참고 $${result.costUsd.toFixed(2)} — 청구 아님)` : '';
   log(`${name}: ${path.basename(result.file)} 산출${cost}`);
   return result;
 }
@@ -173,7 +175,7 @@ async function runLive(ctx) {
       } else if (msg?.type === 'result') {
         if (typeof msg.total_cost_usd === 'number') costUsd = msg.total_cost_usd;
         if (msg.subtype === 'success' && msg.result) finalText = msg.result;
-        else if (msg.subtype === 'error_max_budget_usd') log(`${name}: 비용 상한($${MAX_USD}) 도달로 중단 — 그때까지 쓴 내용으로 산출`);
+        else if (msg.subtype === 'error_max_budget_usd') log(`${name}: API 요금 상한($${MAX_USD}, live 모드) 도달로 중단 — 그때까지 쓴 내용으로 산출`);
         else if (msg.subtype === 'error_max_turns') log(`${name}: 최대 턴(${MAX_TURNS}) 도달로 중단 — 그때까지 쓴 내용으로 산출`);
       }
     }
@@ -246,12 +248,12 @@ export function parseReply(text) {
 
 /**
  * 작업 1건 실행.
- *   capUsd    작업 비용 상한(달러 환산). 넘으면 멈추고 { budgetExceeded:true } — 오케스트레이터가 승인 카드로 올린다
+ *   capTokens 작업 1건 실행의 사용 토큰 한도(tokens.mjs). 넘으면 멈추고 { budgetExceeded:true } — 오케스트레이터가 승인 카드로 올린다
  *   maxTurns  최대 턴(서킷 브레이커 '제한' 단계면 절반)
  *   context   hive 규칙으로 덧붙이는 글(기억·안 읽은 편지·조정 지시·이어 하기 안내·QA 보완 요청)
  *   revision  QA 반려 뒤 1회 보완 재작업인지. claude_code 는 context 의 'QA 보완 요청'으로 알고, mock 은 시험 동작에만 쓴다
  */
-export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capUsd, maxTurns, context = '', revision = false, extraDirs = [] }) {
+export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capTokens, maxTurns, context = '', revision = false, extraDirs = [] }) {
   const name = nameOf(task.owner);
   const agent = ROSTER.find((a) => a.id === task.owner);
   // 표준 절차(제안 프로세스 등)가 단계별 스킬을 정해 둔 작업은 그 스킬을, 아니면 담당의 기본 스킬을 붙인다.
@@ -260,10 +262,10 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
   const used = skills.applied.map((s) => s.name);
   const stageDir = path.join(outDir, task.stage || '00_sales');
   await fs.mkdir(stageDir, { recursive: true });
-  log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}${capUsd ? ` (상한 $${Number(capUsd).toFixed(2)})` : ''}`);
+  log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}${capTokens ? ` (한도 ${fmtTokens(capTokens)} 토큰)` : ''}`);
   if (skills.missing.length) log(`${name}: 이 PC에 없는 스킬은 건너뜀 — ${skills.missing.join(', ')}`);
 
-  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context, extraDirs });
+  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs });
   if (mode === 'live') {
     // 구 live 경로 재사용: 게이트 모양으로 감싸서 Agent SDK 로 실행한다.
     const ctx = {
@@ -276,14 +278,14 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
     const r = await runLive(ctx);
     return { ...r, reply: r.summary || '', leftovers: [], memory: [], questions: [] };
   }
-  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd, revision });
+  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision });
 }
 
-// mock — 모델 호출 없이 실시간 기록·비용 상한·질문 흐름까지 흉내 낸다.
-//   OFFICE_MOCK_COST_USD  작업 1건이 쓴 것처럼 볼 비용. 상한보다 크면 '상한 초과'로 멈춘다(사용량 합계에는 넣지 않는다)
+// mock — 모델 호출 없이 실시간 기록·사용 토큰 한도·질문 흐름까지 흉내 낸다.
+//   OFFICE_MOCK_TOKENS    작업 1건이 쓴 것처럼 볼 사용 토큰. 한도보다 크면 '한도 초과'로 멈춘다(사용량 합계에는 넣지 않는다)
 //   OFFICE_MOCK_QUESTION=1  회신에 '재하에게 질문'을 하나 넣는다
 //   OFFICE_MOCK_QA_FAIL     once = 첫 실행만 본문이 빈 산출물(QA FAIL) → 보완 재작업은 정상 / always = 보완 뒤에도 FAIL
-async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capUsd, revision = false }) {
+async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision = false }) {
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
   const file = path.join(stageDir, taskFileName(task));
   sink({ type: 'system', subtype: 'init', cwd: DELIVERABLES_DIR });
@@ -319,18 +321,18 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   await fs.writeFile(file, md + extra, 'utf8');
   sink({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: file, content: md } }] } });
   sink({ type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } });
-  const mockCost = Number(process.env.OFFICE_MOCK_COST_USD || 0);
-  if (mockCost && capUsd && mockCost > capUsd) {
-    sink({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: capUsd, num_turns: 3 });
-    return { file, budgetExceeded: true, summary: '', costUsd: 0, reply: '', leftovers: [`[목업] 비용 상한 $${Number(capUsd).toFixed(2)} 도달로 멈춤`], memory: [], questions: [] };
+  const mockTokens = Number(process.env.OFFICE_MOCK_TOKENS || 0);
+  if (mockTokens && capTokens && mockTokens > capTokens) {
+    sink({ type: 'result', subtype: 'error_token_cap', is_error: true, usage: { input_tokens: 0, output_tokens: 0 }, num_turns: 3 });
+    return { file, budgetExceeded: true, summary: '', tokens: null, costUsd: 0, reply: '', leftovers: [`[목업] 사용 토큰 한도 ${fmtTokens(capTokens)} 도달로 멈춤`], memory: [], questions: [] };
   }
-  sink({ type: 'result', subtype: 'success', total_cost_usd: 0, num_turns: 3 });
+  sink({ type: 'result', subtype: 'success', usage: { input_tokens: 0, output_tokens: 0 }, num_turns: 3 });
   const q = process.env.OFFICE_MOCK_QUESTION === '1' ? `[목업] ${task.title} 의 기준일을 언제로 잡을까요?` : '없음';
   const reply = ['## 완료 기능', `[목업] ${task.title}${revision ? ' (QA 보완 재작업)' : ''}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음', '## 재하에게 질문', q].join('\n');
-  return { file, summary: `[목업] ${task.title}`, costUsd: 0, reply, ...parseReply(reply) };
+  return { file, summary: `[목업] ${task.title}`, tokens: null, costUsd: 0, reply, ...parseReply(reply) };
 }
 
-async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context, extraDirs = [] }) {
+async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs = [] }) {
   const persona = await loadPersona(task.owner);
   const s = await getSettings();
   // 에이전트는 산출물 폴더(DELIVERABLES_DIR)를 작업 폴더로 돈다. 원장·지시문의 경로가 모두 그 기준이다.
@@ -362,7 +364,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   const addDirs = [...new Set([...applied.map((sk) => sk.refs).filter(Boolean), ...extraDirs])];
   const before = new Set(await listDir(stageDir));
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
-  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, maxBudgetUsd: capUsd, onEvent: sink });
+  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, tokenCap: capTokens, onEvent: sink });
   const expected = path.join(stageDir, taskFileName(task));
 
   // 지정 경로가 아니면 이번 실행에서 새로 생긴 md 중 이 작업 것만 산출물로 본다. 같은 단계 폴더에서
@@ -376,12 +378,12 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
 
   if (!r.ok && r.code === 'budget') {
     const found = await findOutput();
-    log(`${name}: 비용 상한 $${Number(capUsd).toFixed(2)} 도달로 멈춤 (쓴 비용 $${r.costUsd.toFixed(2)})`);
-    return { file: found.file, budgetExceeded: true, summary: '', costUsd: r.costUsd, reply: r.text || '', leftovers: [`비용 상한 $${Number(capUsd).toFixed(2)} 도달로 멈춤`], memory: [], questions: [] };
+    log(`${name}: 사용 토큰 한도 ${fmtTokens(capTokens)} 도달로 멈춤 (쓴 토큰 ${fmtTokens(weighted(r.tokens))})`);
+    return { file: found.file, budgetExceeded: true, summary: '', tokens: r.tokens, costUsd: r.costUsd, reply: r.text || '', leftovers: [`사용 토큰 한도 ${fmtTokens(capTokens)} 도달로 멈춤`], memory: [], questions: [] };
   }
   if (!r.ok) {
     log(`${name}: 실행 실패(${r.code}) — ${r.message}`);
-    return { file: null, summary: '', costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${failureHint(r.code) || r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
+    return { file: null, summary: '', tokens: r.tokens, costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${failureHint(r.code) || r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
   }
   const extraLeft = [];
   let { file, note } = await findOutput();
@@ -394,6 +396,6 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   const parsed = parseReply(r.text);
   parsed.leftovers = [...extraLeft, ...parsed.leftovers];
   const summary = firstLine(r.text) || task.title;
-  log(`${name}: ${path.basename(file)} 산출 (예상 비용 $${r.costUsd.toFixed(2)})`);
-  return { file, summary, costUsd: r.costUsd, reply: r.text, ...parsed };
+  log(`${name}: ${path.basename(file)} 산출 (사용 토큰 ${fmtTokens(weighted(r.tokens))})`);
+  return { file, summary, tokens: r.tokens, costUsd: r.costUsd, reply: r.text, ...parsed };
 }

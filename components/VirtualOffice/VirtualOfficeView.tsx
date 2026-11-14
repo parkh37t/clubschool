@@ -220,12 +220,12 @@ export function VirtualOfficeView({
     ? members.map((m) => ({
       id: m.id, name: displayName(lang, m.id, members),
       role: S.roles[m.id] ?? (lang === 'en' ? m.dept_en || m.dept : m.dept),
-      status: m.status, task: m.task, usd: m.usd, custom: m.custom, look: m.look ?? null,
+      status: m.status, task: m.task, tokens: m.tokens, custom: m.custom, look: m.look ?? null,
       level: m.breaker?.level, levelReason: breakerReason(lang, m.breaker),
     }))
     : AGENT_ORDER.map((id) => {
       const s = demoStates?.[id];
-      return { id, name: S.names[id] ?? id, role: S.roles[id] ?? '', status: SIM_TO_STATUS[s?.state ?? 'idle'], task: s?.state === 'idle' ? '' : (s?.task ?? ''), usd: 0 };
+      return { id, name: S.names[id] ?? id, role: S.roles[id] ?? '', status: SIM_TO_STATUS[s?.state ?? 'idle'], task: s?.state === 'idle' ? '' : (s?.task ?? ''), tokens: 0 };
     });
   const customCount = (members ?? []).filter((m) => m.custom).length;
   const canAdd = connected && customCount < (roster.data?.max_custom ?? 6);

@@ -17,6 +17,7 @@ import { proposalPlan } from './proposal.mjs';
 import { planningPlan } from './planning.mjs';
 import { AGENTS_DIR } from './paths.mjs';
 import { getSettings, languageLine } from './settings.mjs';
+import { weighted, fmtTokens } from './tokens.mjs';
 
 const APPROVAL_PATTERNS = [
   { kind: '외부발송', re: /(고객|발주처|외부)\s*(에게|에)?\s*(발송|전송|제출|공유)|메일 발송|공유 링크/ },
@@ -176,7 +177,7 @@ function decomposePrompt(b) {
 
 /**
  * 브리핑 → 작업 초안 목록.
- * @returns {{tasks:[], questions:[], summary?:string, via:string, costUsd:number}}
+ * @returns {{tasks:[], questions:[], summary?:string, via:string, tokens?:object, costUsd:number}}
  */
 export async function decompose(briefing, { mode, model, log }) {
   const b = normalizeBriefing(briefing);
@@ -215,7 +216,7 @@ export async function decompose(briefing, { mode, model, log }) {
     const r = await runStructured({ system, prompt: decomposePrompt(b) + lang, schema: decomposeSchema(), model });
     if (r.ok) {
       const tasks = (r.data.tasks || []).map((t) => ({ ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '' }));
-      return { tasks, questions: r.data.questions || [], summary: r.data.summary, via: 'claude_code', costUsd: r.costUsd };
+      return { tasks, questions: r.data.questions || [], summary: r.data.summary, via: 'claude_code', tokens: r.tokens, costUsd: r.costUsd };
     }
     // CLI 가 없거나 로그인이 풀렸으면 작업을 만들어도 전부 같은 이유로 실패한다 — 더미로 바꿔 돌리지 않고 멈춘다(CLAUDE.md §8).
     if (r.code === 'cli_missing' || r.code === 'not_logged_in') {
@@ -256,14 +257,14 @@ export function assignBody(b, task, { priorFiles = [], outDirRel }) {
 }
 
 /** 보고서(블랙보드) — 팀장이 모든 작업이 끝나거나 멈춘 뒤 쓴다. 남은 제한은 그대로 모아 맨 아래. */
-export function buildReport(b, tasks, { approvals = [], leftovers = [], outDirRel, mode, costUsd }) {
+export function buildReport(b, tasks, { approvals = [], leftovers = [], outDirRel, mode, costUsd, tokens }) {
   const row = (t) => `| ${t.id} | ${nameOf(t.owner)} | ${t.title} | ${t.status}${t.revised ? ' · 보완 1회' : ''} | ${t.gate} | ${t.output || ''} |`; // 보완 1회 = QA 반려 뒤 자동 보완(orchestrator)
   const pending = approvals.filter((a) => a.status === 'pending');
   return [
     `# 현황판 — ${b.title}`,
     '',
     `- 결과 목표: ${b.result}`,
-    `- 모드: ${mode}${costUsd ? ` · 예상 비용 $${costUsd.toFixed(2)} (CLI 추정치, 청구서 아님)` : ''}`,
+    `- 모드: ${mode}${weighted(tokens) ? ` · 사용 토큰 ${fmtTokens(weighted(tokens))}(구독 사용량 — 입력 ${fmtTokens(tokens.in)} · 캐시 생성 ${fmtTokens(tokens.cw)} · 캐시 읽기 ${fmtTokens(tokens.cr)} · 출력 ${fmtTokens(tokens.out)})` : ''}${costUsd ? ` · 참고: API 단가 환산 $${costUsd.toFixed(2)}(청구 아님)` : ''}`,
     `- 산출물 폴더: ${outDirRel}/`,
     `- 작업 ${tasks.length}건 · 완료 ${tasks.filter((t) => t.status === '완료').length} · 승인대기 ${tasks.filter((t) => t.status === '승인대기').length} · 보류/실패 ${tasks.filter((t) => ['보류', '실패'].includes(t.status)).length}`,
     '',

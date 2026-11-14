@@ -31,6 +31,7 @@ import { listTriggers, addTrigger, updateTrigger, removeTrigger, runTriggerNow, 
 import { listTemplates, addTemplate, removeTemplate, MAX_TEMPLATES } from './templates.mjs';
 import { openPty, listPty, killPty, killAllPty, attachPtySocket, isAgentPtyOpen, ptyAvailable } from './pty.mjs';
 import { loadPersona } from './agentRunner.mjs';
+import { weighted } from './tokens.mjs';
 
 const MAX_UPLOAD = 25 * 1024 * 1024; // 파일 첨부 상한 25MB
 
@@ -241,7 +242,7 @@ async function rosterView() {
       const b = breakers[a.id];
       return {
         id: a.id, name: a.name, name_en: a.name_en, dept: a.dept, dept_en: a.dept_en, role: a.role, role_en: a.role_en, stages: a.stages, skills: skills[a.id] || [],
-        status: now[a.id]?.status || '대기', task: now[a.id]?.task || '', usd: usage.byAgent[a.id] || 0,
+        status: now[a.id]?.status || '대기', task: now[a.id]?.task || '', tokens: usage.byAgent[a.id] || 0,
         custom: !a.builtin, template: a.template || '', look: a.look || null,
         breaker: b ? { level: b.level, reason: b.reason, reason_code: b.reason_code, reason_detail: b.reason_detail, ratio: b.ratio, used_today: b.used_today, budget: b.budget, failures: b.failures } : null,
       };
@@ -387,13 +388,18 @@ const server = http.createServer(async (req, res) => {
 
     // 사용량 합계(에이전트별·일별). CLI 추정 금액이며 청구서가 아니다.
     if (req.method === 'GET' && url.pathname === '/api/usage') {
+      // 사용 토큰(구독 사용량) — 작업마다 실행·QA 토큰과 그 작업의 한도. 금액은 usd_ref(API 환산 참고) 하나만 남긴다
       const [u, ledger, st] = await Promise.all([hive.usageSummary({ qaAgent: QA_AGENT }), hive.loadTasks(), getSettings()]);
-      const tasks = ledger.tasks.slice(-40).reverse().map((t) => ({ id: t.id, owner: t.owner, title: t.title, status: t.status, gate: t.gate, cost_usd: t.cost_usd || 0, qa_usd: t.qa?.cost_usd || 0, cap_usd: t.cap_usd || st.max_task_usd, at: t.cost_at || t.updated }));
-      sendJson(res, 200, { ...u, tasks, max_task_usd: st.max_task_usd, agent_daily_usd: st.agent_daily_usd });
+      const tasks = ledger.tasks.slice(-40).reverse().map((t) => ({
+        id: t.id, owner: t.owner, title: t.title, status: t.status, gate: t.gate,
+        tokens: weighted(t.tokens), qa_tokens: weighted(t.qa?.tokens), parts: t.tokens || null,
+        cap_tokens: t.cap_tokens || st.max_task_tokens, at: t.cost_at || t.updated || t.created,
+      }));
+      sendJson(res, 200, { ...u, tasks, max_task_tokens: st.max_task_tokens, agent_daily_tokens: st.agent_daily_tokens });
       return;
     }
 
-    // ── 설정(언어·작업당 상한·하루 예산) ──
+    // ── 설정(언어·작업당 토큰 한도·하루 토큰 한도 등) ──
     if (req.method === 'GET' && url.pathname === '/api/settings') {
       sendJson(res, 200, await settingsView(localViewer(req)));
       return;

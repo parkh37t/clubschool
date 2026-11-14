@@ -7,12 +7,12 @@ export type AgentStatus = '대기' | '진행' | '검수' | '승인대기';
 
 export interface RosterSkill { spec: string; name: string | null; available: boolean; }
 export type BreakerLevel = 'normal' | 'steer' | 'constrain' | 'stop';
-/** 서킷 브레이커 — 연속 문제·하루 예산으로 정한 단계(server/breaker.mjs) */
+/** 서킷 브레이커 — 연속 문제·하루 사용 토큰 한도로 정한 단계(server/breaker.mjs) */
 export interface BreakerInfo { level: BreakerLevel; reason: string; reason_code?: string; reason_detail?: string; ratio: number; used_today: number; budget: number; failures: number; }
 export interface AgentLookLite { hair: string; skin: string; shirt: string; style: string; glasses?: boolean; }
 export interface RosterMember {
   id: string; name: string; name_en?: string; dept: string; dept_en?: string; role: string; role_en?: string; stages: string[];
-  skills: RosterSkill[]; status: AgentStatus; task: string; usd: number;
+  skills: RosterSkill[]; status: AgentStatus; task: string; tokens: number; // 사용 토큰(누적)
   custom?: boolean; template?: string; look?: AgentLookLite | null; breaker?: BreakerInfo | null;
 }
 export interface RosterResponse { members: RosterMember[]; running: boolean; mode: string; concurrency: number; max_custom?: number; }
@@ -20,7 +20,7 @@ export interface RosterResponse { members: RosterMember[]; running: boolean; mod
 /** 대기열 — 팀장에게 보낸 메시지와 브리핑(server/leaderSession.mjs) */
 export interface QueueItem {
   id: string; kind: 'message' | 'briefing'; title: string; text: string; by: string;
-  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled'; created: string; started: string | null; finished: string | null; reply: string; error: string; briefing_id?: string; cost_usd?: number;
+  status: 'queued' | 'running' | 'done' | 'failed' | 'canceled'; created: string; started: string | null; finished: string | null; reply: string; error: string; briefing_id?: string; tokens?: { in: number; cw: number; cr: number; out: number } | null;
 }
 export interface QueueResponse { items: QueueItem[]; leader_terminal: boolean; running: boolean; }
 
@@ -30,10 +30,12 @@ export interface Question {
   asked_at: string; answer: string | null; answered_by: string | null; answered_at: string | null;
 }
 
-export interface UsageTask { id: string; owner: string; title: string; status: string; gate: string; cost_usd: number; qa_usd: number; cap_usd: number; at: string; }
+export interface UsageTask { id: string; owner: string; title: string; status: string; gate: string; tokens: number; qa_tokens: number; parts: { in: number; cw: number; cr: number; out: number } | null; cap_tokens: number; at: string; }
 export interface UsageResponse {
   total: number; byAgent: Record<string, number>; byDay: Record<string, number>; byAgentDay: Record<string, Record<string, number>>;
-  tasks: UsageTask[]; max_task_usd: number; agent_daily_usd: number;
+  tasks: UsageTask[]; max_task_tokens: number; agent_daily_tokens: number;
+  /** 네 갈래 합계(전체·오늘), API 환산 참고 금액(청구 아님), 토큰 기록 전이라 합계에서 빠진 기록 수 */
+  parts: { in: number; cw: number; cr: number; out: number }; parts_today: { in: number; cw: number; cr: number; out: number }; usd_ref: number; untracked: number;
 }
 
 export interface AgentTemplate {
@@ -44,13 +46,13 @@ export interface AgentTemplate {
 /** 실시간 기록 한 줄(server/live.mjs) */
 export interface LiveLine {
   ts: string; k: string; text?: string; tool?: string; size?: number; error?: boolean; status?: string;
-  cost?: number; turns?: number; cap?: number; level?: string; gate?: string; agent?: string; task?: string;
+  tokens?: number; turns?: number; cap?: number; level?: string; gate?: string; agent?: string; task?: string; // tokens·cap = 사용 토큰
 }
 
 /** auto_revise — QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(server/orchestrator.mjs) */
 /** 설정(GET /api/settings) — 저장된 값 + 지금 쓰는 산출물·hive 위치(이 PC 화면이 아니면 사용자 폴더는 ~). running=브리핑 진행 중 */
 export interface OfficeSettings {
-  lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; auto_revise: boolean; leader_session: boolean; concurrency: number;
+  lang: 'ko' | 'en'; max_task_tokens: number; agent_daily_tokens: number; auto_revise: boolean; leader_session: boolean; concurrency: number;
   deliverables_dir: string; deliverables_default: string; deliverables_custom: boolean; hive_dir: string; mode: string; desktop: boolean; running: boolean;
   plan_kit_dir: string; plan_kit: { ok: boolean; error: string };
 }
@@ -95,7 +97,7 @@ export interface LedgerTask { id: string; title: string; owner: string; status: 
 /** events.log 한 줄. 종류(kind)마다 채워지는 필드가 다르다. */
 export interface HiveEvent {
   ts: string; kind: string; id?: string; title?: string; owner?: string; status?: string; gate?: string;
-  from?: string; to?: string; type?: string; task?: string; agent?: string; cost_usd?: number;
+  from?: string; to?: string; type?: string; task?: string; agent?: string; tokens_w?: number;
   by?: string; approval_kind?: string; note?: string; what?: string;
   level?: string; reason?: string; reason_code?: string; reason_detail?: string; item_kind?: string; action?: string; count?: number; template?: string; item?: string; why?: string; at?: string;
 }

@@ -4,7 +4,7 @@ import type { HiveState, HiveTask } from './officeSimulator';
 import { postJson } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
 import { gateLabel, statusLabel, useOfficeLang } from './i18n';
-import { BAD_FG, GATE_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, STATUS_COLOR, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, h2Style, smallMuted, usd } from './officeTheme';
+import { BAD_FG, GATE_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, STATUS_COLOR, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, h2Style, smallMuted, tok } from './officeTheme';
 
 interface TasksTabProps {
   connected: boolean;
@@ -31,7 +31,7 @@ export function TasksTab({ connected, hive, selected, concurrency, apiBase }: Ta
   if (!connected || !hive) return <p style={smallMuted}>{t('tasks.offline')}</p>;
   const tasks = hive.tasks;
   const done = tasks.filter((x) => x.status === '완료').length;
-  const cost = tasks.reduce((n, x) => n + (x.cost_usd || 0), 0);
+  const used = tasks.reduce((n, x) => n + (x.tokens || 0) + (x.qa_tokens || 0), 0); // 사용 토큰(실행 + QA)
   const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
   const showDone = doneOpen ?? done === tasks.length;
   const known = new Set(GROUP_ORDER);
@@ -58,7 +58,7 @@ export function TasksTab({ connected, hive, selected, concurrency, apiBase }: Ta
               </div>
               <div style={{ display: 'flex', gap: 10, marginTop: 5, fontSize: 11.5, color: MUTED, flexWrap: 'wrap' }}>
                 <span style={{ fontWeight: 800, color: WYLIE_DARK }}>{t('tasks.progress', { d: done, n: tasks.length })}</span>
-                {cost > 0 && <span>{t('tasks.cost', { v: usd(cost) })}</span>}
+                {used > 0 && <span title={t('tasks.tokenNote')}>{t('tasks.cost', { v: tok(used) })}</span>}
               </div>
             </>
           )}
@@ -122,7 +122,7 @@ function TaskCard({ task, dim, apiBase }: { task: HiveTask; dim: boolean; apiBas
       <div style={{ display: 'flex', gap: 8, marginTop: 5, fontSize: 11, color: MUTED, alignItems: 'center', flexWrap: 'wrap' }}>
         {task.needs_approval && <span style={{ whiteSpace: 'nowrap', color: WARN_FG, fontWeight: 800 }}>{t('tasks.needsApproval')}</span>}
         {task.depends_on && task.depends_on.length > 0 && <span style={{ whiteSpace: 'nowrap', fontFamily: MONO }}>← {task.depends_on.join(', ')}</span>}
-        {Boolean(task.cost_usd) && <span style={{ whiteSpace: 'nowrap' }}>{usd(task.cost_usd)}</span>}
+        {Boolean(task.tokens) && <span style={{ whiteSpace: 'nowrap' }} title={t('tasks.tokenNote')}>{t('tasks.tokens', { v: tok((task.tokens || 0) + (task.qa_tokens || 0)) })}</span>}
         {task.output && apiBase !== undefined && (
           <span style={{ display: 'inline-flex', gap: 4, marginLeft: 'auto' }}>
             <button type="button" style={action} onClick={() => open(task.output || '')} title={file}><FileText size={12} aria-hidden />{t('tasks.open')}</button>

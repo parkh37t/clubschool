@@ -1,6 +1,6 @@
-// 앱 설정 — hive/settings.json. 화면 언어(한·영), 작업당 비용 상한, 에이전트별 하루 예산, QA 반려 시 자동 보완, 동시 작업 수,
+// 앱 설정 — hive/settings.json. 화면 언어(한·영), 작업당 사용 토큰 한도, 에이전트별 하루 사용 토큰 한도, QA 반려 시 자동 보완, 동시 작업 수,
 // 산출물 폴더(storage.mjs 가 검사한 뒤에만 바꾼다), 팀장 상주 세션 id.
-// 환경 변수(OFFICE_MAX_USD 등)는 기본값이고, 화면(모니터 탭·언어 전환)에서 바꾼 값이 이 파일에 남아 우선한다.
+// 환경 변수(OFFICE_MAX_TOKENS 등)는 기본값이고, 화면(설정 창·모니터 탭·언어 전환)에서 바꾼 값이 이 파일에 남아 우선한다.
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
@@ -10,8 +10,10 @@ const FILE = path.join(HIVE_DIR, 'settings.json');
 
 export const DEFAULTS = {
   lang: 'ko', // 'ko' | 'en' — 화면 언어. 'en' 이면 팀장·역할 에이전트에게 영어로 쓰라고 덧붙인다
-  max_task_usd: Number(process.env.OFFICE_MAX_USD || 2), // 작업 1건 비용 상한(달러 환산 추정). 넘으면 멈추고 승인 카드
-  agent_daily_usd: Number(process.env.OFFICE_AGENT_DAILY_USD || 5), // 에이전트 1명의 하루 예산. 80% 제한, 100% 중지
+  // 사용 토큰(tokens.mjs: 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10). 구독 사용량이라 금액으로 두지 않는다.
+  // 기본값은 처음 실측(2026-11-14 제안·기획 실행) 전 추정치 — 모니터 탭의 작업별 사용 토큰을 보고 조정한다.
+  max_task_tokens: Number(process.env.OFFICE_MAX_TOKENS || 400000), // 작업 1건 실행의 사용 토큰 한도. 넘으면 멈추고 '사용량' 승인 카드
+  agent_daily_tokens: Number(process.env.OFFICE_AGENT_DAILY_TOKENS || 1200000), // 에이전트 1명의 하루 사용 토큰 한도. 80% 제한, 100% 중지
   auto_revise: true, // QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(orchestrator.mjs)
   concurrency: Math.max(1, Math.min(3, Math.floor(Number(process.env.OFFICE_CONCURRENCY || 2)) || 2)), // 브리핑 안에서 동시에 도는 작업 수(1~3). 새 브리핑부터 적용
   deliverables_dir: '', // 산출물 폴더(절대경로). 빈 값이면 기본 위치(OFFICE_DELIVERABLES_DIR)
@@ -43,8 +45,11 @@ export function updateSettings(patch) {
     const cur = await getSettings();
     const next = { ...cur };
     if (patch.lang === 'ko' || patch.lang === 'en') next.lang = patch.lang;
-    if (patch.max_task_usd !== undefined) next.max_task_usd = clampNum(patch.max_task_usd, 0.05, 100, cur.max_task_usd);
-    if (patch.agent_daily_usd !== undefined) next.agent_daily_usd = clampNum(patch.agent_daily_usd, 0.1, 1000, cur.agent_daily_usd);
+    if (patch.max_task_tokens !== undefined) next.max_task_tokens = Math.round(clampNum(patch.max_task_tokens, 20000, 20000000, cur.max_task_tokens));
+    if (patch.agent_daily_tokens !== undefined) next.agent_daily_tokens = Math.round(clampNum(patch.agent_daily_tokens, 50000, 200000000, cur.agent_daily_tokens));
+    // 예전 금액 기준 값은 더 쓰지 않는다 — 파일에서도 지운다
+    delete next.max_task_usd;
+    delete next.agent_daily_usd;
     if (typeof patch.auto_revise === 'boolean') next.auto_revise = patch.auto_revise;
     if (patch.concurrency !== undefined) next.concurrency = Math.round(clampNum(patch.concurrency, 1, 3, cur.concurrency));
     if (typeof patch.deliverables_dir === 'string') next.deliverables_dir = patch.deliverables_dir;
@@ -68,7 +73,7 @@ export async function currentConcurrency() {
 
 /** 화면에 내보낼 값(세션 id 는 빼고). */
 export function publicSettings(s) {
-  const { leader_session_id: _id, ...rest } = s;
+  const { leader_session_id: _id, max_task_usd: _u1, agent_daily_usd: _u2, ...rest } = s;
   return { ...rest, leader_session: Boolean(s.leader_session_id) };
 }
 

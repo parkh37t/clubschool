@@ -147,7 +147,8 @@ async function processMessage(item, { mode, log }) {
   liveNote('lead', meta, item.text.slice(0, 400), 'user_msg');
   const settings = await getSettings();
   let data;
-  let cost = 0;
+  let cost = 0; // API 환산 참고
+  let tokens = null;
   if (mode === 'claude_code') {
     const system = await leaderSystem(settings);
     const prompt = [`[재하 메시지 ${item.id}]`, item.text, '', '# 명단(배정 근거)', rosterTable()].join('\n');
@@ -164,7 +165,8 @@ async function processMessage(item, { mode, log }) {
       r = await runLeaderTurn({ system, prompt, schema: LEADER_SCHEMA, sessionId, resume, cwd: HIVE_DIR, addDirs: [DELIVERABLES_DIR], model: process.env.OFFICE_MODEL, onEvent: sink });
     }
     cost = r.costUsd || 0;
-    await hive.recordUsage({ agent: LEADER.id, usd: cost, what: '상주 세션' });
+    tokens = r.tokens || null;
+    await hive.recordUsage({ agent: LEADER.id, tokens, usd: cost, what: '상주 세션' });
     if (!r.ok) {
       log(`팀장 세션 실패(${r.code}) — ${r.message}`);
       liveNote('lead', meta, `${r.code}: ${String(r.message).slice(0, 200)}`, 'error');
@@ -195,7 +197,7 @@ async function processMessage(item, { mode, log }) {
     const q = await hive.addQuestion({ from: LEADER.id, task: '', text: data.question, briefing: '' });
     log(`질문 ${q.id}: 팀장(상주 세션) → 재하 — ${data.question}`);
   }
-  await patch(item.id, { status: 'done', finished: hive.nowIso(), reply: reply.slice(0, 2000), briefing_id: briefingId, cost_usd: Number(cost.toFixed(4)) });
+  await patch(item.id, { status: 'done', finished: hive.nowIso(), reply: reply.slice(0, 2000), briefing_id: briefingId, tokens, cost_usd: Number(cost.toFixed(4)) });
 }
 
 // ── 대기열 일꾼 ──

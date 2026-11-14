@@ -61,7 +61,7 @@ components/VirtualOffice/
   officeBackend.ts       백엔드 주소 결정(?api → localhost 상대경로 → 저장값 → 미연결)
 ```
 
-환경 변수: `OFFICE_MODE`(mock | claude_code | live), `PORT`, `CLAUDE_BIN`, `OFFICE_MODEL`, `OFFICE_MAX_TURNS`, `OFFICE_MAX_USD`, `OFFICE_APPROVAL_TIMEOUT_MS`(기본 0 = 승인까지 무한 대기)
+환경 변수: `OFFICE_MODE`(mock | claude_code | live), `PORT`, `CLAUDE_BIN`, `OFFICE_MODEL`, `OFFICE_MAX_TURNS`, `OFFICE_MAX_TOKENS`(작업당 사용 토큰 한도, 2026-11-14 금액 상한에서 바뀜), `OFFICE_APPROVAL_TIMEOUT_MS`(기본 0 = 승인까지 무한 대기)
 
 작업마다 `tasks.json`에 `cost_usd`(역할 실행)와 `qa.cost_usd`(QA)가 기록됨 — 재하 구독 사용량을 금액으로 환산한 값임.
 
@@ -115,10 +115,10 @@ components/VirtualOffice/
 2차 — 실시간 보기·모니터
 - 역할 실행을 `--output-format stream-json --verbose`로 바꿔 진행 이벤트(읽은 파일·쓴 파일·도구 호출)를 받고, 책상별 실시간 기록으로 보여 줌(xterm.js 패널)
 - [터미널 열기]: node-pty로 해당 작업 폴더에서 대화형 Claude Code 세션을 열어 직접 입력함. node-pty는 Electron용 재빌드(@electron/rebuild)가 필요하므로, 설치가 막히면 실시간 기록 보기만 두고 재하에게 알릴 것
-- 모니터 탭: 에이전트별·일별 사용량. 작업당 상한(`OFFICE_MAX_USD`)을 넘으면 그 작업을 멈추고 승인 카드로 올림
+- 모니터 탭: 에이전트별·일별 사용량. 작업당 한도를 넘으면 그 작업을 멈추고 승인 카드로 올림(2026-11-14부터 금액이 아니라 구독 사용 토큰으로 셈 — `OFFICE_MAX_TOKENS`, 카드 종류 '사용량')
 - **진행 상태(2026-11-08)**: 위 세 가지 완료. node-pty 는 N-API 사전 빌드판(`@lydell/node-pty`)을 써서 Electron 재빌드 없이 동작함.
   재하 지시로 Munder Difflin 운영 방식도 함께 넣음 — 팀장 상주 세션·입력 대기열, hive 규칙(기억·편지함 `.done`)·질문 탭,
-  서킷 브레이커(조정·제한·중지)·하루 예산, 역할 템플릿 12종으로 인원 추가(3차의 '인원 추가'는 여기서 끝남), 화면·안내·템플릿 한·영 전환.
+  서킷 브레이커(조정·제한·중지)·하루 사용 한도, 역할 템플릿 12종으로 인원 추가(3차의 '인원 추가'는 여기서 끝남), 화면·안내·템플릿 한·영 전환.
 
 3차 — 예약·관계도·입력 확장
 - 예약 탭: 정해진 시각에 브리핑을 자동 실행(예: 매주 월요일 09:00 주간보고). `hive/triggers.json`에 저장하고, 앱이 켜져 있을 때만 실행함

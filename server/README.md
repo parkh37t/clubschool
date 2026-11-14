@@ -36,7 +36,7 @@ API 키가 필요 없고 자격 증명을 코드가 보지 않습니다. 팀장 
 ```bash
 OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 ```
-`.env.example` 의 선택 변수: `OFFICE_MODEL`, `OFFICE_MAX_USD`, `OFFICE_AGENT_DAILY_USD`, `OFFICE_MAX_TURNS`, `CLAUDE_BIN`, `OFFICE_APPROVAL_TIMEOUT_MS`.
+`.env.example` 의 선택 변수: `OFFICE_MODEL`, `OFFICE_MAX_TOKENS`, `OFFICE_AGENT_DAILY_TOKENS`, `OFFICE_MAX_TURNS`, `CLAUDE_BIN`, `OFFICE_APPROVAL_TIMEOUT_MS`.
 
 ### 환경 변수 (위치·동시 작업)
 
@@ -48,9 +48,10 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `OFFICE_HIVE_DIR` | `server/hive` | 작업 원장·메일함·기억·이벤트 위치. 지정하면 `office-state.json` 도 그 안에 둔다 |
 | `OFFICE_DELIVERABLES_DIR` | `<저장소>/DELIVERABLES` | 산출물·첨부 위치. 역할 에이전트가 이 폴더를 작업 폴더(cwd)로 돈다 |
 | `OFFICE_DIST_DIR` | `<저장소>/dist` | 함께 내보낼 빌드된 화면 |
-| `OFFICE_MAX_USD` | 2 | 작업 1건 비용 상한(달러 환산 추정)의 기본값. 화면 모니터 탭에서 바꾸면 `settings.json` 값이 우선 |
-| `OFFICE_AGENT_DAILY_USD` | 5 | 에이전트 1명의 하루 예산 기본값(80% 제한 · 100% 중지). 모니터 탭에서 변경 |
-| `OFFICE_MOCK_COST_USD` | 0 | (mock 시험용) 작업 1건이 쓴 것처럼 볼 비용. 상한보다 크면 '상한 초과' 승인 카드가 뜬다. 사용량 합계에는 넣지 않음 |
+| `OFFICE_MAX_TOKENS` | 400000 | 작업 1건 실행의 사용 토큰 한도 기본값(사용 토큰 = 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10). 설정 화면·모니터 탭에서 바꾸면 `settings.json` 값이 우선 |
+| `OFFICE_AGENT_DAILY_TOKENS` | 1200000 | 에이전트 1명의 하루 사용 토큰 한도 기본값(80% 제한 · 100% 중지) |
+| `OFFICE_MAX_USD` | 2 | `live`(API 키) 모드 전용 — 실제로 청구되는 API 요금의 작업당 상한(달러). claude_code 모드는 쓰지 않음 |
+| `OFFICE_MOCK_TOKENS` | 0 | (mock 시험용) 작업 1건이 쓴 것처럼 볼 사용 토큰. 한도보다 크면 '사용량' 승인 카드가 뜬다. 합계에는 넣지 않음 |
 | `OFFICE_MOCK_QUESTION` | (없음) | (mock 시험용) `1` 이면 역할 에이전트가 회신에 "재하에게 질문"을 한 줄 넣는다 |
 | `OFFICE_MOCK_QA_FAIL` | (없음) | (mock 시험용) `once` 면 첫 실행만 본문이 빈 산출물을 써서 QA FAIL → 보완 재작업은 정상, `always` 면 보완 뒤에도 FAIL |
 
@@ -69,7 +70,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `POST /api/instruct` | 브리핑 양식 `{title, result, context, constraints[], question_policy, deadline, attachments, gates?}` → 202 `{queued, position}`. 대기열에 넣고 차례가 오면 실행. 구 지시(`goal`·`brief`·`gates`)도 받는다 |
 | `GET /api/queue` · `POST /api/queue` · `DELETE /api/queue/:id` | 팀장 대기열 보기 / 메시지 넣기 `{text}` / 아직 대기 중인 항목 취소. POST·DELETE 는 이 PC 화면에서 온 요청만 |
 | `GET /api/questions` · `POST /api/questions/:id/answer` | "나에게 질문" 목록 / 답하기 `{answer, by}`(by 없으면 400). 팀장 질문의 답은 대기열 메시지로, 역할 에이전트 질문의 답은 그 사람 편지함으로 |
-| `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산·QA 반려 시 자동 보완·동시 작업 수 `{lang, max_task_usd, agent_daily_usd, auto_revise, concurrency(1~3)}`. GET 은 지금 쓰는 `deliverables_dir`·`deliverables_default`·`hive_dir`·`running` 도 준다(이 PC 화면이 아니면 사용자 폴더는 `~`). 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만이고 산출물 폴더는 바꾸지 않는다 |
+| `GET /api/settings` · `POST /api/settings` | 언어·작업당 토큰 한도·하루 토큰 한도·QA 반려 시 자동 보완·동시 작업 수 `{lang, max_task_tokens, agent_daily_tokens, auto_revise, concurrency(1~3)}`. GET 은 지금 쓰는 `deliverables_dir`·`deliverables_default`·`hive_dir`·`running` 도 준다(이 PC 화면이 아니면 사용자 폴더는 `~`). 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만이고 산출물 폴더는 바꾸지 않는다 |
 | `POST /api/settings/deliverables` | 산출물 저장 위치 바꾸기 `{dir, copy?}` · 기본으로 `{reset:true}` · 검사만 `{check:true, dir}`. 절대경로·hive/앱 폴더와 겹치지 않음·쓰기 시험 통과일 때만. 브리핑이 진행 중이면 409. `copy` 면 지금 폴더 내용을 새 폴더로 복사(덮어쓰지 않음, 예전 폴더는 지우지 않음). 바로 적용되고 `settings.json` 의 `deliverables_dir` 에 남아 다음 시작 때도 쓴다(`storage.mjs`) |
 | `GET /api/plan/packs` · `GET /api/plan/packs/:id[?verify=1]` | 기획 탭 — 패키지 상태와 팩 목록(이름·접두·SSOT 5계층 상태·화면 수) / 팩 한 개(화면 레지스트리·파일 유무, `verify=1` 이면 verify_page 결과) |
 | `GET /plan-files/<packs\|core>/…` | 2단 화면설계서 뷰어용 — 패키지의 `packs/`·`core/` 아래 화면·자산(html·css·js·json·이미지·글꼴)만. HTML 은 `Content-Security-Policy: sandbox allow-scripts` 로 내보내 화면 스크립트가 이 앱 API 를 같은 오리진으로 부르지 못하게 한다. Host 가 루프백일 때만 |
@@ -93,7 +94,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
 | `GET /api/auth` | `claude auth status` 중 `loggedIn` 만(계정 메일·조직 정보는 버림). 1분 기억, `?refresh=1` 로 다시 확인 |
 | `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login`. 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
-| `GET /api/usage` | 역할 실행·QA `cost_usd`, 팀장 분해·상주 세션 비용의 합계 — 에이전트별·일별·작업별, 상한·예산 설정값(CLI 추정치, 청구서 아님) |
+| `GET /api/usage` | 사용 토큰 합계 — 에이전트별·일별·작업별(실행·QA·작업 한도), 네 갈래 합계(`parts`·`parts_today`), 한도 설정값. `usd_ref` 는 API 단가 환산 참고값(청구 아님), `untracked` 는 토큰 기록 전이라 합계에서 빠진 기록 수 |
 
 ## 흐름
 
@@ -116,8 +117,8 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 4. 읽은 편지는 `inbox/<담당>/.done/` 으로 옮깁니다(이벤트 `inbox_done`). 회신의 "재하에게 질문"은 질문 탭(`questions.json`)에 쌓입니다.
 
 ### 서킷 브레이커와 예산
-- 연속 문제(실행 실패·QA FAIL·비용 상한 초과) 1회 **조정**(다음 지시에 주의 메모) → 2회 **제한**(최대 턴·비용 상한 절반) → 3회 **중지**.
-- 하루 예산 80% 사용이면 제한, 100%면 중지. 정상 완료가 나오면 연속 횟수는 0 으로 돌아가지만 **중지는 재하가 풀어야** 내려옵니다.
+- 연속 문제(실행 실패·QA FAIL·사용 토큰 한도 초과) 1회 **조정**(다음 지시에 주의 메모) → 2회 **제한**(최대 턴·토큰 한도 절반) → 3회 **중지**.
+- 하루 사용 토큰 한도 80% 사용이면 제한, 100%면 중지. 정상 완료가 나오면 연속 횟수는 0 으로 돌아가지만 **중지는 재하가 풀어야** 내려옵니다.
 - 중지된 사람에게 작업이 가면 그 작업만 멈추고 '재개' 승인 카드가 뜹니다 — 승인하면 단계를 풀고 다시 배정, 반려하면 그 담당 작업 보류.
   모니터 탭의 [초기화]도 같은 일을 합니다(행위자·사유 필수). 상태는 `breakers.json`.
 - 작업 1건이 상한을 넘으면 Claude Code 가 그 자리에서 멈추고(`--max-budget-usd`) '비용' 승인 카드가 뜹니다.
@@ -148,7 +149,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
   두 번째도 FAIL 이면 지금처럼 실패로 닫습니다. 서킷 브레이커 `qa_fail` 은 최종 결과에서만 1회 셉니다. 보완 실행의 상한은 원래 작업 상한 그대로이고
   두 번 쓴 비용은 `cost_usd`(QA 는 `qa.cost_usd`)에 더해집니다. 작업 레코드에 `revised: 1`·`revise`(지적·요약·앞 산출물)가 남고, 실시간 기록(`k: revise`)·
   events(`kind: revise`)·보고서 표(`보완 1회`)에 표시됩니다. CLI 없음·로그인 풀림·그 밖의 QA 검토 오류(판정 자체가 실패)는 보완하지 않습니다.
-  모니터 탭의 [QA 반려 시 1회 자동 보완] 체크박스(`settings.json` 의 `auto_revise`, 기본 켜짐)로 끕니다. 보완 중 비용 상한으로 멈췄다가 승인으로 다시 돌면 지적을 이어 붙이고 더 보완하지 않습니다.
+  모니터 탭의 [QA 반려 시 1회 자동 보완] 체크박스(`settings.json` 의 `auto_revise`, 기본 켜짐)로 끕니다. 보완 중 사용 토큰 한도로 멈췄다가 승인으로 다시 돌면 지적을 이어 붙이고 더 보완하지 않습니다.
 - **QA 기계 검사**: 파일 있음 · 본문이 비지 않음(제목 줄 빼고 20자 이상) · 분량 하한(200자) · 제목(#) · 목업 표시 없음.
   브리핑 결과·제약이나 작업 완료 기준에 짧은 형식 요청('3줄'·'한 줄'·'5문장 이내'·'200자 이내'·'짧게' — 줄·문장 10, 단어 60, 글자 300 이하)이 있으면
   분량 하한·제목 검사는 결과만 남기고 게이트 판정에서 뺍니다(로그에 `(참고)`). 판정에 넣는 검사가 fail 이면 내용 검토가 PASS 여도 FAIL 입니다.
@@ -179,8 +180,9 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `docxExport.mjs` | 마크다운 산출물 → Word |
 | `state.mjs` | `office-state.json` 읽기/쓰기 |
 | `leaderSession.mjs` | 팀장 상주 세션과 대기열(`queue.json`) — 메시지 처리·브리핑 등록·두 줄 실행 |
-| `settings.mjs` | 언어·작업당 상한·하루 예산·팀장 세션 id(`settings.json`), 서버가 만드는 상태 문구의 한·영 |
-| `breaker.mjs` | 서킷 브레이커(조정·제한·중지)와 하루 예산 판정(`breakers.json`) |
+| `settings.mjs` | 언어·작업당·하루 사용 토큰 한도·자동 보완·동시 작업 수·산출물 폴더·기획 패키지·팀장 세션 id(`settings.json`), 서버가 만드는 상태 문구의 한·영 |
+| `tokens.mjs` | 사용 토큰 계산(입력·캐시 생성·캐시 읽기·출력 → 한 숫자), 실행 중 스트림 집계(한도 판정), 표기 |
+| `breaker.mjs` | 서킷 브레이커(조정·제한·중지)와 하루 토큰 한도 판정(`breakers.json`) |
 | `agentTemplates.mjs` | 인원 추가용 역할 템플릿 12종(한·영) |
 | `live.mjs` | stream-json 사건 → 실시간 기록 줄(`live/`) |
 | `pty.mjs` | 대화형 터미널(node-pty) 세션과 WebSocket 입출력 |
@@ -210,7 +212,7 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | 7 | 제안서 본문(본문 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | 견적·인력 수치가 걸리면 **수치확정** |
 | 8 | 제안서 검수(정합 단계) | 고지표 | 03_proposal | wylie-proposal-review\|proposal-review | |
 
-- 담당은 한 사람이 하루 예산을 혼자 넘기지 않게 나눴다(한도전 RFP·전략·본문 3단계, 차도안 UX 섹션·장표 구성안, 고지표 KPI·검수). 고객사 전용 스킬은 2·3·6·7단계에 붙는다.
+- 담당은 한 사람이 하루 토큰 한도를 혼자 넘기지 않게 나눴다(한도전 RFP·전략·본문 3단계, 차도안 UX 섹션·장표 구성안, 고지표 KPI·검수). 고객사 전용 스킬은 2·3·6·7단계에 붙는다.
 - 단계별 스킬은 작업 원장(`tasks.json`)의 `skills` 에 남고, 실행기는 이 값이 있으면 담당의 기본 스킬 대신 씁니다. `process: 'proposal'`·`step` 도 함께 남습니다.
 - Go/No-Go 승인 전에는 3단계 이후가 시작되지 않습니다(반려하면 보류). 6단계는 3·4·5단계가 모두 끝나야 시작합니다.
 - **고객사 전용 제안 스킬** — 사용자 스킬 폴더(`~/.claude/skills`, 동기화 폴더 포함)의 `<고객>-…-proposal` 가운데 브리핑에 그 고객사가 나오면
@@ -287,8 +289,8 @@ start-ax-office.cmd   ← 저장소 루트에서 더블클릭(또는 powershell 
 ## 보안·비용 주의
 - **API 키는 서버(환경변수)에만.** 브라우저/프론트 코드/저장소/채팅에 넣지 않습니다.
 - 무인 실행 에이전트는 **문서 읽기·쓰기만** 허용합니다(PC 명령 실행 `Bash` 차단). claude_code 모드도 같습니다.
-- 작업 1건마다 **비용 상한(모니터 탭 · 기본 `OFFICE_MAX_USD`)·턴 상한(`OFFICE_MAX_TURNS`)** 이 걸려 있습니다. claude_code 모드는 상한에서
-  멈추고 승인 카드를 띄우며, 에이전트별 하루 예산을 넘으면 서킷 브레이커가 그 사람을 중지합니다.
+- 작업 1건마다 **사용 토큰 한도(설정 화면 · 기본 `OFFICE_MAX_TOKENS`)·턴 상한(`OFFICE_MAX_TURNS`)** 이 걸려 있습니다. claude_code 모드는 앱이 스트림의 토큰을 세다
+  한도에서 끊고 '사용량' 승인 카드를 띄우며, 에이전트별 하루 토큰 한도를 넘으면 서킷 브레이커가 그 사람을 중지합니다. 사용량은 구독 사용 토큰이며 금액으로 청구되지 않습니다.
   표시되는 비용은 CLI 추정치이며 청구서가 아닙니다 — 실제 사용량은 Anthropic 콘솔에서 확인하세요.
 - 설정·대기열·인원 추가·브레이커 초기화·터미널처럼 상태를 바꾸는 API 는 이 PC 화면(Origin 이 127.0.0.1·localhost)에서 온 요청만 받습니다.
   대화형 터미널은 공개 주소(터널)로는 열리지 않습니다.

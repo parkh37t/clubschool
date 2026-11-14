@@ -3,7 +3,7 @@ import { postJson, usePolling } from './officeApi';
 import type { OfficeSettings, RosterMember, UsageResponse } from './officeApi';
 import { EnvCard } from './EnvCard';
 import { breakerReason, statusLabel, useOfficeLang } from './i18n';
-import { BAD_FG, BREAKER_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, PAPER, WYLIE, WYLIE_DARK, h2Style, inputStyle, smallMuted, usd } from './officeTheme';
+import { BAD_FG, BREAKER_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, PAPER, WYLIE, WYLIE_DARK, h2Style, inputStyle, smallMuted, tok, usd } from './officeTheme';
 
 interface MonitorTabProps {
   connected: boolean;
@@ -18,8 +18,8 @@ function localDay(d: Date): string {
 }
 
 /**
- * 모니터 탭 — 맨 위 환경 점검(CLI·로그인), 사용량(CLI 추정 금액) 에이전트별·일별, 작업별 비용과 상한,
- * 작업당 상한·하루 예산·QA 반려 시 자동 보완 설정, 서킷 브레이커 단계(조정·제한·중지)와 초기화.
+ * 모니터 탭 — 맨 위 환경 점검(CLI·로그인), 사용 토큰(구독 사용량) 합계·네 갈래·일별·에이전트별, 작업별 사용 토큰과 한도,
+ * 작업당·하루 토큰 한도·QA 반려 시 자동 보완 설정, 서킷 브레이커 단계(조정·제한·중지)와 초기화.
  * 중지된 에이전트의 재개는 승인 탭 카드로 한다.
  */
 export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabProps) {
@@ -36,7 +36,8 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
   const [resetMsg, setResetMsg] = useState('');
 
   useEffect(() => {
-    if (data && cap === '' && budget === '') { setCap(String(data.max_task_usd)); setBudget(String(data.agent_daily_usd)); }
+    // 입력은 천 토큰 단위
+    if (data && cap === '' && budget === '') { setCap(String(Math.round(data.max_task_tokens / 1000))); setBudget(String(Math.round(data.agent_daily_tokens / 1000))); }
   }, [data, cap, budget]);
 
   if (!connected) return <p style={smallMuted}>{t('mo.offline')}</p>;
@@ -45,13 +46,13 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
 
   const today = localDay(new Date());
   const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() - (6 - i)); return localDay(d); });
-  const dayMax = Math.max(0.01, ...days.map((d) => data.byDay[d] || 0));
+  const dayMax = Math.max(1, ...days.map((d) => data.byDay[d] || 0));
   const members = (roster ?? []).filter((m) => !selected || m.id === selected);
 
   const save = async () => {
-    const r = await postJson(`${apiBase}/api/settings`, { max_task_usd: Number(cap), agent_daily_usd: Number(budget) });
+    const r = await postJson(`${apiBase}/api/settings`, { max_task_tokens: Math.round(Number(cap) * 1000), agent_daily_tokens: Math.round(Number(budget) * 1000) });
     setSaved(r.ok ? t('mo.saved') : String(r.error));
-    if (r.ok) { setCap(String(r.data?.max_task_usd ?? cap)); setBudget(String(r.data?.agent_daily_usd ?? budget)); refresh(); }
+    if (r.ok) { setCap(String(Math.round(Number(r.data?.max_task_tokens ?? Number(cap) * 1000) / 1000))); setBudget(String(Math.round(Number(r.data?.agent_daily_tokens ?? Number(budget) * 1000) / 1000))); refresh(); }
   };
   const toggleRevise = async (next: boolean) => {
     setRevise(next);
@@ -73,9 +74,19 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
       <div>
         <h2 style={h2Style}>{t('mo.title')}</h2>
         <div style={{ display: 'flex', gap: 14, marginTop: 6, fontFamily: MONO, fontSize: 13 }}>
-          <span>{t('mo.total')} <b style={{ color: WYLIE_DARK }}>{usd(data.total)}</b></span>
-          <span>{t('mo.today')} <b style={{ color: WYLIE_DARK }}>{usd(data.byDay[today])}</b></span>
+          <span>{t('mo.total')} <b style={{ color: WYLIE_DARK }}>{tok(data.total)}</b></span>
+          <span>{t('mo.today')} <b style={{ color: WYLIE_DARK }}>{tok(data.byDay[today])}</b></span>
         </div>
+        {/* 네 갈래 — 사용 토큰 = 입력 + 캐시 생성 + 출력 + 캐시 읽기÷10 */}
+        <p style={{ ...smallMuted, fontSize: 11, marginTop: 4 }}>
+          {t('mo.partsToday', { i: tok(data.parts_today?.in), cw: tok(data.parts_today?.cw), cr: tok(data.parts_today?.cr), o: tok(data.parts_today?.out) })}
+        </p>
+        <p style={{ ...smallMuted, fontSize: 11 }}>{t('mo.weightNote')}</p>
+        {(data.usd_ref > 0 || data.untracked > 0) && (
+          <p style={{ ...smallMuted, fontSize: 10.5 }}>
+            {data.usd_ref > 0 ? t('mo.usdRef', { v: usd(data.usd_ref) }) : ''}{data.untracked > 0 ? ` ${t('mo.untracked', { n: data.untracked })}` : ''}
+          </p>
+        )}
       </div>
 
       {/* 일별 막대 */}
@@ -85,7 +96,7 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
           {days.map((d) => {
             const v = data.byDay[d] || 0;
             return (
-              <div key={d} title={`${d} ${usd(v)}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <div key={d} title={`${d} ${tok(v)}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                 <div style={{ width: '100%', height: Math.max(2, (v / dayMax) * 52), background: d === today ? WYLIE : '#C9B8E6', borderRadius: '3px 3px 0 0' }} />
                 <span style={{ fontSize: 9.5, color: MUTED, fontFamily: MONO }}>{d.slice(5)}</span>
               </div>
@@ -94,24 +105,24 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
         </div>
       </div>
 
-      {/* 에이전트별 오늘 사용량 · 하루 예산 · 서킷 브레이커 */}
+      {/* 에이전트별 오늘 사용 토큰 · 하루 한도 · 서킷 브레이커 */}
       <div>
         <h2 style={{ ...h2Style, marginBottom: 4 }}>{t('mo.byAgent')}</h2>
         <p style={{ ...smallMuted, fontSize: 11, marginBottom: 6 }}>{t('mo.breakerHint')}</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {members.map((m) => {
             const used = data.byAgentDay[m.id]?.[today] || 0;
-            const ratio = data.agent_daily_usd > 0 ? used / data.agent_daily_usd : 0;
+            const ratio = data.agent_daily_tokens > 0 ? used / data.agent_daily_tokens : 0;
             const lv = m.breaker?.level ?? 'normal';
             const bc = BREAKER_COLOR[lv] ?? BREAKER_COLOR.normal;
             return (
               <div key={m.id} style={{ fontSize: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ width: 86, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name(m.id)}</span>
-                  <div style={{ flex: 1, height: 8, background: '#EAE5D8', borderRadius: 4, overflow: 'hidden' }} title={`${usd(used)} / ${usd(data.agent_daily_usd)}`}>
+                  <div style={{ flex: 1, height: 8, background: '#EAE5D8', borderRadius: 4, overflow: 'hidden' }} title={`${tok(used)} / ${tok(data.agent_daily_tokens)}`}>
                     <div style={{ width: `${Math.min(100, ratio * 100)}%`, height: '100%', background: ratio >= 1 ? BAD_FG : ratio >= 0.8 ? '#E8A33D' : '#2D8C4E' }} />
                   </div>
-                  <span style={{ width: 52, textAlign: 'right', fontFamily: MONO, fontSize: 11 }}>{usd(used)}</span>
+                  <span style={{ width: 52, textAlign: 'right', fontFamily: MONO, fontSize: 11 }}>{tok(used)}</span>
                   {m.id !== 'lead' && (
                     <span title={breakerReason(lang, m.breaker)} style={{ fontSize: 10.5, fontWeight: 800, padding: '0 6px', borderRadius: 3, background: bc.bg, color: bc.fg, whiteSpace: 'nowrap' }}>{t(`lv.${lv}`)}</span>
                   )}
@@ -133,13 +144,13 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
         {resetMsg && <p style={{ ...smallMuted, color: BAD_FG }}>{resetMsg}</p>}
       </div>
 
-      {/* 설정 — 작업당 상한 · 하루 예산 */}
+      {/* 설정 — 작업당 토큰 한도 · 하루 토큰 한도(천 토큰 단위로 입력) */}
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexWrap: 'wrap', background: PAPER, border: `1px solid ${LINE}`, borderRadius: 8, padding: '8px 10px' }}>
         <label style={{ fontSize: 11.5, color: INK, fontWeight: 700 }}>{t('mo.cap')}
-          <input value={cap} onChange={(e) => { setCap(e.target.value); setSaved(''); }} inputMode="decimal" style={{ ...inputStyle, marginTop: 3, width: 90, fontSize: 12, padding: '4px 7px', resize: undefined }} />
+          <input value={cap} onChange={(e) => { setCap(e.target.value); setSaved(''); }} inputMode="numeric" style={{ ...inputStyle, marginTop: 3, width: 90, fontSize: 12, padding: '4px 7px', resize: undefined }} />
         </label>
         <label style={{ fontSize: 11.5, color: INK, fontWeight: 700 }}>{t('mo.budget')}
-          <input value={budget} onChange={(e) => { setBudget(e.target.value); setSaved(''); }} inputMode="decimal" style={{ ...inputStyle, marginTop: 3, width: 90, fontSize: 12, padding: '4px 7px', resize: undefined }} />
+          <input value={budget} onChange={(e) => { setBudget(e.target.value); setSaved(''); }} inputMode="numeric" style={{ ...inputStyle, marginTop: 3, width: 90, fontSize: 12, padding: '4px 7px', resize: undefined }} />
         </label>
         <button type="button" className="axo-iconbtn" onClick={save}>{t('mo.save')}</button>
         {saved && <span style={{ fontSize: 11.5, color: saved === t('mo.saved') ? OK_FG : BAD_FG }}>{saved}</span>}
@@ -154,19 +165,20 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
         <p style={{ ...smallMuted, fontSize: 11, flexBasis: '100%' }}>{t('mo.autoReviseHint')}</p>
       </div>
 
-      {/* 작업별 비용 */}
+      {/* 작업별 사용 토큰 */}
       <div>
         <h2 style={{ ...h2Style, marginBottom: 5 }}>{t('mo.tasks')}</h2>
         {data.tasks.filter((x) => !selected || x.owner === selected).slice(0, 25).map((x) => {
-          const spent = x.cost_usd + x.qa_usd;
-          const over = x.cost_usd >= x.cap_usd * 0.999 && x.cost_usd > 0;
+          const spent = (x.tokens || 0) + (x.qa_tokens || 0);
+          const over = x.tokens > 0 && x.tokens >= x.cap_tokens * 0.999;
+          const p = x.parts;
           return (
             <div key={x.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11.5, padding: '3px 0', borderBottom: `1px dashed ${LINE_SOFT}` }}>
               <span style={{ fontFamily: MONO, color: WYLIE_DARK, width: 52 }}>{x.id}</span>
               <span style={{ width: 70, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 700 }}>{name(x.owner)}</span>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: MUTED }}>{x.title}</span>
               <span style={{ fontSize: 10.5, color: MUTED }}>{statusLabel(lang, x.status)}</span>
-              <span style={{ fontFamily: MONO, width: 54, textAlign: 'right', color: over ? BAD_FG : INK }} title={`QA ${usd(x.qa_usd)} · cap ${usd(x.cap_usd)}`}>{usd(spent)}</span>
+              <span style={{ fontFamily: MONO, width: 54, textAlign: 'right', color: over ? BAD_FG : INK }} title={`${p ? t('mo.partsTask', { i: tok(p.in), cw: tok(p.cw), cr: tok(p.cr), o: tok(p.out) }) + ' · ' : ''}QA ${tok(x.qa_tokens)} · ${t('mo.capShort')} ${tok(x.cap_tokens)}`}>{tok(spent)}</span>
             </div>
           );
         })}

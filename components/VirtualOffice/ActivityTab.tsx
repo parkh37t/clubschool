@@ -3,7 +3,7 @@ import type { HiveEvent } from './officeApi';
 import { breakerReason, gateLabel, kindLabel, statusLabel, useOfficeLang } from './i18n';
 import type { TFn, Lang } from './i18n';
 import { SIM_TEXT } from './simText';
-import { BAD_FG, INK, LINE_SOFT, MONO, MUTED, OK_FG, WARN_FG, WYLIE_DARK, clock, smallMuted, usd } from './officeTheme';
+import { BAD_FG, INK, LINE_SOFT, MONO, MUTED, OK_FG, WARN_FG, WYLIE_DARK, clock, smallMuted, tok } from './officeTheme';
 
 interface ActivityTabProps {
   connected: boolean;
@@ -28,7 +28,7 @@ function describe(e: HiveEvent, t: TFn, lang: Lang, name: (id?: string) => strin
       if (e.status === 'pending') return { who: name('lead'), text: t('ev.approvalPending', { id: e.id ?? '', task: e.task ?? '', kind: kindLabel(lang, e.approval_kind ?? '') }), color: WARN_FG };
       return { who: e.by || name('jaeha'), text: t('ev.approvalDone', { id: e.id ?? '', d: t(e.status === 'approved' ? 'ap.approved' : 'ap.rejected'), task: e.task ?? '' }), color: e.status === 'approved' ? OK_FG : BAD_FG };
     case 'usage':
-      return { who: name(e.agent), text: t('ev.usage', { what: e.what || '', v: usd(e.cost_usd) }), color: MUTED };
+      return { who: name(e.agent), text: t('ev.usage', { what: e.what || '', v: tok(e.tokens_w) }), color: MUTED };
     case 'question':
       return e.status === 'answered'
         ? { who: e.by || name('jaeha'), text: t('ev.questionAnswered', { id: e.id ?? '' }), color: OK_FG }

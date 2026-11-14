@@ -28,6 +28,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { HIVE_DIR } from './paths.mjs';
+import { weighted, addTokens } from './tokens.mjs';
 
 export { HIVE_DIR };
 
@@ -200,6 +201,7 @@ export async function addTasks(briefingId, drafts) {
         ...(d.process ? { process: String(d.process), step: String(d.step || '') } : {}),
         ...(d.pack ? { pack: String(d.pack) } : {}),
         ...(Number.isInteger(d.slice) ? { slice: d.slice } : {}),
+        ...(Number(d.cap_tokens) > 0 ? { cap_tokens: Math.round(Number(d.cap_tokens)) } : {}),
         output: '',
         qa: null,
         created: nowIso(),
@@ -597,15 +599,16 @@ export async function appendOpenItem({ item, why, meanwhile, source }) {
 }
 
 // ── 사용량 ──
-/** 팀장 분해처럼 작업 레코드에 붙지 않는 호출 비용은 이벤트로 남긴다. */
-export async function recordUsage({ agent, usd, briefing, what }) {
-  if (!usd) return;
-  await appendEvent({ kind: 'usage', agent, cost_usd: Number(Number(usd).toFixed(4)), briefing, what });
+/** 작업 원장 밖에서 쓴 사용량(팀장 분해·상주 세션). tokens = {in,cw,cr,out}, usd 는 API 환산 참고값. */
+export async function recordUsage({ agent, tokens, usd = 0, briefing, what }) {
+  const t = tokens || { in: 0, cw: 0, cr: 0, out: 0 };
+  if (!weighted(t) && !Number(usd)) return;
+  await appendEvent({ kind: 'usage', agent, tokens: t, tokens_w: weighted(t), cost_usd: Number(Number(usd || 0).toFixed(4)), briefing, what });
 }
 
 /**
- * 사용량 합계(달러 환산 추정치). 역할 실행 cost_usd 는 담당에게, QA cost_usd 는 고지표(go)에게,
- * usage 이벤트(팀장 분해)는 그 에이전트에게 더한다. 날짜는 이 PC 기준.
+ * 사용량 합계 — 사용 토큰(tokens.mjs). 역할 실행은 담당에게, QA 판정은 고지표(go)에게, 원장 밖 사용(usage 이벤트)은 그 에이전트에게.
+ * 토큰을 기록하기 전(금액만 남은) 작업은 토큰 합계에 넣지 못하므로 따로 센다(untracked). usd_ref 는 API 환산 참고 합계.
  */
 export async function usageSummary({ qaAgent = 'go' } = {}) {
   const [ledger, events] = await Promise.all([loadTasks(), readAllEvents()]);
@@ -613,28 +616,33 @@ export async function usageSummary({ qaAgent = 'go' } = {}) {
   const byDay = {};
   const byAgentDay = {};
   let total = 0;
-  const add = (agent, usd, iso) => {
-    const v = Number(usd) || 0;
-    if (!v) return;
+  let parts = { in: 0, cw: 0, cr: 0, out: 0 };
+  let partsToday = { in: 0, cw: 0, cr: 0, out: 0 };
+  let usdRef = 0;
+  let untracked = 0;
+  const today = localDay();
+  const add = (agent, tokens, usd, iso) => {
+    const w = weighted(tokens);
+    usdRef += Number(usd) || 0;
+    if (!w) { if (Number(usd)) untracked += 1; return; }
     const day = localDay(iso);
-    total += v;
-    byAgent[agent] = (byAgent[agent] || 0) + v;
-    byDay[day] = (byDay[day] || 0) + v;
+    total += w;
+    parts = addTokens(parts, tokens);
+    if (day === today) partsToday = addTokens(partsToday, tokens);
+    byAgent[agent] = (byAgent[agent] || 0) + w;
+    byDay[day] = (byDay[day] || 0) + w;
     byAgentDay[agent] = byAgentDay[agent] || {};
-    byAgentDay[agent][day] = (byAgentDay[agent][day] || 0) + v;
+    byAgentDay[agent][day] = (byAgentDay[agent][day] || 0) + w;
   };
   for (const t of ledger.tasks) {
-    add(t.owner, t.cost_usd, t.cost_at || t.updated || t.created);
-    if (t.qa) add(qaAgent, t.qa.cost_usd, t.qa.at || t.updated || t.created);
+    add(t.owner, t.tokens, t.cost_usd, t.cost_at || t.updated || t.created);
+    if (t.qa) add(qaAgent, t.qa.tokens, t.qa.cost_usd, t.qa.at || t.updated || t.created);
   }
-  for (const e of events) if (e.kind === 'usage') add(e.agent, e.cost_usd, e.ts);
-  const round = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, Number(v.toFixed(4))]));
+  for (const e of events) if (e.kind === 'usage') add(e.agent, e.tokens, e.cost_usd, e.ts);
   return {
-    total: Number(total.toFixed(4)),
-    byAgent: round(byAgent),
-    byDay: round(byDay),
-    byAgentDay: Object.fromEntries(Object.entries(byAgentDay).map(([k, v]) => [k, round(v)])),
-    note: 'CLI 가 알려 준 추정 금액(구독 사용량 환산)이며 청구서가 아님',
+    total, byAgent, byDay, byAgentDay, parts, parts_today: partsToday,
+    usd_ref: Number(usdRef.toFixed(2)), untracked,
+    note: '구독 사용 토큰(입력 + 캐시 생성 + 출력 + 캐시 읽기÷10). 금액(usd_ref)은 API 단가 환산 참고값이며 청구액이 아님',
   };
 }
 
