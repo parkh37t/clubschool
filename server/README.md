@@ -206,14 +206,15 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | 3 | 제안 전략 — 승부 메시지·스토리·목차 | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | |
 | 4 | UX·디자인 제안 섹션 *(화면·서비스 과제일 때)* | 차도안 | 03_proposal | proposal-skills, wylie-proposal-visual\|ui-review | |
 | 5 | 성과 지표(KPI) 설계 *(성과·지표 언급 시)* | 고지표 | 03_proposal | kpi-event-tracking | |
-| 6 | 장표 구성안·근거표(구조 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, wylie-proposal-visual | |
+| 6 | 장표 구성안·근거표(구조 단계) | 차도안 | 03_proposal | wylie-proposal-visual\|ui-review, wylie-proposal\|proposal-writing | |
 | 7 | 제안서 본문(본문 단계) | 한도전 | 03_proposal | wylie-proposal\|proposal-writing, proposal-maker | 견적·인력 수치가 걸리면 **수치확정** |
 | 8 | 제안서 검수(정합 단계) | 고지표 | 03_proposal | wylie-proposal-review\|proposal-review | |
 
+- 담당은 한 사람이 하루 예산을 혼자 넘기지 않게 나눴다(한도전 RFP·전략·본문 3단계, 차도안 UX 섹션·장표 구성안, 고지표 KPI·검수). 고객사 전용 스킬은 2·3·6·7단계에 붙는다.
 - 단계별 스킬은 작업 원장(`tasks.json`)의 `skills` 에 남고, 실행기는 이 값이 있으면 담당의 기본 스킬 대신 씁니다. `process: 'proposal'`·`step` 도 함께 남습니다.
 - Go/No-Go 승인 전에는 3단계 이후가 시작되지 않습니다(반려하면 보류). 6단계는 3·4·5단계가 모두 끝나야 시작합니다.
 - **고객사 전용 제안 스킬** — 사용자 스킬 폴더(`~/.claude/skills`, 동기화 폴더 포함)의 `<고객>-…-proposal` 가운데 브리핑에 그 고객사가 나오면
-  (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 한도전 단계(2·3·6·7)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
+  (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 제안 문서를 쓰는 단계(2·3·6·7)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
 - 사내 제안 스킬이 없는 PC 에서는 저장소의 공용 스킬(`proposal-writing`·`rfp-analysis`·`proposal-review`)로 대체됩니다. 공용 스킬은 사내 방법론을 옮기지 않고 일반 원칙으로 썼습니다.
 - `claude_code` 모드에서는 시작 전에 CLI·로그인을 확인하고, 없으면 브리핑을 시작하지 않습니다(분해에 모델을 쓰지 않아도 같은 규칙).
 

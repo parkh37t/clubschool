@@ -1,7 +1,7 @@
 {
   "name": "wylie-ax-office",
   "productName": "Wylie AX Office",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Wylie AX Office — 팀장 + 12인 AI 에이전트 가상 사무실(설치형)",
   "main": "main.cjs",
   "author": "Wylie Convergence",

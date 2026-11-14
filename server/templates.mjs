@@ -40,14 +40,14 @@ const DEFAULTS = [
       result: '제안서 초안 묶음(마크다운) — 조사, RFP 요구·평가 대응표와 Go/No-Go, 전략·목차, UX·디자인 섹션, KPI, 장표 구성안·근거표, 본문, 검수 보고서',
       context: 'RFP 원문·과업지시서는 파일·폴더로 첨부한다. 발주처: [고객사] · 사업명: [사업명] · 대상 서비스: [웹/앱/플랫폼] · 제출 마감: [YYYY-MM-DD] · 발표 시간: [분]. 강조할 레퍼런스: [유사 사업]. 투입 가능한 인력 상황을 적으면 Go/No-Go 판단이 정확해진다.',
       constraints: ['Go/No-Go 는 재하가 승인한 뒤 다음 단계로 넘어감', '견적 금액·투입 M/M 은 범위로만(확정은 승인 필요)', '근거 없는 효과 수치·상투어 금지, 확인 못 한 값은 "미확인"', '외부 발송 금지 — 내부 검토용'],
-      steps: ['① 조사 — 김영업', '② RFP 분석·Go/No-Go — 한도전 (재하 승인)', '③ 전략·스토리·목차 — 한도전', '④ UX·디자인 섹션 — 차도안 (화면·서비스 과제일 때)', '⑤ KPI 설계 — 고지표 (성과·지표 언급 시)', '⑥ 장표 구성안·근거표 — 한도전', '⑦ 본문 — 한도전', '⑧ 검수 — 고지표'],
+      steps: ['① 조사 — 김영업', '② RFP 분석·Go/No-Go — 한도전 (재하 승인)', '③ 전략·스토리·목차 — 한도전', '④ UX·디자인 섹션 — 차도안 (화면·서비스 과제일 때)', '⑤ KPI 설계 — 고지표 (성과·지표 언급 시)', '⑥ 장표 구성안·근거표 — 차도안', '⑦ 본문 — 한도전', '⑧ 검수 — 고지표'],
     },
     en: {
       title: '[Client] [Project] proposal — full process',
       result: 'A proposal draft set (markdown) — research, RFP requirement-scoring matrix and Go/No-Go, strategy and outline, UX/design section, KPIs, slide plan and evidence table, body, review report',
       context: 'Attach the RFP and statement of work as files or a folder. Client: [client] · Project: [project] · Service: [web/app/platform] · Due: [YYYY-MM-DD] · Pitch length: [minutes]. References to stress: [similar projects]. Note who is available to staff it for a sharper Go/No-Go.',
       constraints: ['Moves past Go/No-Go only after Jaeha approves', 'Price and man-months as ranges only (committing numbers needs approval)', 'No unsupported effect numbers or clichés; unverified values marked "unverified"', 'No external sending — internal review only'],
-      steps: ['① Research — Kim Youngeop', '② RFP analysis · Go/No-Go — Han Dojeon (Jaeha approves)', '③ Strategy · story · outline — Han Dojeon', '④ UX/design section — Cha Doan (screen or service projects)', '⑤ KPI design — Go Jipyo (when results or metrics are mentioned)', '⑥ Slide plan · evidence table — Han Dojeon', '⑦ Body — Han Dojeon', '⑧ Review — Go Jipyo'],
+      steps: ['① Research — Kim Youngeop', '② RFP analysis · Go/No-Go — Han Dojeon (Jaeha approves)', '③ Strategy · story · outline — Han Dojeon', '④ UX/design section — Cha Doan (screen or service projects)', '⑤ KPI design — Go Jipyo (when results or metrics are mentioned)', '⑥ Slide plan · evidence table — Cha Doan', '⑦ Body — Han Dojeon', '⑧ Review — Go Jipyo'],
     },
   },
   {

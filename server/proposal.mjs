@@ -2,6 +2,9 @@
 //
 //   조사 → RFP 분석·Go/No-Go(재하 승인) → 전략·스토리·목차 → [UX·디자인 섹션] [성과 지표]
 //   → 장표 구성안·근거표(구조) → 본문 → 검수(정합)
+// 담당 배분: 조사 김영업 · RFP·전략·본문 한도전 · UX 섹션·장표 구성안 차도안 · KPI·검수 고지표.
+//   한 사람이 하루 예산을 혼자 넘기지 않게 나눈다(2026-11-14 실측: 한도전이 4단계를 맡았을 때 $3.98 로 다른 과제와 합쳐 $5 초과).
+//   고객사 전용 제안 스킬은 제안 문서를 직접 쓰는 단계(client:true — RFP·전략·장표·본문)에 붙는다.
 //
 // 단계마다 담당·산출 폴더·스킬·완료 기준·승인을 여기서 정한다. 스킬은 'a|b' 규칙(skills.mjs) —
 // 사내 제안 스킬(wylie-proposal·-visual·-review 등)이 이 PC 에 있으면 그것을, 없으면 저장소의 공용 스킬을 쓴다.
@@ -24,7 +27,7 @@ export const PROPOSAL_STEPS = [
     deps: [],
   },
   {
-    key: 'rfp', owner: 'han', stage: '01_rfp',
+    key: 'rfp', owner: 'han', stage: '01_rfp', client: true,
     ko: 'RFP 분석 — 요구·평가 대응표와 Go/No-Go', en: 'RFP analysis — requirement-scoring matrix and Go/No-Go',
     skills: ['rfp-analysis', WRITE],
     done: 'RFP 요구사항을 빠짐없이 옮긴 요구·평가 대응표(요구 id · 원문 위치 · 평가 항목 · 대응할 장 · 근거 · 충족 상태 · 공백)와 Go/No-Go 5축(적합성·승산·수익성·리스크·전략가치) 권고',
@@ -32,7 +35,7 @@ export const PROPOSAL_STEPS = [
     deps: ['research'], approval: 'Go/No-Go',
   },
   {
-    key: 'strategy', owner: 'han', stage: '03_proposal',
+    key: 'strategy', owner: 'han', stage: '03_proposal', client: true,
     ko: '제안 전략 — 승부 메시지·스토리·목차', en: 'Proposal strategy — win theme, story and outline',
     skills: [WRITE, 'proposal-maker'],
     done: '승부 메시지 1개와 전략 2~4개, 스토리 흐름(고객 문제 → 성공 조건 → 왜 우리인가 → 무엇을 어떻게 → 완수·검증 → 결정 요청), 평가 배점 순서에 맞춘 목차와 장별 핵심 메시지',
@@ -56,15 +59,15 @@ export const PROPOSAL_STEPS = [
     deps: ['strategy'],
   },
   {
-    key: 'slides', owner: 'han', stage: '03_proposal',
+    key: 'slides', owner: 'cha', stage: '03_proposal', client: true,
     ko: '장표 구성안·근거표(구조 단계)', en: 'Slide plan and evidence table (structure pass)',
-    skills: [WRITE, 'wylie-proposal-visual'],
+    skills: ['wylie-proposal-visual|ui-review', WRITE],
     done: '장표마다 평가자 질문·결론형 제목·근거 id·도식 유형·담당 요구 id 를 적은 구성안과 근거표. 제목만 이어 읽어도 주장이 이어져야 함',
     doneEn: 'A slide plan listing, per slide, the evaluator question, a conclusion-style title, evidence ids, diagram type and requirement ids, plus the evidence table. Reading only the titles must carry the argument',
     deps: ['strategy', 'design', 'kpi'],
   },
   {
-    key: 'draft', owner: 'han', stage: '03_proposal',
+    key: 'draft', owner: 'han', stage: '03_proposal', client: true,
     ko: '제안서 본문(본문 단계)', en: 'Proposal body (content pass)',
     skills: [WRITE, 'proposal-maker'],
     done: '구성안 순서대로 쓴 제안서 본문. 견적·투입 M/M 은 범위로만, 근거 없는 효과 수치와 상투어 금지, 확인 못 한 값은 "미확인"',
@@ -123,8 +126,8 @@ export async function proposalPlan(b, { lang = 'ko' } = {}) {
       depends_on: deps,
       needs_approval: Boolean(approval),
       approval_reason: approval,
-      // 고객사 전용 스킬은 한도전(RFP·전략·장표·본문) 단계에만 — 조사·디자인·KPI·검수에는 섞지 않는다
-      skills: s.owner === 'han' ? [...s.skills, ...client] : [...s.skills],
+      // 고객사 전용 스킬은 제안 문서를 쓰는 단계(RFP·전략·장표·본문)에만 — 조사·UX 섹션·KPI·검수에는 섞지 않는다
+      skills: s.client ? [...s.skills, ...client] : [...s.skills],
       process: 'proposal',
       step: s.key,
     };
