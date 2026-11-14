@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { Activity, Brain, CalendarClock, ChevronDown, Gauge, LayoutTemplate, ListChecks, MessageCircleQuestion, MessagesSquare, MoreHorizontal, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
+import { Activity, Brain, CalendarClock, ChevronDown, Gauge, Layers, LayoutTemplate, ListChecks, MessageCircleQuestion, MessagesSquare, MoreHorizontal, Network, Sparkles, SquareTerminal, Stamp, Zap } from 'lucide-react';
 import type { FeedItem, HiveState } from './officeSimulator';
 import { usePolling } from './officeApi';
 import type { AgentStatus, BriefingPrefill, BriefingTemplate, HiveEvent, Question, QueueResponse, RosterMember } from './officeApi';
@@ -20,10 +20,11 @@ import { TriggersTab } from './TriggersTab';
 import { GraphTab } from './GraphTab';
 import { TalkTab } from './TalkTab';
 import { TemplatesTab } from './TemplatesTab';
+import { PlanTab } from './PlanTab';
 import { statusLabel, useOfficeLang } from './i18n';
 import { INK, LINE, MONO, MUTED, STATUS_COLOR, WYLIE, WYLIE_DARK, WYLIE_TINT } from './officeTheme';
 
-export type CommandTab = 'tasks' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor' | 'triggers' | 'graph' | 'talk' | 'templates';
+export type CommandTab = 'tasks' | 'plan' | 'approvals' | 'questions' | 'memory' | 'activity' | 'skills' | 'terminal' | 'monitor' | 'triggers' | 'graph' | 'talk' | 'templates';
 
 interface DemoProps {
   feed: FeedItem[];
@@ -49,12 +50,15 @@ interface CommandCenterProps {
   demo: DemoProps;
   /** 입력창(패널 맨 아래) */
   instructUrl?: string;
+  /** 기획 탭의 [설정 열기] */
+  onOpenSettings?: () => void;
   onSubmitted: (title: string) => void;
 }
 
-// 탭 — 자주 쓰는 다섯 개는 한 줄로 늘 보이고(아이콘 + 이름 + 건수), 나머지는 '더보기' 메뉴에 둔다(GitHub·Linear 의 탭 막대 방식).
+// 탭 — 자주 쓰는 여섯 개는 한 줄로 늘 보이고(아이콘 + 이름 + 건수), 나머지는 '더보기' 메뉴에 둔다(GitHub·Linear 의 탭 막대 방식).
 const TAB_META: Record<CommandTab, { label: string; icon: LucideIcon }> = {
   tasks: { label: 'tab.tasks', icon: ListChecks },
+  plan: { label: 'tab.plan', icon: Layers },
   approvals: { label: 'tab.approvals', icon: Stamp },
   questions: { label: 'tab.questions', icon: MessageCircleQuestion },
   talk: { label: 'tab.talk', icon: MessagesSquare },
@@ -67,14 +71,14 @@ const TAB_META: Record<CommandTab, { label: string; icon: LucideIcon }> = {
   graph: { label: 'tab.graph', icon: Network },
   skills: { label: 'tab.skills', icon: Sparkles },
 };
-const PRIMARY_TABS: CommandTab[] = ['tasks', 'approvals', 'questions', 'talk', 'terminal'];
+const PRIMARY_TABS: CommandTab[] = ['tasks', 'plan', 'approvals', 'questions', 'talk', 'terminal'];
 const MORE_TABS: CommandTab[] = ['monitor', 'templates', 'triggers', 'memory', 'activity', 'graph', 'skills'];
 
 /**
  * 오른쪽 커맨드 센터 — 머리(팀장·상태·자동 진행) → 탭 막대(주 탭 다섯 + 더보기) → 상태 줄 → 탭 내용 → 대기열 → 입력창.
  * 사무실 시계가 0.1초마다 다시 그리므로 memo 로 감싼다.
  */
-export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, apiBase, selected, onSelect, roster, events, concurrency, mode, demo, instructUrl, onSubmitted }: CommandCenterProps) {
+export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, apiBase, selected, onSelect, roster, events, concurrency, mode, demo, instructUrl, onSubmitted, onOpenSettings }: CommandCenterProps) {
   const { t, lang, name } = useOfficeLang();
   const connected = apiBase !== undefined && hive !== null;
   const queue = usePolling<QueueResponse>(connected ? `${apiBase}/api/queue` : undefined, 2000);
@@ -211,6 +215,7 @@ export const CommandCenter = memo(function CommandCenter({ tab, onTab, hive, api
         {tab === 'graph' && <GraphTab connected={connected} apiBase={apiBase} currentBriefing={hive?.briefing} selected={selected} onSelect={onSelect} />}
         {tab === 'talk' && <TalkTab connected={connected} apiBase={apiBase} selected={selected} roster={roster} />}
         {tab === 'templates' && <TemplatesTab connected={connected} apiBase={apiBase} onUse={applyTemplate} />}
+        {tab === 'plan' && <PlanTab connected={connected} apiBase={apiBase} onUse={applyTemplate} onOpenSettings={onOpenSettings} />}
       </div>
 
       <QueueStrip apiBase={apiBase} queue={queue.data} onChange={queue.refresh} />

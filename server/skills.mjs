@@ -1,5 +1,6 @@
 // 게이트 작업에 붙일 스킬(업무 지침서)을 찾아 읽는다.
 // 찾는 순서: ① 저장소 .claude/skills/<이름>  ② ~/.claude/skills/<이름>  ③ ~/.claude/skills/synced/*/<이름>
+//           ④ 기획 에이전트 패키지(설정 plan_kit_dir)의 .claude/skills/<이름>
 // 사내 스킬(wylie-*, ba-agent, proposal-maker)은 공개 저장소에 올리지 않는다(.gitignore).
 // 각 PC의 .claude/skills 에 직접 두거나, Claude 계정 동기화 폴더(③)에 있으면 자동으로 쓴다.
 // 스펙 'a|b' 는 "a가 있으면 a, 없으면 b" — 사내 스킬이 없는 PC에서는 공용 스킬로 대체된다.
@@ -8,6 +9,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SKILLS_DIR } from './paths.mjs';
+import { getSettings } from './settings.mjs';
 
 const REPO_SKILLS = SKILLS_DIR; // 저장소(설치형 앱은 resources)의 .claude/skills
 const USER_SKILLS = path.join(os.homedir(), '.claude', 'skills');
@@ -29,6 +31,8 @@ async function findSkillDir(name) {
   } catch {
     // 동기화 폴더가 없으면 건너뜀
   }
+  const kit = String((await getSettings()).plan_kit_dir || '').trim();
+  if (kit && path.isAbsolute(kit)) candidates.push(path.join(kit, '.claude', 'skills', name));
   for (const dir of candidates) {
     if (await exists(path.join(dir, 'SKILL.md'))) return dir;
   }

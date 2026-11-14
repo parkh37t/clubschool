@@ -10,6 +10,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { resolveSkills } from './skills.mjs';
+import { mockClarifyBlock } from './planning.mjs';
 import { runAgent as runClaudeCodeAgent, failureHint } from './claudeCode.mjs';
 import { ROSTER, nameOf } from './roster.mjs';
 import { APP_ROOT, AGENTS_DIR, DELIVERABLES_DIR, relData, absData } from './paths.mjs';
@@ -250,7 +251,7 @@ export function parseReply(text) {
  *   context   hive 규칙으로 덧붙이는 글(기억·안 읽은 편지·조정 지시·이어 하기 안내·QA 보완 요청)
  *   revision  QA 반려 뒤 1회 보완 재작업인지. claude_code 는 context 의 'QA 보완 요청'으로 알고, mock 은 시험 동작에만 쓴다
  */
-export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capUsd, maxTurns, context = '', revision = false }) {
+export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capUsd, maxTurns, context = '', revision = false, extraDirs = [] }) {
   const name = nameOf(task.owner);
   const agent = ROSTER.find((a) => a.id === task.owner);
   // 표준 절차(제안 프로세스 등)가 단계별 스킬을 정해 둔 작업은 그 스킬을, 아니면 담당의 기본 스킬을 붙인다.
@@ -262,7 +263,7 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
   log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}${capUsd ? ` (상한 $${Number(capUsd).toFixed(2)})` : ''}`);
   if (skills.missing.length) log(`${name}: 이 PC에 없는 스킬은 건너뜀 — ${skills.missing.join(', ')}`);
 
-  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context });
+  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context, extraDirs });
   if (mode === 'live') {
     // 구 live 경로 재사용: 게이트 모양으로 감싸서 Agent SDK 로 실행한다.
     const ctx = {
@@ -313,7 +314,9 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
     `> 실제 ${name} 에이전트가 위 스킬 지침대로 진짜 산출물을 작성합니다.`,
     '',
   ].join('\n');
-  await fs.writeFile(file, md, 'utf8');
+  // 기획 ② 목업은 화면 목록 JSON 을 남겨 뼈대 생성·린트까지 배선을 시험한다(planning.mjs)
+  const extra = !broken && task.process === 'planning' && task.step === 'clarify' ? await mockClarifyBlock(task) : '';
+  await fs.writeFile(file, md + extra, 'utf8');
   sink({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: file, content: md } }] } });
   sink({ type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } });
   const mockCost = Number(process.env.OFFICE_MOCK_COST_USD || 0);
@@ -327,7 +330,7 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   return { file, summary: `[목업] ${task.title}`, costUsd: 0, reply, ...parseReply(reply) };
 }
 
-async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context }) {
+async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capUsd, maxTurns, context, extraDirs = [] }) {
   const persona = await loadPersona(task.owner);
   const s = await getSettings();
   // 에이전트는 산출물 폴더(DELIVERABLES_DIR)를 작업 폴더로 돈다. 원장·지시문의 경로가 모두 그 기준이다.
@@ -355,7 +358,8 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
     REPLY_GUIDE,
   ].filter((l) => l !== '').join('\n');
 
-  const addDirs = [...new Set(applied.map((sk) => sk.refs).filter(Boolean))];
+  // 스킬 참고자료 폴더 + 표준 절차(기획 팩 등)가 넘긴 폴더 — 산출물 폴더 밖이라 --add-dir 로 연다
+  const addDirs = [...new Set([...applied.map((sk) => sk.refs).filter(Boolean), ...extraDirs])];
   const before = new Set(await listDir(stageDir));
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
   const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, maxBudgetUsd: capUsd, onEvent: sink });

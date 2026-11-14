@@ -21,7 +21,7 @@ hive/
 ├── questions.json      "나에게 질문" — 팀장·역할 에이전트가 재하에게 물은 것과 답(Q-0001…). 답은 행위자(by)가 있어야 기록
 ├── breakers.json       서킷 브레이커 — 에이전트별 연속 문제 횟수·단계(normal · steer · constrain · stop)·사유
 ├── agents.json         역할 템플릿으로 추가한 인원(최대 6명) — 이름(한·영)·템플릿·페르소나
-├── settings.json       화면 언어·작업당 비용 상한·하루 예산·QA 자동 보완·동시 작업 수·산출물 폴더(deliverables_dir)·팀장 상주 세션 id
+├── settings.json       화면 언어·작업당 비용 상한·하루 예산·QA 자동 보완·동시 작업 수·산출물 폴더(deliverables_dir)·기획 에이전트 패키지(plan_kit_dir)·팀장 상주 세션 id
 ├── live/<작업>.jsonl   실시간 기록 줄(시작·글·도구·결과·QA·완료). 팀장 상주 세션은 live/lead.jsonl
 ├── triggers.json       예약(R-0001…) — 일정(매주·매일·한 번)·브리핑 4요소·켜짐·다음/지난 실행·놓침. 앱이 켜져 있을 때만 돈다
 ├── templates.json      사용자 브리핑 템플릿(TPL-0001…, 최대 30개) — 과제명·결과·맥락·제약. 기본 6개는 코드(server/templates.mjs)에 있다

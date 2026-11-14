@@ -198,6 +198,8 @@ export async function addTasks(briefingId, drafts) {
         // 작업별 스킬(있으면 담당의 기본 스킬 대신 쓴다)·표준 절차 표시(제안 프로세스의 어느 단계인지)
         ...(Array.isArray(d.skills) && d.skills.length ? { skills: d.skills.map(String) } : {}),
         ...(d.process ? { process: String(d.process), step: String(d.step || '') } : {}),
+        ...(d.pack ? { pack: String(d.pack) } : {}),
+        ...(Number.isInteger(d.slice) ? { slice: d.slice } : {}),
         output: '',
         qa: null,
         created: nowIso(),

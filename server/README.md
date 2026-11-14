@@ -71,6 +71,9 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/questions` · `POST /api/questions/:id/answer` | "나에게 질문" 목록 / 답하기 `{answer, by}`(by 없으면 400). 팀장 질문의 답은 대기열 메시지로, 역할 에이전트 질문의 답은 그 사람 편지함으로 |
 | `GET /api/settings` · `POST /api/settings` | 언어·작업당 상한·하루 예산·QA 반려 시 자동 보완·동시 작업 수 `{lang, max_task_usd, agent_daily_usd, auto_revise, concurrency(1~3)}`. GET 은 지금 쓰는 `deliverables_dir`·`deliverables_default`·`hive_dir`·`running` 도 준다(이 PC 화면이 아니면 사용자 폴더는 `~`). 팀장 세션 id 는 내보내지 않음. POST 는 이 PC 화면에서만이고 산출물 폴더는 바꾸지 않는다 |
 | `POST /api/settings/deliverables` | 산출물 저장 위치 바꾸기 `{dir, copy?}` · 기본으로 `{reset:true}` · 검사만 `{check:true, dir}`. 절대경로·hive/앱 폴더와 겹치지 않음·쓰기 시험 통과일 때만. 브리핑이 진행 중이면 409. `copy` 면 지금 폴더 내용을 새 폴더로 복사(덮어쓰지 않음, 예전 폴더는 지우지 않음). 바로 적용되고 `settings.json` 의 `deliverables_dir` 에 남아 다음 시작 때도 쓴다(`storage.mjs`) |
+| `GET /api/plan/packs` · `GET /api/plan/packs/:id[?verify=1]` | 기획 탭 — 패키지 상태와 팩 목록(이름·접두·SSOT 5계층 상태·화면 수) / 팩 한 개(화면 레지스트리·파일 유무, `verify=1` 이면 verify_page 결과) |
+| `GET /plan-files/<packs\|core>/…` | 2단 화면설계서 뷰어용 — 패키지의 `packs/`·`core/` 아래 화면·자산(html·css·js·json·이미지·글꼴)만. HTML 은 `Content-Security-Policy: sandbox allow-scripts` 로 내보내 화면 스크립트가 이 앱 API 를 같은 오리진으로 부르지 못하게 한다. Host 가 루프백일 때만 |
+| `POST /api/settings/plan-kit` | 기획 에이전트 패키지 폴더 `{dir}`(빈 값이면 끔). `scripts/new_screen.py`·`scripts/verify_page.py`·`packs/_template/pack.json`·`core/golden`·`core/template` 이 있어야 함. 이 PC 화면에서만 |
 | `POST /api/open` | 이 PC 에서 열기 `{target:'deliverables'\|'hive'}` 또는 `{path, select?}`(산출물 폴더 기준 상대경로). 산출물 폴더 안의 문서·이미지만 기본 앱으로 열고, `select` 면 탐색기에서 그 파일을 고른 채로 폴더를 연다. 실행 파일은 열지 않음. 이 PC 화면에서만 |
 | `GET /api/mail?limit=80&agent=` | 대화 탭 — 받은 편지함(`inbox/<사람>/`)·처리한 편지(`.done/`)·아직 옮기지 않은 outbox 의 메시지를 최근순으로 `{messages:[{id, from, to, type, task, ts, body, truncated}]}`. 같은 id 는 한 번만. `agent` 가 있으면 그 사람이 보내거나 받은 것만(없는 사람은 404). 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'. 읽기 전용 |
 | `GET /api/templates?lang=` · `POST /api/templates` · `DELETE /api/templates/:id` | 브리핑 템플릿 — 기본 6개(코드, 한·영. `lang` 이 없으면 설정 언어) + 사용자 저장(`templates.json`, 최대 30개) / 저장 `{title, result, context?, constraints?}`(과제명·결과 필수) / 사용자 템플릿 삭제(기본은 400, 없으면 404). POST·DELETE 는 이 PC 화면에서만 |
@@ -213,6 +216,25 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
   (폴더 이름 첫 토큰이나 설명 첫 단어로 맞춤) 한도전 단계(2·3·6·7)에 붙습니다. 저장소에는 두지 않습니다(`.gitignore` 의 `.claude/skills/*-proposal/`).
 - 사내 제안 스킬이 없는 PC 에서는 저장소의 공용 스킬(`proposal-writing`·`rfp-analysis`·`proposal-review`)로 대체됩니다. 공용 스킬은 사내 방법론을 옮기지 않고 일반 원칙으로 썼습니다.
 - `claude_code` 모드에서는 시작 전에 CLI·로그인을 확인하고, 없으면 브리핑을 시작하지 않습니다(분해에 모델을 쓰지 않아도 같은 규칙).
+
+## 표준 기획 프로세스 (`planning.mjs`)
+
+결과 줄이 화면설계·화면 기획·IA·스토리보드·와이어프레임인 브리핑은, 설정에 **기획 에이전트 패키지**(`plan_kit_dir`)가 연결돼 있으면
+팀장 분해 대신 아래 6단계로 나눕니다(제안서 브리핑이 먼저 판단됨). 패키지는 이 PC 의 폴더이며 저장소에 두지 않습니다 — 규격 SKILL·린트·검증·골든·팩 템플릿이 들어 있고,
+서버는 그 폴더의 `scripts/new_screen.py`·`scripts/verify_page.py`·`scripts/pack_index.py` 를 파이썬으로 부릅니다(역할 에이전트는 명령을 실행하지 않음).
+
+| # | 단계 | 담당 | 서버가 하는 일 | 승인 |
+| --- | --- | --- | --- | --- |
+| ① | 요구 원장·미확정 목록 | 정우선 | 팩이 없으면 `packs/_template` 복사(nav.config.js 는 빈 구조로) | |
+| ② | 작업가이드·규칙·IA 확정안 + 화면 목록 JSON | 나기획 | — | **가이드확정** → 팩 `layers.rules/ia/guide = confirmed` |
+| ③ | 2단 화면설계서(앞쪽 화면) | 나기획 | 화면 목록으로 `new_screen.py` 뼈대 생성·등록 → QA 에 verify(L01~L13·V01~V08) | |
+| ③ | 2단 화면설계서(뒤쪽 화면) | 표준수 | 같음(화면을 반씩 나눠 두 사람이 동시에) | |
+| ④ | 화면설계서 리뷰 | 고지표 | 이번 화면 verify 결과·레지스트리를 지시문에 붙이고 `pack_index.py` 로 목록 페이지 갱신 | |
+| ⑤ | 추적 매트릭스·3키 인계 | 정우선 | 같음 | **컨펌** |
+
+- 팩은 브리핑에 `팩: <id>`(영문 소문자·숫자·하이픈)로 고르고, 없으면 시각으로 새로 만듭니다. 브리핑 하나에서 화면은 최대 6개.
+- 화면 생성 단계의 QA 는 기계 검사 `spec_verify` 가 fail 이면 FAIL → 위반 목록이 1회 자동 보완의 지적으로 붙습니다. mock 모드에서는 참고로만(required:false).
+- 원장(`tasks.json`)에 `process:'planning'`·`step`·`pack`·`slice`·`plan_files`(패키지 기준 화면 경로)가 남습니다.
 
 ## 스킬 연결 (업무 지침서)
 

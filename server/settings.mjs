@@ -15,6 +15,7 @@ export const DEFAULTS = {
   auto_revise: true, // QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(orchestrator.mjs)
   concurrency: Math.max(1, Math.min(3, Math.floor(Number(process.env.OFFICE_CONCURRENCY || 2)) || 2)), // 브리핑 안에서 동시에 도는 작업 수(1~3). 새 브리핑부터 적용
   deliverables_dir: '', // 산출물 폴더(절대경로). 빈 값이면 기본 위치(OFFICE_DELIVERABLES_DIR)
+  plan_kit_dir: '', // 기획 에이전트 패키지 폴더(절대경로) — 표준 기획 프로세스·기획 탭이 쓴다(planning.mjs). 빈 값이면 꺼짐
   leader_session_id: '', // 팀장 상주 세션(claude --resume) id
 };
 
@@ -47,6 +48,7 @@ export function updateSettings(patch) {
     if (typeof patch.auto_revise === 'boolean') next.auto_revise = patch.auto_revise;
     if (patch.concurrency !== undefined) next.concurrency = Math.round(clampNum(patch.concurrency, 1, 3, cur.concurrency));
     if (typeof patch.deliverables_dir === 'string') next.deliverables_dir = patch.deliverables_dir;
+    if (typeof patch.plan_kit_dir === 'string') next.plan_kit_dir = patch.plan_kit_dir;
     if (typeof patch.leader_session_id === 'string') next.leader_session_id = patch.leader_session_id;
     await fs.mkdir(HIVE_DIR, { recursive: true });
     await fs.writeFile(FILE + '.tmp', JSON.stringify(next, null, 2), 'utf8');

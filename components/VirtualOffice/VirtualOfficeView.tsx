@@ -79,6 +79,7 @@ export function VirtualOfficeView({
   const [localLang, setLocalLang] = useState<Lang>('ko');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
   const lang: Lang = settings.data?.lang ?? localLang;
   const t = useMemo(() => makeT(lang), [lang]);
   const changeLang = async (next: Lang) => {
@@ -361,6 +362,7 @@ export function VirtualOfficeView({
             onTab={setTab}
             hive={hive}
             apiBase={apiBase}
+            onOpenSettings={openSettings}
             selected={selected}
             onSelect={handleSelect}
             roster={members}

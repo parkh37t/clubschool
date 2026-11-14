@@ -18,7 +18,8 @@ import path from 'node:path';
 import * as hive from './hive.mjs';
 import { decompose, normalizeBriefing, assignBody, buildReport, LEADER, OWNER, QA_AGENT } from './leader.mjs';
 import { runTask } from './agentRunner.mjs';
-import { judge } from './qa.mjs';
+import { judge, combineGate } from './qa.mjs';
+import { planningBefore, planningChecks, planningOnApproved } from './planning.mjs';
 import { exportDocx } from './docxExport.mjs';
 import { nameOf, AGENT_IDS } from './roster.mjs';
 import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths.mjs';
@@ -201,6 +202,8 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   async function awaitDecision(task, a, outRel, verdict) {
     const decision = await hive.waitForApproval(a.id, { pollMs: 2000, timeoutMs: APPROVAL_TIMEOUT_MS });
     if (decision === 'approved') {
+      // 기획 ② 가이드확정 — 팩 계층을 confirmed 로 올린 뒤 완료(다음 단계의 화면 뼈대 생성이 이 상태를 본다)
+      await planningOnApproved(task, { log }).catch((e) => log(`기획 승인 반영 오류(${task.id}): ${e.message}`));
       await hive.updateTask(task.id, { status: '완료' });
       produced.push(outRel);
       log(`승인 완료: ${a.id} (${task.id})`);
@@ -311,16 +314,33 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     ].filter(Boolean).join('\n\n') + languageLine(settings);
     const readIds = [assign.id, ...unread.map((m) => m.id)];
 
+    // 표준 기획 프로세스 — 팩 준비·화면 뼈대(new_screen)·기계 검사 결과를 서버가 만들어 지시문에 붙인다(역할 에이전트는 명령 실행 불가).
+    let plan = null;
+    if (task.process === 'planning') {
+      plan = await planningBefore(task, { tasks: await hive.tasksOf(briefingId), log });
+      if (plan.skip || plan.error) {
+        const why = plan.skip || plan.error;
+        await hive.updateTask(task.id, { status: plan.skip ? '완료' : '실패', qa: { summary: plan.skip ? `건너뜀 — ${why}` : why } });
+        await hive.markInboxDone(task.owner, readIds);
+        if (plan.error) leftovers.push(`${task.id} ${nameOf(task.owner)}: ${why}`);
+        log(`${task.id} ${plan.skip ? '건너뜀' : '실패'} — ${why}`);
+        liveNote(task.id, meta, why, plan.skip ? 'done' : 'fail');
+        await publish();
+        return;
+      }
+      if (plan.planFiles?.length) await hive.updateTask(task.id, { plan_files: plan.planFiles });
+    }
+
     // 보완 재작업 중 비용 상한으로 멈췄다가 승인으로 다시 들어온 작업이면 QA 지적을 이어 붙이고, 더는 보완하지 않는다.
     let revision = task.revised && Array.isArray(task.revise?.issues) && task.revise.issues.length ? task.revise : null;
     const asked = new Set(); // 보완 재작업에서 같은 질문을 또 올리지 않게
 
     for (;;) {
       // 2-2) 실행
-      const runContext = revision ? `${context}\n\n${reviseNote(revision)}` : context;
+      const runContext = [context, plan?.context, revision ? reviseNote(revision) : ''].filter(Boolean).join('\n\n');
       let r;
       try {
-        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capUsd: cap, maxTurns, context: runContext, revision: Boolean(revision) });
+        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capUsd: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [] });
       } catch (e) {
         r = { file: null, summary: '', costUsd: 0, reply: '', leftovers: [`실행 예외: ${e.message}`], memory: [], questions: [], failure: 'exception' };
       }
@@ -381,7 +401,15 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       // 2-3) QA 게이트 — 고지표가 판정. 점수가 아니라 4값 검사 + PASS/CONDITIONAL/FAIL.
       await publish();
       liveNote(task.id, meta, '', 'qa_start');
-      const verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log });
+      let verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log });
+      // 기획 화면 생성 — 서버가 린트(L01~L13)·verify(V01~V08)를 돌려 기계 검사에 더한다. 위반이면 FAIL → 1회 보완에 지적으로 붙는다.
+      if (plan) {
+        const pc = await planningChecks(task, plan, { mode });
+        if (pc.checks.length) {
+          const gate = combineGate(pc.checks, verdict.gate);
+          verdict = { ...verdict, gate, checks: [...verdict.checks, ...pc.checks], issues: gate === 'FAIL' && pc.issues.length ? [...pc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
+        }
+      }
       costUsd += verdict.costUsd || 0;
       // QA 비용도 두 번 판정했으면 더한다(사용량 합계는 qa.cost_usd 를 고지표에게 더한다).
       const qaCost = Number(((revision?.qa_cost_usd || 0) + (verdict.costUsd || 0)).toFixed(4));
@@ -537,7 +565,7 @@ export async function watchOrphanApprovals(log) {
     hive.waitForApproval(a.id, { pollMs: 3000 }).then(async (decision) => {
       // 비용 상한 초과 승인은 '이어서 실행'이 필요하지만 브리핑 루프가 없으므로 보류로 두고 사실을 적는다.
       if (decision === 'approved' && kind === 'budget') await hive.updateTask(t.id, { status: '보류', qa: { ...(t.qa || {}), summary: '비용 상한 초과 승인(서버 재시작 후) — 이어서 하려면 브리핑을 다시 보낼 것' } });
-      else if (decision === 'approved') await hive.updateTask(t.id, { status: '완료' });
+      else if (decision === 'approved') { await planningOnApproved(t, { log }).catch(() => {}); await hive.updateTask(t.id, { status: '완료' }); }
       else await hive.updateTask(t.id, { status: '보류', qa: { ...(t.qa || {}), summary: `승인 ${decision}` } });
       log(`승인 ${decision}: ${a.id} — ${t.id} 마감(재시작 후)`);
     }).catch((e) => log(`승인 이어 보기 오류(${a.id}): ${e.message}`));

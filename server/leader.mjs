@@ -14,6 +14,7 @@ import path from 'node:path';
 import { runStructured, failureHint, claudeAvailable, authStatus } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
 import { proposalPlan } from './proposal.mjs';
+import { planningPlan } from './planning.mjs';
 import { AGENTS_DIR } from './paths.mjs';
 import { getSettings, languageLine } from './settings.mjs';
 
@@ -41,7 +42,7 @@ export function normalizeBriefing(raw) {
     attachmentPaths: Array.isArray(b.attachmentPaths) ? b.attachmentPaths : [],
     deliverables: Array.isArray(b.deliverables) ? b.deliverables : [],
     // 'proposal' = 표준 제안 절차를 쓴다 · 'free' = 쓰지 않는다 · '' = 결과 줄로 판단(server/proposal.mjs)
-    process: b.process === 'proposal' || b.process === 'free' ? b.process : '',
+    process: ['proposal', 'planning', 'free'].includes(b.process) ? b.process : '',
   };
 }
 
@@ -183,18 +184,29 @@ export async function decompose(briefing, { mode, model, log }) {
 
   // 제안서 브리핑 — 팀장 분해 대신 표준 제안 프로세스(server/proposal.mjs). 모델 호출이 없으니 비용도 없다.
   const settings = await getSettings();
-  const proposal = await proposalPlan(b, { lang: settings.lang === 'en' ? 'en' : 'ko' });
+  // 분해를 모델 없이 해도 CLI 없음·로그인 풀림이면 작업이 전부 같은 이유로 실패한다 — 시작하지 않는다(CLAUDE.md §8).
+  const cliBlocked = async (what) => {
+    if (mode !== 'claude_code') return null;
+    const code = !(await claudeAvailable()) ? 'cli_missing' : (await authStatus()).loggedIn === false ? 'not_logged_in' : '';
+    if (!code) return null;
+    log(`팀장: ${what} 시작 전 점검 실패(${code}) — 브리핑을 시작하지 않음`);
+    return { tasks: [], questions: [], blocked: failureHint(code), blockedCode: code, via: `blocked:${code}`, costUsd: 0 };
+  };
+  const lang = settings.lang === 'en' ? 'en' : 'ko';
+  const proposal = await proposalPlan(b, { lang });
   if (proposal) {
-    // 분해를 모델 없이 해도 CLI 없음·로그인 풀림이면 작업이 전부 같은 이유로 실패한다 — 시작하지 않는다(CLAUDE.md §8).
-    if (mode === 'claude_code') {
-      const code = !(await claudeAvailable()) ? 'cli_missing' : (await authStatus()).loggedIn === false ? 'not_logged_in' : '';
-      if (code) {
-        log(`팀장: 제안 프로세스 시작 전 점검 실패(${code}) — 브리핑을 시작하지 않음`);
-        return { tasks: [], questions: [], blocked: failureHint(code), blockedCode: code, via: `blocked:${code}`, costUsd: 0 };
-      }
-    }
+    const blocked = await cliBlocked('제안 프로세스');
+    if (blocked) return blocked;
     log(`팀장: 제안서 브리핑 — ${proposal.summary}${proposal.client.length ? ` · 고객사 전용 스킬 ${proposal.client.join(', ')}` : ''}`);
     return { tasks: proposal.tasks, questions: [], summary: proposal.summary, via: 'proposal', costUsd: 0 };
+  }
+  // 화면설계 브리핑 — 표준 기획 프로세스(server/planning.mjs, 기획 에이전트 패키지가 설정돼 있을 때)
+  const planning = await planningPlan(b, { lang, log });
+  if (planning) {
+    const blocked = await cliBlocked('기획 프로세스');
+    if (blocked) return blocked;
+    log(`팀장: 화면설계 브리핑 — ${planning.summary}`);
+    return { tasks: planning.tasks, questions: [], summary: planning.summary, via: 'planning', costUsd: 0 };
   }
 
   if (mode === 'claude_code') {

@@ -52,6 +52,20 @@ export interface LiveLine {
 export interface OfficeSettings {
   lang: 'ko' | 'en'; max_task_usd: number; agent_daily_usd: number; auto_revise: boolean; leader_session: boolean; concurrency: number;
   deliverables_dir: string; deliverables_default: string; deliverables_custom: boolean; hive_dir: string; mode: string; desktop: boolean; running: boolean;
+  plan_kit_dir: string; plan_kit: { ok: boolean; error: string };
+}
+
+/** 기획 탭 — 기획 에이전트 패키지의 프로젝트 팩(GET /api/plan/packs, /api/plan/packs/:id[?verify=1]). 계층 상태 none|draft|confirmed */
+export interface PlanPackSummary { id: string; name: string; prefix: string; status: string; version: string; layers: Record<string, string>; screens: number; portals: string[]; }
+export interface PlanPacksResponse { kit: { ok: boolean; dir: string; error?: string }; packs: PlanPackSummary[]; }
+export interface PlanScreen { id: string; title?: string; type?: string; portal?: string; menu?: string; req?: string[]; status?: string; hidden?: boolean; file: string; exists: boolean; }
+export interface PlanCheckItem { code: string; msg: string; }
+export interface PlanVerify { ok: boolean; violations: PlanCheckItem[]; warnings: PlanCheckItem[]; }
+export interface PlanPackDetail {
+  ok: boolean; error?: string; index: string;
+  pack: { id: string; name: string; brand: string; prefix: string; status: string; version: string; layers: Record<string, string>; portals: Record<string, unknown>; note: string };
+  screens: PlanScreen[];
+  verify: Record<string, PlanVerify> | { _error: string } | null;
 }
 
 /** 대화 탭 — 에이전트끼리 주고받은 메시지(GET /api/mail). 본문은 앞 600자, 자료 울타리 안은 '(첨부 자료 생략)'. 최신순 */

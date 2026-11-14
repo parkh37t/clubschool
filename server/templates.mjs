@@ -97,17 +97,20 @@ const DEFAULTS = [
   },
   {
     id: 'wireframe-draft',
+    // 결과 줄에 '화면설계'가 있고 기획 에이전트 패키지가 설정돼 있으면 서버가 표준 기획 프로세스(server/planning.mjs)로 나눈다.
     ko: {
-      title: '[서비스명] 화면설계 초안',
-      result: 'IA(메뉴 구조)와 핵심 화면 5개 내외의 화면설계서 초안(마크다운) — 사용자 플로우, 화면별 목적·구성 요소·상태(빈 화면·오류·로딩)·정책·예외',
-      context: '요구사항 정의서나 RFP 기능 목록을 첨부한다. 주요 사용자: [페르소나] · 채널: [앱/웹] · 핵심 과업: [예: 비대면 계좌 개설].',
-      constraints: ['시안·이미지 제작 없이 텍스트 화면 정의로만', '요구사항에 없는 기능은 "제안"으로 구분', '화면마다 접근성(KWCAG) 고려 사항 한 줄 이상'],
+      title: '[서비스명] 화면설계 — 기획 에이전트 프로세스',
+      result: '2단 화면설계서(좌 화면 · 우 사양) 핵심 화면 최대 6개와 요구 원장·작업가이드·IA·리뷰·추적 매트릭스',
+      context: '팩: [영문-소문자-팩id — 기존 팩이면 이어서, 없으면 새로 만듦]\n요구사항 정의서나 RFP 기능 목록을 첨부한다. 주요 사용자: [역할] · 채널: [앱/웹] · 핵심 과업: [예: 비대면 계좌 개설].',
+      constraints: ['작업가이드·규칙·IA 는 재하가 승인(가이드확정)한 뒤 화면 생성', '요구사항에 없는 기능은 "제안"으로 구분', '실기관·실인물 이름은 쓰지 않음(익명화)'],
+      steps: ['① 요구 원장·미확정 — 정우선', '② 작업가이드·규칙·IA — 나기획 (재하 승인: 가이드확정)', '③ 2단 화면설계서 — 나기획·표준수 (서버가 뼈대 생성, 린트·verify 게이트)', '④ 리뷰 — 고지표', '⑤ 추적 매트릭스·3키 인계 — 정우선 (재하 승인: 컨펌)'],
     },
     en: {
-      title: '[Service] wireframe spec draft',
-      result: 'A draft IA (menu structure) and screen spec for about five key screens (markdown) — user flow; per screen: purpose, components, states (empty, error, loading), policies and exceptions',
-      context: 'Attach the requirements spec or the RFP feature list. Main users: [persona] · Channel: [app/web] · Key job: [e.g. opening an account online].',
-      constraints: ['Text screen definitions only — no visuals or images', 'Mark features not in the requirements as "proposal"', 'At least one accessibility (KWCAG/WCAG) note per screen'],
+      title: '[Service] screen spec — planning-agent process',
+      result: 'Two-pane screen specs (left screen · right spec) for up to six key screens, plus requirements ledger, work guide, IA, review and trace matrix',
+      context: 'Pack: [lowercase-pack-id — continues an existing pack or creates one]\nAttach the requirements spec or the RFP feature list. Main users: [roles] · Channel: [app/web] · Key job: [e.g. opening an account online].',
+      constraints: ['Screens are generated only after Jaeha approves the work guide, rules and IA', 'Mark features not in the requirements as "proposal"', 'No real organization or person names (anonymized)'],
+      steps: ['① Requirements ledger · open items — Jeong Useon', '② Work guide · rules · IA — Na Gihoek (Jaeha approves the guide)', '③ Two-pane specs — Na Gihoek · Pyo Junsu (server scaffolds; lint/verify gate)', '④ Review — Go Jipyo', '⑤ Trace matrix · three-key handoff — Jeong Useon (Jaeha confirms)'],
     },
   },
 ];

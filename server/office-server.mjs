@@ -22,6 +22,7 @@ import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, l
 import { resolveSkills } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
 import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
+import { kitStatus, listPacks, packDetail, kitFile } from './planning.mjs';
 import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency } from './settings.mjs';
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
@@ -125,6 +126,15 @@ function localViewer(req) {
   }
 }
 
+/** 요청 Host 가 이 PC(루프백)인지 — 기획 화면 파일(/plan-files)은 터널 같은 바깥 주소로는 내주지 않는다. */
+function loopbackHost(req) {
+  try {
+    return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(`http://${req.headers.host}`).hostname);
+  } catch {
+    return false;
+  }
+}
+
 // ── 화면(dist/) 정적 제공 ──
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -172,6 +182,8 @@ async function settingsView(local) {
     deliverables_default: shown(DELIVERABLES_DEFAULT),
     deliverables_custom: Boolean(s.deliverables_dir),
     hive_dir: shown(HIVE_DIR),
+    plan_kit_dir: shown(String(s.plan_kit_dir || '')),
+    plan_kit: await kitStatus().then((k) => ({ ok: k.ok, error: k.error || '' })),
     mode: MODE,
     desktop: process.env.OFFICE_DESKTOP === '1',
     running: running(),
@@ -295,6 +307,28 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
+    // 기획 탭의 2단 화면설계서 뷰어 — 패키지 폴더의 packs/·core/ 아래 화면·자산만. 에이전트가 만든 HTML 이 이 앱의 API 를
+    // 같은 오리진으로 부르지 못하게 CSP sandbox(불투명 오리진)로 내보낸다. 이 PC 주소로 연 화면에서만.
+    if (req.method === 'GET' && url.pathname.startsWith('/plan-files/')) {
+      if (!loopbackHost(req)) { res.writeHead(403); res.end(); return; }
+      const abs = await kitFile(decodeURIComponent(url.pathname.slice('/plan-files/'.length)));
+      if (!abs) { res.writeHead(404); res.end(); return; }
+      try {
+        const body = await fs.readFile(abs);
+        const ext = path.extname(abs).toLowerCase();
+        res.writeHead(200, {
+          'Content-Type': MIME[ext] || 'application/octet-stream',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          ...(ext === '.html' ? { 'Content-Security-Policy': 'sandbox allow-scripts' } : {}),
+        });
+        res.end(body);
+      } catch {
+        res.writeHead(404); res.end();
+      }
+      return;
+    }
+
     // 오피스가 2초마다 폴링하는 상태. 브리핑 전이면 hive 에서 대기 상태를 만들어 준다.
     if (req.method === 'GET' && url.pathname === '/office-state.json') {
       sendJson(res, 200, (await readState()) || (await idleState()));
@@ -379,6 +413,33 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ...(await settingsView(true)), copied: r.copied });
       return;
     }
+    // 기획 탭 — 패키지의 팩 목록 / 팩 한 개(화면 레지스트리, ?verify=1 이면 린트·verify 실행)
+    if (req.method === 'GET' && url.pathname === '/api/plan/packs') {
+      sendJson(res, 200, await listPacks());
+      return;
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/api/plan/packs/')) {
+      const id = decodeURIComponent(url.pathname.slice('/api/plan/packs/'.length));
+      const r = await packDetail(id, { verify: url.searchParams.get('verify') === '1' });
+      sendJson(res, r.ok ? 200 : 404, r);
+      return;
+    }
+    // 기획 에이전트 패키지 폴더 지정 — 패키지 구조(scripts·packs/_template·core)를 확인한 뒤에만. 빈 값이면 끈다
+    if (req.method === 'POST' && url.pathname === '/api/settings/plan-kit') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 바꿀 수 있습니다.' }); return; }
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
+      const dir = String(body?.dir || '').trim().replace(/^"(.*)"$/, '$1');
+      if (dir) {
+        const k = await kitStatus(dir);
+        if (!k.ok) { sendJson(res, 400, { error: k.error }); return; }
+      }
+      await updateSettings({ plan_kit_dir: dir ? path.resolve(dir) : '' });
+      log(`기획 에이전트 패키지: ${dir ? path.resolve(dir) : '(끔)'}`);
+      sendJson(res, 200, await settingsView(true));
+      return;
+    }
+
     // 이 PC 에서 산출물 파일·폴더 열기(탐색기·기본 앱). 산출물 폴더 안의 문서만
     if (req.method === 'POST' && url.pathname === '/api/open') {
       if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 열 수 있습니다.' }); return; }
@@ -394,7 +455,7 @@ const server = http.createServer(async (req, res) => {
       let body;
       try { body = JSON.parse(await readBody(req)); } catch { sendJson(res, 400, { error: '잘못된 JSON' }); return; }
       // 산출물 위치는 검사·복사가 필요해 /api/settings/deliverables 로만 바꾼다
-      const { deliverables_dir: _ignored, ...patch } = body || {};
+      const { deliverables_dir: _ignored, plan_kit_dir: _ignored2, ...patch } = body || {};
       const next = await updateSettings(patch);
       log(`설정 변경: ${JSON.stringify(publicSettings(next))}`);
       sendJson(res, 200, await settingsView(true));

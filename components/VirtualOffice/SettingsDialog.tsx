@@ -42,6 +42,8 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
   const [daily, setDaily] = useState('');
   const [costMsg, setCostMsg] = useState<Msg>(null);
   const [behaviorMsg, setBehaviorMsg] = useState<Msg>(null);
+  const [kitDir, setKitDir] = useState('');
+  const [kitMsg, setKitMsg] = useState<Msg>(null);
   const loaded = useRef(false);
   const desktop = desktopBridge();
 
@@ -81,6 +83,21 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
     if (!desktop) return;
     const chosen = await desktop.pickFolder(dir.trim() || data?.deliverables_dir || '');
     if (chosen) setDir(chosen);
+  };
+
+  const setKit = async (dirValue: string) => {
+    setKitMsg(null);
+    const r = await postJson(`${apiBase}/api/settings/plan-kit`, { dir: dirValue });
+    if (!r.ok) { setKitMsg({ ok: false, text: String(r.error) }); return; }
+    setKitMsg({ ok: true, text: dirValue ? t('set.kitOn') : t('set.kitOff') });
+    setKitDir('');
+    refresh();
+    onSaved();
+  };
+  const pickKit = async () => {
+    if (!desktop) return;
+    const chosen = await desktop.pickFolder(kitDir.trim() || data?.plan_kit_dir || '');
+    if (chosen) setKitDir(chosen);
   };
 
   const saveCost = async () => {
@@ -149,6 +166,26 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
             </div>
             {note(storageMsg)}
             <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.storageNote')}</p>
+          </section>
+        )}
+
+        {connected && data && (
+          <section style={section} aria-label={t('set.kit')}>
+            <h3 style={h3}>{t('set.kit')}</h3>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: data.plan_kit?.ok ? OK_FG : MUTED, whiteSpace: 'nowrap' }}>{data.plan_kit?.ok ? t('set.kitOk') : t('set.kitNone')}</span>
+              <span style={pathBox}>{data.plan_kit_dir || '—'}</span>
+              {data.plan_kit_dir && <button type="button" style={btn} onClick={() => setKit('')}>{t('set.kitDisable')}</button>}
+            </div>
+            {!data.plan_kit?.ok && data.plan_kit?.error && data.plan_kit_dir && <p style={{ ...smallMuted, fontSize: 11.5, color: BAD_FG }}>{data.plan_kit.error}</p>}
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <input value={kitDir} onChange={(e) => setKitDir(e.target.value)} placeholder={t('set.kitPh')} spellCheck={false} aria-label={t('set.kit')}
+                style={{ ...inputStyle, marginTop: 0, fontFamily: MONO, fontSize: 12, flex: 1, resize: undefined }} />
+              {desktop && <button type="button" style={btn} onClick={pickKit}>{t('set.pick')}</button>}
+              <button type="button" style={{ ...primary, opacity: kitDir.trim() ? 1 : 0.55 }} disabled={!kitDir.trim()} onClick={() => setKit(kitDir.trim())}>{t('set.kitApply')}</button>
+            </div>
+            {note(kitMsg)}
+            <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.kitNote')}</p>
           </section>
         )}
 
