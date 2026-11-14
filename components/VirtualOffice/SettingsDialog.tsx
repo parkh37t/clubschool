@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { postJson, usePolling } from './officeApi';
 import type { OfficeSettings } from './officeApi';
 import { EnvCard } from './EnvCard';
+import { AccountSection } from './AccountSection';
 import { useOfficeLang } from './i18n';
 import type { Lang } from './i18n';
 import { BAD_FG, FONT, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, PAPER, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle, smallMuted } from './officeTheme';
@@ -155,6 +156,13 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved }: Sett
         </div>
         {!connected && <p style={smallMuted}>{t('set.offline')}</p>}
         {connected && error && !data && <p style={{ ...smallMuted, color: BAD_FG }}>{t('set.loadFail')}</p>}
+
+        {connected && apiBase !== undefined && (
+          <section style={section} aria-label={t('acc.title')}>
+            <h3 style={h3}>{t('acc.title')}</h3>
+            <AccountSection apiBase={apiBase} running={Boolean(data?.running)} />
+          </section>
+        )}
 
         {connected && data && (
           <section ref={storageRef} style={section} aria-label={t('set.storage')}>

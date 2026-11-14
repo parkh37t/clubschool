@@ -93,8 +93,9 @@ OFFICE_MODE=live ANTHROPIC_API_KEY=sk-ant-... node office-server.mjs
 | `GET /api/roster` | 팀장 + 12인의 이름·역할·스킬(이 PC 에서 쓸 수 있는지)·현재 상태(대기·진행·검수·승인대기)·지금 작업·누적 사용량 |
 | `GET /api/memory/:agent` | 에이전트 기억 파일(`memory/<agent>.md`) 내용 |
 | `GET /api/events?since=<ISO>` | events.log 증분(since 이후). 없으면 최근 200건 |
-| `GET /api/auth` | `claude auth status` 중 `loggedIn` 만(계정 메일·조직 정보는 버림). 1분 기억, `?refresh=1` 로 다시 확인 |
-| `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login`. 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
+| `GET /api/auth` | `claude auth status` — 로그인 여부, 이 PC 화면에만 계정(`account`: 메일·조직·플랜·방식·만료, 서버 메모리에만 두고 기록하지 않음), API 키 상태. 1분 기억, `?refresh=1` 로 다시 확인 |
+| `POST /api/auth/login` | 새 PowerShell 창에서 `claude auth login --claudeai`(구독 로그인, `{email}` 을 주면 미리 채움 — 형식 검사). 이 PC 화면(Origin 이 localhost·127.0.0.1)에서 온 요청만 받음 |
+| `POST /api/auth/logout` | `claude auth logout` — 이 PC 화면·`{confirm:true}`·브리핑이 돌지 않을 때만(409). 이 PC 의 claude 명령 로그인도 함께 풀린다. 이벤트에 메일은 남기지 않음 |
 | `GET /api/usage/top` | 화면 위 사용량 막대 — 구독 사용 한도 창(`limits.json`), 오늘 사용 토큰(끝난 작업 + 실행 중), 담당별 하루 한도 대비, 실행 중 작업의 토큰/한도 |
 | `POST /api/usage/probe` | 구독 사용 한도 지금 확인 — claude_code 모드·이 PC 화면·1분에 한 번. 작은 호출 1번(사용 토큰 기록) |
 | `GET /api/skills/registry` | 문서·제안 스킬 등록부와 이 PC 에서 찾은 위치(저장소·사용자·동기화·플러그인), 고객사 전용 제안 스킬 이름. 경로는 보내지 않음 |

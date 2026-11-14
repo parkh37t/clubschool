@@ -149,34 +149,59 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine, stopWhen } = {
 }
 
 /**
- * 로그인 여부. `claude auth status` 의 JSON 에는 계정 메일·조직 정보도 있으므로 loggedIn 만 꺼내고 나머지는 버린다.
- * @returns {Promise<{cli:boolean, loggedIn:boolean|null}>}  loggedIn=null 은 판단 불가(시간 초과 등)
+ * 로그인 여부와 계정 — `claude auth status` 의 JSON 에서 화면에 보일 것만 꺼낸다(메일·조직·플랜·방식·만료).
+ * 계정 정보는 서버 메모리에만 두고, 이 PC 화면에서 온 요청에만 보낸다(office-server /api/auth). hive·기록에는 남기지 않는다.
+ * @returns {Promise<{cli:boolean, loggedIn:boolean|null, account?:object}>}  loggedIn=null 은 판단 불가(시간 초과 등)
  */
 export async function authStatus() {
   const r = await run([bin(), 'auth', 'status'], { timeoutMs: 20000 });
   if (r.error && r.error.code === 'ENOENT') return { cli: false, loggedIn: null };
   if (r.error) return { cli: false, loggedIn: null };
   const res = parseResultJson(r.stdout);
-  if (res && typeof res.loggedIn === 'boolean') return { cli: true, loggedIn: res.loggedIn };
-  if (classify(r) === 'not_logged_in') return { cli: true, loggedIn: false };
+  if (res && typeof res.loggedIn === 'boolean') {
+    const pick = (k) => (typeof res[k] === 'string' ? res[k].slice(0, 120) : '');
+    const account = res.loggedIn ? {
+      email: pick('email'), org: pick('orgName'), plan: pick('subscriptionType') || pick('planTier'), tier: pick('planTier'),
+      method: pick('authMethod'), provider: pick('apiProvider'), expires_at: pick('loginExpiresAt'),
+    } : null;
+    return { cli: true, loggedIn: res.loggedIn, account };
+  }
+  if (classify(r) === 'not_logged_in') return { cli: true, loggedIn: false, account: null };
   return { cli: true, loggedIn: null };
 }
 
 /**
- * 새 PowerShell 창에서 `claude auth login` 을 연다. 브라우저 승인 뒤 코드를 같은 창에 붙여 넣는 대화형이라
- * 서버 안에서 돌리지 않고 창을 따로 띄운다. Windows 전용.
+ * 로그아웃 — `claude auth logout`. 이 PC 의 Claude Code 로그인(같은 설정 폴더를 쓰는 claude 명령)이 함께 풀린다.
+ * 진행 중인 브리핑이 없는지는 호출한 쪽이 확인한다.
+ * @returns {Promise<{ok:boolean, code?:string, message?:string}>}
  */
-export async function openLoginWindow() {
+export async function logout() {
+  const r = await run([bin(), 'auth', 'logout'], { timeoutMs: 30000 });
+  if (r.error && r.error.code === 'ENOENT') return { ok: false, code: 'cli_missing', message: failureHint('cli_missing') };
+  if (r.code !== 0 || r.error) return { ok: false, code: classify(r), message: (r.stderr || r.stdout || '').toString().trim().slice(0, 300) || '로그아웃하지 못했습니다.' };
+  return { ok: true };
+}
+
+const EMAIL_RE = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,180}\.[A-Za-z]{2,24}$/;
+export const validLoginEmail = (e) => EMAIL_RE.test(String(e || ''));
+
+/**
+ * 새 PowerShell 창에서 `claude auth login --claudeai` 를 연다(구독 로그인 — Console(API 요금) 로그인은 쓰지 않는다).
+ * 브라우저 승인 뒤 코드를 같은 창에 붙여 넣는 대화형이라 서버 안에서 돌리지 않고 창을 따로 띄운다. Windows 전용.
+ * email 을 주면 로그인 화면에 미리 채운다(형식이 맞을 때만 — 스크립트에 그대로 넣으므로 엄격히 거른다).
+ */
+export async function openLoginWindow({ email = '' } = {}) {
   if (process.platform !== 'win32') return { ok: false, message: 'Windows 에서만 창을 띄웁니다. 터미널에서 claude auth login 을 실행하세요.' };
+  if (email && !validLoginEmail(email)) return { ok: false, message: '이메일 형식이 아닙니다.' };
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ax-office-login-'));
   const ps1 = path.join(dir, 'claude-login.ps1');
   const exe = bin().replace(/'/g, "''");
   const script = [
     '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
     "$Host.UI.RawUI.WindowTitle = 'Claude 로그인 - Wylie AX Office'",
-    "Write-Host 'Claude 로그인을 시작합니다. 브라우저에서 승인한 뒤, 화면에 나온 코드를 이 창에 붙여 넣으세요.'",
+    "Write-Host 'Claude 로그인을 시작합니다. 브라우저에서 자기 Claude 계정으로 승인한 뒤, 화면에 나온 코드를 이 창에 붙여 넣으세요.'",
     "Write-Host ''",
-    `& '${exe}' auth login`,
+    `& '${exe}' auth login --claudeai${email ? ` --email '${email}'` : ''}`,
     "Write-Host ''",
     "Write-Host '끝났으면 이 창을 닫아도 됩니다. AX Office 화면의 로그인 배너는 잠시 뒤 사라집니다.'",
   ].join('\r\n');

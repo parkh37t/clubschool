@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs';
 import { readState, writeState, clearState } from './state.mjs';
 import { runBriefing, watchOrphanApprovals } from './orchestrator.mjs';
 import * as hive from './hive.mjs';
-import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, killAllChildren, onRateLimit, probeLimits, failureHint, billingEnvPresent, apiKeyAllowed } from './claudeCode.mjs';
+import { claudeAvailable, claudeBinPath, authStatus, openLoginWindow, logout as logoutCli, validLoginEmail, killAllChildren, onRateLimit, probeLimits, failureHint, billingEnvPresent, apiKeyAllowed } from './claudeCode.mjs';
 import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, loadCustomAgents, addCustomAgent, removeCustomAgent, agentById, nameOf } from './roster.mjs';
 import { resolveSkills, registryStatus } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
@@ -336,7 +336,7 @@ async function envStatus(force) {
       };
       envCache = { at: Date.now(), data, inflight: null };
       // 로그인 배너(/api/auth)도 방금 확인한 값으로 맞춘다 — [다시 확인] 뒤 배너가 1분 동안 옛 상태로 남지 않게.
-      authCache = { at: Date.now(), data: { cli: data.cli.found, loggedIn: data.loggedIn, checked_at: data.checked_at }, inflight: authCache.inflight };
+      authCache = { at: Date.now(), data: { cli: data.cli.found, loggedIn: data.loggedIn, account: version ? auth.account || null : null, checked_at: data.checked_at }, inflight: authCache.inflight };
       return data;
     })().catch((e) => {
       envCache.inflight = null;
@@ -427,17 +427,38 @@ const server = http.createServer(async (req, res) => {
       const a = await cachedAuth(url.searchParams.get('refresh') === '1');
       // api_key: 환경에 과금 자격 변수가 있는지(이름만), 그 키로 실제 과금되는지(allowed) — 화면이 경고 띠를 띄운다
       const keys = billingEnvPresent();
-      sendJson(res, 200, { loggedIn: a.loggedIn, cli: a.cli, checked_at: a.checked_at, mode: MODE, api_key: { present: keys, billed: MODE === 'claude_code' && keys.length > 0 && apiKeyAllowed() } });
+      // 계정(메일·플랜·방식)은 이 PC 화면에만 — 터널 등 다른 출처에는 로그인 여부만
+      sendJson(res, 200, { loggedIn: a.loggedIn, cli: a.cli, checked_at: a.checked_at, mode: MODE, api_key: { present: keys, billed: MODE === 'claude_code' && keys.length > 0 && apiKeyAllowed() }, ...(localViewer(req) && a.account ? { account: a.account } : {}) });
       return;
     }
 
     // [로그인] 버튼 — 새 PowerShell 창에서 claude auth login. 이 PC 화면에서 온 요청만 받는다.
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
       if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 로그인 창을 열 수 있습니다.' }); return; }
-      const r = await openLoginWindow();
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 빈 몸체 허용 */ }
+      const email = String(body?.email || '').trim();
+      if (email && !validLoginEmail(email)) { sendJson(res, 400, { error: '이메일 형식이 아닙니다.' }); return; }
+      const r = await openLoginWindow({ email });
       authCache.at = 0; // 다음 확인 때 다시 묻는다
-      log(r.ok ? '로그인 창을 열었습니다(claude auth login).' : `로그인 창 실패: ${r.message}`);
+      log(r.ok ? '로그인 창을 열었습니다(claude auth login --claudeai).' : `로그인 창 실패: ${r.message}`);
       sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true } : { error: r.message });
+      return;
+    }
+    // 로그아웃 — 이 PC 의 Claude Code 로그인을 푼다. 이 PC 화면에서, 확인(confirm:true)을 받아, 브리핑이 돌지 않을 때만.
+    // 다른 사람이 자기 계정으로 로그인하기 전에 쓴다. 계정 메일은 기록에 남기지 않는다.
+    if (req.method === 'POST' && url.pathname === '/api/auth/logout') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 로그아웃할 수 있습니다.' }); return; }
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 아래에서 거절 */ }
+      if (body?.confirm !== true) { sendJson(res, 400, { error: '로그아웃하려면 확인이 필요합니다(confirm:true).' }); return; }
+      if (running()) { sendJson(res, 409, { error: '브리핑이 진행 중입니다. 끝난 뒤에 로그아웃하세요(진행 중인 작업이 로그인 풀림으로 실패합니다).' }); return; }
+      const r = await logoutCli();
+      authCache.at = 0;
+      envCache.at = 0;
+      await hive.appendEvent({ kind: 'auth', action: 'logout', ok: r.ok, by: OWNER.id });
+      log(r.ok ? 'Claude 로그아웃(claude auth logout) — 다음 실행 전에 로그인 필요' : `로그아웃 실패: ${r.message}`);
+      sendJson(res, r.ok ? 200 : 400, r.ok ? { ok: true, auth: await cachedAuth(true) } : { error: r.message, code: r.code });
       return;
     }
 

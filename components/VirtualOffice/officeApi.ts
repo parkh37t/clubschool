@@ -130,6 +130,8 @@ export interface AuthState {
   loggedIn: boolean | null; cli: boolean; checked_at?: string; mode?: string;
   /** 환경의 과금 자격 변수(이름만)와, 그것으로 실제 과금되는지(OFFICE_ALLOW_API_KEY=1 일 때만) */
   api_key?: { present: string[]; billed: boolean };
+  /** 로그인한 계정 — 이 PC 화면에만 온다(메일·조직·플랜·인증 방식·만료) */
+  account?: { email: string; org: string; plan: string; tier: string; method: string; provider: string; expires_at: string } | null;
 }
 
 /** url 을 ms 마다 GET 해 JSON 을 돌려준다. url 이 없으면 멈춘다. refresh() 로 즉시 다시 읽는다. */

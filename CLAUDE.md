@@ -166,6 +166,9 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   표준 절차 단계·작업 글 자동 부착(`auto`)·팀장 분해의 선택(`extra_skills`, 작업당 최대 2개)으로 붙는다. 외부 도구·웹·데이터 연결이 필요한 스킬은 `usable:false`(보이되 붙이지 않음). 스킬 탭에서 본다.
 - **사용량 막대(화면 위)**: `/api/usage/top` — 구독 사용 한도(주간·5시간 창 사용률·재설정 시각, `limits.json`), 오늘 사용 토큰(끝난 작업 + 실행 중), 하루 한도에 가까운 담당,
   실행 중 작업(live 의 `k:'usage'` 줄, 2만 토큰마다)을 보여 준다. [지금 확인]은 claude_code 모드에서 1분에 한 번 작은 호출로 한도를 새로 받는다(그 사용 토큰도 기록).
+- **Claude 계정**: 설정 창 맨 위 — 이 PC 에 로그인된 계정(메일·플랜·방식·만료)을 이 PC 화면에만 보이고, 로그인은 새 창(`claude auth login --claudeai`),
+  로그아웃은 확인·브리핑 없음 조건에서 `claude auth logout`(이 PC 의 claude 명령 로그인도 함께 풀림). 사람마다 자기 PC 에서 자기 Claude 계정으로 로그인하는 구조다.
+  시험은 가짜 claude(`CLAUDE_BIN`)로 한다 — 실제 계정을 로그아웃시키지 않는다.
 - **설정·산출물 위치**: 설정 창에서 산출물 폴더·비용 한도·QA 자동 보완·동시 작업 수(1~3)를 바꾼다. 산출물 폴더는 `server/storage.mjs` 가 쓰기 시험 후
   `paths.mjs` 의 `DELIVERABLES_DIR`(live binding)를 바꾸고 `settings.json` 의 `deliverables_dir` 에 남긴다. 브리핑 진행 중에는 바꾸지 않고, 예전 폴더 파일은 지우지 않는다.
   파일 열기(`/api/open`)는 산출물 폴더 안의 문서만, 이 PC 화면에서 온 요청만 받는다.
