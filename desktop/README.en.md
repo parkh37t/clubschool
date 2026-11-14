@@ -26,6 +26,9 @@ The app calls the Claude Code CLI (`claude.exe`) that ships with the Claude desk
 If you are signed out, a banner appears at the top. Click **[Sign in]**: a PowerShell window opens; approve in the browser and paste
 the code shown into that window. The banner disappears once it is confirmed.
 
+When the Claude desktop app updates, its bundled Claude Code changes version and **you may be signed out.** If the banner comes back, sign in the same way.
+AX Office finds the new Claude Code without a restart. Briefings sent while signed out don't start; the queue shows them as failed with a note.
+
 ## Handing over work
 
 - **Message** (default): type in the input box and press Ctrl+Enter. It joins the queue and the lead's resident session answers one message at a time.

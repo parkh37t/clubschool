@@ -57,16 +57,26 @@ function findDesktopBundledClaude() {
   } catch { return null; }
 }
 
-const BIN = process.env.CLAUDE_BIN
-  || (process.platform === 'win32' ? (findDesktopBundledClaude() || 'claude.cmd') : 'claude');
+// 실행 파일은 부를 때마다 정한다. 데스크톱 앱이 업데이트되면 내장 CLI 폴더(<버전>\<해시>)가 바뀌고 옛 폴더는 지워지므로,
+// 서버 시작 때 찾은 경로를 계속 쓰면 업데이트 뒤 모든 실행이 cli_missing 으로 실패한다(2.1.321 → 2.1.325 에서 실제로 겪음).
+// 기억한 경로가 아직 있으면 그대로 쓰고, 사라졌으면 다시 찾는다.
+let cachedBin = '';
+function bin() {
+  if (process.env.CLAUDE_BIN) return process.env.CLAUDE_BIN;
+  if (process.platform !== 'win32') return 'claude';
+  if (cachedBin && fsSync.existsSync(cachedBin)) return cachedBin;
+  const found = findDesktopBundledClaude();
+  if (found && found !== cachedBin) cachedBin = found;
+  return found || 'claude.cmd'; // 데스크톱 앱이 없으면 PATH 의 claude.cmd(다음 호출 때 다시 찾아본다)
+}
 // .cmd/.bat 는 셸이 필요하지만, .exe 를 셸로 돌리면 cmd.exe 가 JSON 인용부호를 깨뜨린다.
-const NEEDS_SHELL = process.platform === 'win32' && /\.(cmd|bat)$/i.test(BIN);
+const needsShell = (b) => process.platform === 'win32' && /\.(cmd|bat)$/i.test(b);
 
-export function claudeBinPath() { return BIN; }
+export function claudeBinPath() { return bin(); }
 
 /** CLI 가 PATH 에 있는지. 없으면 null 대신 버전 문자열을 돌려주지 않고 false. */
 export async function claudeAvailable() {
-  const r = await run([BIN, '--version'], { timeoutMs: 15000 });
+  const r = await run([bin(), '--version'], { timeoutMs: 15000 });
   return r.code === 0 && !r.error ? r.stdout.trim() : false;
 }
 
@@ -78,7 +88,7 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine } = {}) {
     let partial = '';
     let child;
     try {
-      child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: NEEDS_SHELL, windowsHide: true });
+      child = spawn(argv[0], argv.slice(1), { cwd, env: { ...process.env, ...env }, shell: needsShell(argv[0]), windowsHide: true });
     } catch (e) {
       resolve({ code: -1, stdout, stderr, error: e });
       return;
@@ -105,7 +115,7 @@ function run(argv, { cwd, stdin, timeoutMs = 300000, env, onLine } = {}) {
  * @returns {Promise<{cli:boolean, loggedIn:boolean|null}>}  loggedIn=null 은 판단 불가(시간 초과 등)
  */
 export async function authStatus() {
-  const r = await run([BIN, 'auth', 'status'], { timeoutMs: 20000 });
+  const r = await run([bin(), 'auth', 'status'], { timeoutMs: 20000 });
   if (r.error && r.error.code === 'ENOENT') return { cli: false, loggedIn: null };
   if (r.error) return { cli: false, loggedIn: null };
   const res = parseResultJson(r.stdout);
@@ -122,13 +132,13 @@ export async function openLoginWindow() {
   if (process.platform !== 'win32') return { ok: false, message: 'Windows 에서만 창을 띄웁니다. 터미널에서 claude auth login 을 실행하세요.' };
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'ax-office-login-'));
   const ps1 = path.join(dir, 'claude-login.ps1');
-  const bin = BIN.replace(/'/g, "''");
+  const exe = bin().replace(/'/g, "''");
   const script = [
     '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
     "$Host.UI.RawUI.WindowTitle = 'Claude 로그인 - Wylie AX Office'",
     "Write-Host 'Claude 로그인을 시작합니다. 브라우저에서 승인한 뒤, 화면에 나온 코드를 이 창에 붙여 넣으세요.'",
     "Write-Host ''",
-    `& '${bin}' auth login`,
+    `& '${exe}' auth login`,
     "Write-Host ''",
     "Write-Host '끝났으면 이 창을 닫아도 됩니다. AX Office 화면의 로그인 배너는 잠시 뒤 사라집니다.'",
   ].join('\r\n');
@@ -141,6 +151,15 @@ export async function openLoginWindow() {
   child.on('error', () => {});
   child.unref();
   return { ok: true };
+}
+
+/** 실패 코드 → 재하가 읽을 안내. 화면(대기열·작업 실패 사유)과 기록에 같은 문구를 쓴다. */
+export function failureHint(code) {
+  if (code === 'cli_missing') return 'Claude Code 실행 파일을 찾지 못했습니다. Claude 데스크톱 앱이 설치돼 있는지 확인하세요(앱이 막 업데이트됐다면 잠시 뒤 다시 보내 주세요).';
+  if (code === 'not_logged_in') return 'Claude 로그인이 풀려 있습니다. 화면 위 [로그인]으로 다시 로그인한 뒤 다시 보내 주세요.';
+  if (code === 'rate_limit') return '사용량 한도에 걸렸습니다. 잠시 뒤 다시 보내 주세요.';
+  if (code === 'timeout') return '시간 안에 끝나지 않았습니다.';
+  return '';
 }
 
 function classify(r) {
@@ -186,7 +205,7 @@ export async function runStructured({ system, prompt, schema, model, timeoutMs =
   // `--bare` 는 키체인/OAuth 자격 증명을 읽지 않아(API 키 전용) claude.ai 로그인 PC 에서는 "Not logged in" 이 난다.
   // 그래서 --bare 대신 --tools "" + --setting-sources "" + --strict-mcp-config 로 격리한다.
   const argv = [
-    BIN, '-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema),
+    bin(), '-p', '--output-format', 'json', '--json-schema', JSON.stringify(schema),
     '--tools', '', '--setting-sources', '', '--strict-mcp-config',
     '--no-session-persistence', '--max-turns', String(maxTurns),
   ];
@@ -228,7 +247,7 @@ function streamResult(stdout) {
  */
 export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000, maxTurns = 40, addDirs = [], maxBudgetUsd, onEvent }) {
   const argv = [
-    BIN, '-p', '--output-format', 'stream-json', '--verbose',
+    bin(), '-p', '--output-format', 'stream-json', '--verbose',
     '--allowedTools', 'Read', 'Write', 'Edit', 'Grep', 'Glob',
     '--disallowedTools', 'Bash', 'Skill', 'WebFetch', 'WebSearch',
     '--permission-mode', 'acceptEdits',
@@ -259,7 +278,7 @@ export async function runAgent({ system, prompt, cwd, model, timeoutMs = 600000,
  */
 export async function runLeaderTurn({ system, prompt, schema, sessionId, resume, cwd, addDirs = [], model, onEvent, timeoutMs = 300000, maxTurns = 12 }) {
   const argv = [
-    BIN, '-p', '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(schema),
+    bin(), '-p', '--output-format', 'stream-json', '--verbose', '--json-schema', JSON.stringify(schema),
     '--allowedTools', 'Read', 'Grep', 'Glob',
     '--disallowedTools', 'Bash', 'Write', 'Edit', 'Skill', 'WebFetch', 'WebSearch',
     '--setting-sources', '', '--strict-mcp-config', '--max-turns', String(maxTurns),
@@ -282,5 +301,6 @@ export async function runLeaderTurn({ system, prompt, schema, sessionId, resume,
 
 /** 대화형 터미널(node-pty)에서 띄울 실행 파일과 셸 필요 여부. */
 export function interactiveCommand() {
-  return { bin: BIN, needsShell: NEEDS_SHELL };
+  const b = bin();
+  return { bin: b, needsShell: needsShell(b) };
 }

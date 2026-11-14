@@ -13,7 +13,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { HIVE_DIR, DELIVERABLES_DIR, AGENTS_DIR } from './paths.mjs';
 import * as hive from './hive.mjs';
-import { runLeaderTurn } from './claudeCode.mjs';
+import { runLeaderTurn, failureHint } from './claudeCode.mjs';
 import { getSettings, updateSettings, languageLine } from './settings.mjs';
 import { liveSink, liveNote } from './live.mjs';
 import { LEADER, OWNER, rosterTable } from './roster.mjs';
@@ -168,7 +168,8 @@ async function processMessage(item, { mode, log }) {
     if (!r.ok) {
       log(`팀장 세션 실패(${r.code}) — ${r.message}`);
       liveNote('lead', meta, `${r.code}: ${String(r.message).slice(0, 200)}`, 'error');
-      await patch(item.id, { status: 'failed', finished: hive.nowIso(), error: `${r.code}: ${String(r.message).slice(0, 300)}` });
+      const hint = failureHint(r.code);
+      await patch(item.id, { status: 'failed', finished: hive.nowIso(), error: hint || `${r.code}: ${String(r.message).slice(0, 300)}` });
       return;
     }
     if (sessionId !== settings.leader_session_id) await updateSettings({ leader_session_id: r.sessionId || sessionId });
@@ -236,7 +237,7 @@ export async function startQueue({ mode, log, runBriefing, isLeaderPtyOpen }) {
           briefBusy = true;
           await patch(next.id, { status: 'running', started: hive.nowIso() });
           runBriefing(next.briefing)
-            .then(() => patch(next.id, { status: 'done', finished: hive.nowIso() }))
+            .then((res) => patch(next.id, res?.failed ? { status: 'failed', finished: hive.nowIso(), error: String(res.failed).slice(0, 300) } : { status: 'done', finished: hive.nowIso() }))
             .catch(async (e) => { log(`브리핑 오류(${next.id}): ${e?.stack || e}`); await patch(next.id, { status: 'failed', finished: hive.nowIso(), error: String(e?.message || e) }); })
             .finally(() => { briefBusy = false; });
         }

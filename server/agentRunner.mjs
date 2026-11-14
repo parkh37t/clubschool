@@ -10,7 +10,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { resolveSkills } from './skills.mjs';
-import { runAgent as runClaudeCodeAgent } from './claudeCode.mjs';
+import { runAgent as runClaudeCodeAgent, failureHint } from './claudeCode.mjs';
 import { ROSTER, nameOf } from './roster.mjs';
 import { APP_ROOT, AGENTS_DIR, DELIVERABLES_DIR, relData, absData } from './paths.mjs';
 import { getSettings } from './settings.mjs';
@@ -369,7 +369,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   }
   if (!r.ok) {
     log(`${name}: 실행 실패(${r.code}) — ${r.message}`);
-    return { file: null, summary: '', costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
+    return { file: null, summary: '', costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${failureHint(r.code) || r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
   }
   const extraLeft = [];
   let { file, note } = await findOutput();

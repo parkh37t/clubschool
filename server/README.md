@@ -27,6 +27,8 @@ node office-server.mjs          # 산출물은 목업, QA 내용검토는 not_ru
 claude                          # 한 번 로그인돼 있으면 됨 (Pro·Max·Team 구독)
 OFFICE_MODE=claude_code node office-server.mjs      # Windows: $env:OFFICE_MODE="claude_code"; node office-server.mjs
 ```
+실행 파일은 부를 때마다 확인합니다 — Claude 데스크톱 앱이 업데이트되면 내장 CLI 폴더(`<버전>\<해시>`)가 바뀌고 옛 폴더가 지워지기 때문입니다.
+CLI 를 찾지 못하거나 로그인이 풀려 있으면 브리핑을 시작하지 않고(대기열 '실패' + 안내), 이 환경 문제는 서킷 브레이커에 세지 않습니다.
 API 키가 필요 없고 자격 증명을 코드가 보지 않습니다. 팀장 분해·QA 판정은 `claude -p --json-schema`(도구 없음, 격리),
 역할 에이전트는 `claude -p`(Read/Write/Grep/Glob 허용, Bash 차단)로 돕니다. `claude` 가 없으면 **더미로 바꿔 돌리지 않고** 안내만 적고 끝냅니다.
 

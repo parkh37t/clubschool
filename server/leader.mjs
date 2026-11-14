@@ -11,7 +11,7 @@
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { runStructured } from './claudeCode.mjs';
+import { runStructured, failureHint } from './claudeCode.mjs';
 import { ROSTER, LEADER, OWNER, STAGES, QA_AGENT, rosterTable, nameOf } from './roster.mjs';
 import { hasSkill } from './skills.mjs';
 import { AGENTS_DIR } from './paths.mjs';
@@ -186,6 +186,12 @@ export async function decompose(briefing, { mode, model, log }) {
     if (r.ok) {
       const tasks = (r.data.tasks || []).map((t) => ({ ...t, needs_approval: Boolean(t.needs_approval), approval_reason: t.needs_approval ? (t.approval_reason || '승인 필요') : '' }));
       return { tasks, questions: r.data.questions || [], summary: r.data.summary, via: 'claude_code', costUsd: r.costUsd };
+    }
+    // CLI 가 없거나 로그인이 풀렸으면 작업을 만들어도 전부 같은 이유로 실패한다 — 더미로 바꿔 돌리지 않고 멈춘다(CLAUDE.md §8).
+    if (r.code === 'cli_missing' || r.code === 'not_logged_in') {
+      const why = failureHint(r.code);
+      log(`팀장: Claude Code 분해 실패(${r.code}) — 브리핑을 시작하지 않음`);
+      return { tasks: [], questions: [], blocked: why, blockedCode: r.code, via: `blocked:${r.code}`, costUsd: 0 };
     }
     log(`팀장: Claude Code 분해 실패(${r.code}) — ${r.message}. 규칙 분해로 대체하고 사실을 기록합니다.`);
     const fb = await decomposeByRules(b);

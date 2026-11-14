@@ -172,6 +172,14 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     const q = await hive.addQuestion({ from: LEADER.id, task: '', text, briefing: briefingId });
     log(`질문 ${q.id}: 팀장 → 재하 — ${text}`);
   }
+  if (plan.blocked) {
+    await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'report', task: '', body: `브리핑 "${b.title}" 을 시작하지 못했습니다.\n\n${plan.blocked}` });
+    await hive.routeMail();
+    await hive.writeBlackboard(`# 현황판 — ${b.title}\n\n시작하지 못함: ${plan.blocked}\n`);
+    log(`브리핑 시작 안 함(${plan.blockedCode}): ${b.title}`);
+    await publish('awaiting', { stage: 0, question: plan.blocked });
+    return { failed: plan.blocked };
+  }
   if (!plan.tasks.length) {
     const q = plan.questions.join('\n- ');
     await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'question', task: '', body: `브리핑 "${b.title}" 을 작업으로 나누지 못했습니다.\n\n- ${q}\n\n결과 줄을 고쳐 다시 보내 주세요.` });
@@ -314,7 +322,9 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       await hive.updateTask(task.id, { status: '실패', gate: 'FAIL', cost_usd: totalCost, cost_at: hive.nowIso(), qa: { summary: r.leftovers?.[0] || '산출물 없음' } });
       await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, body: `실패: ${r.leftovers?.[0] || '산출물 없음'}` });
       await hive.routeMail();
-      await recordOutcome(task.owner, 'fail', r.leftovers?.[0] || '');
+      // CLI 없음·로그인 풀림은 PC 환경 문제라 담당자의 연속 문제(서킷 브레이커)로 세지 않는다.
+      if (r.failure === 'cli_missing' || r.failure === 'not_logged_in') log(`${task.id}: 환경 문제(${r.failure})라 서킷 브레이커에 넣지 않음`);
+      else await recordOutcome(task.owner, 'fail', r.leftovers?.[0] || '');
       leftovers.push(`${task.id} ${nameOf(task.owner)}: ${r.leftovers?.[0] || '산출물 없음'}`);
       log(`${task.id} 실패`);
       await publish();
