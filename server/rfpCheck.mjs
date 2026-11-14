@@ -13,7 +13,7 @@ import { parseTables } from './xlsxExport.mjs';
 const MIN_QUOTE = 8; // 이보다 짧은 따옴표 안 글은 인용으로 보지 않는다(용어 강조 등)
 const MAX_SOURCE = 4 * 1024 * 1024;
 const AXES = ['성능', '가용성', '보안', '접근성', '호환성', '감리'];
-const ID_RE = /^(?:REQ|FR|NFR|TR|OR|CR|SFR|PER|SER|INR|DAR|QUR|COR|PMR|PSR|ECR)[-_A-Z0-9]*\d+$/i;
+export const ID_RE = /^(?:REQ|FR|NFR|TR|OR|CR|SFR|PER|SER|INR|DAR|QUR|COR|PMR|PSR|ECR)[-_A-Z0-9]*\d+$/i;
 
 const xmlText = (xml) => xml.replace(/<\/w:p>|<\/hp:p>|<\/a:p>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 

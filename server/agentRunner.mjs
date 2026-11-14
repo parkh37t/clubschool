@@ -86,6 +86,24 @@ async function runMock({ worker, gate, instruction, outDir, skills, priorFiles }
   return { file, summary: `[목업] ${worker.task}`, costUsd: 0 };
 }
 
+/**
+ * 지침이 서로 다를 때 어느 스킬을 따를지 — 사내 스킬(wylie-*)이 붙었을 때만 한 줄 넣는다.
+ * 순서: 고객사 전용 제안 스킬(고객 고유 용어·요구·제출 규격) → 사내 스킬 → 공용·범용 스킬. proposal-maker 는 목차 후보로만
+ * (색·서체·문체·회사소개 배치·목표 수치 권장이 사내 규칙과 부딪힌다).
+ */
+export function skillPriorityLines(applied = []) {
+  const names = applied.map((s) => s.name);
+  const internal = names.filter((n) => /^wylie-/.test(n));
+  if (!internal.length) return [];
+  const client = names.filter((n) => /-proposal$/.test(n) && !/^wylie-/.test(n));
+  return [
+    client.length
+      ? `- 지침이 서로 다르면 고객사 전용 스킬(${client.join(', ')})을 고객 고유 사항(용어·요구·제출 규격)에서 먼저 따르고, 그 밖에는 사내 스킬(${internal.join(', ')})을 따른다. 공용 스킬은 그 둘이 다루지 않는 부분에만 쓴다.`
+      : `- 지침이 서로 다르면 사내 스킬(${internal.join(', ')})을 따른다. 공용 스킬은 사내 스킬이 다루지 않는 부분에만 쓴다.`,
+    ...(names.includes('proposal-maker') ? ['- proposal-maker 는 목차 후보를 고를 때만 참고한다 — 색·서체·문체·회사소개 배치·목표 수치 같은 규칙은 사내 스킬을 따른다.'] : []),
+  ];
+}
+
 /** 라이브 에이전트에게 줄 지시문. 검토·테스트를 위해 따로 분리해 둔다. */
 export function buildLivePrompt({ worker, gate, instruction, outDir, skills, priorFiles = [] }) {
   const rel = path.relative(REPO_ROOT, outDir) || '.';
@@ -114,6 +132,7 @@ export function buildLivePrompt({ worker, gate, instruction, outDir, skills, pri
           '- 지침에 이 저장소(프로젝트 관리 대시보드) 전용 언급(VIEW_NAMES·components/ui·useDataStore 등)이 있으면 무시하고 이번 고객 과제 기준으로 적용합니다.',
           '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않습니다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술합니다.',
           '- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행입니다. 질문 대신 "가정"·"미해결"로 표시하고 계속합니다.',
+          ...skillPriorityLines(applied),
           ...applied.flatMap((s) => [
             '',
             `<skill name="${s.name}">`,
@@ -327,7 +346,11 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   const table = !broken && task.export?.includes('xlsx')
     ? '\n## 견적서(안) — 목업\n| 업무구분 | 등급 | 인원 | 수량(M/M) | 단가(원) | 금액(원) |\n| --- | --- | ---: | ---: | ---: | ---: |\n| 기획 | 고급 | 1 | 2.5 | 10,000,000 | 25,000,000 |\n| 합계 |  | 1 | 2.5 |  | 25,000,000 |\n'
     : '';
-  const extra = (!broken && task.process === 'planning' && task.step === 'clarify' ? await mockClarifyBlock(task) : '') + table;
+  // 보완 재작업 목업은 변경 기록(CHG) 표를 붙여 chg_log 검사까지 배선을 시험한다
+  const chg = !broken && revision && task.process !== 'planning'
+    ? '\n## 변경 기록 — 목업\n| CHG id | 지적 | 변경 전 | 변경 후 | 영향 위치 |\n| --- | --- | --- | --- | --- |\n| CHG-01 | 본문이 비어 있음 | 빈 산출물 | 목업 본문 작성 | 전체 |\n'
+    : '';
+  const extra = (!broken && task.process === 'planning' && task.step === 'clarify' ? await mockClarifyBlock(task) : '') + table + chg;
   await fs.writeFile(file, md + extra, 'utf8');
   sink({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: file, content: md } }] } });
   sink({ type: 'user', message: { content: [{ type: 'tool_result', content: 'ok' }] } });
@@ -359,6 +382,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
       '- 지침이 이 저장소(프로젝트 관리 대시보드) 전용 언급(VIEW_NAMES·components/ui·useDataStore 등)을 담고 있으면 무시하고 이번 고객 과제 기준으로 적용한다.',
       '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않는다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술한다. Word 사본은 서버가 만들고, 엑셀이 필요한 단계는 마크다운 표를 서버가 엑셀로 옮긴다.',
       '- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행이다. 질문 대신 "가정"·"미해결"로 표시하고, 꼭 필요한 것만 회신의 "재하에게 질문"에 적는다.',
+      ...skillPriorityLines(applied),
       ...inline.flatMap((sk) => ['', `<skill name="${sk.name}">`, ...(sk.refs ? [`(참고자료 폴더: ${sk.refs} — 필요하면 Read)`] : []), sk.body, '</skill>']),
       ...(refOnly.length ? ['', '## 참고 스킬 — 본문은 넣지 않았다. 이번 작업에 꼭 필요할 때만 지침 파일을 Read 로 읽는다(길어서 사용 토큰이 많이 든다)',
         ...refOnly.map((sk) => `- ${sk.name}: ${sk.desc || '(설명 없음)'}${sk.note ? ` — ${sk.note}` : ''} · 지침 파일: ${path.join(sk.dir, 'SKILL.md')}`)] : []),

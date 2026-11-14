@@ -32,7 +32,7 @@ const BUILTIN = [
   { id: 'baek', dept: '개발', dept_en: 'Engineering', role: 'API·DB·인증·보안 설계', role_en: 'API, DB, auth and security design', skills: ['db-modeling', 'api-design'], stages: ['07_publish'] },
   { id: 'gu', dept: '개발', dept_en: 'Engineering', role: '프론트엔드 구현·상태·연동', role_en: 'Frontend build, state and integration', skills: ['frontend-implementation'], stages: ['07_publish'] },
   { id: 'go', dept: '데이터', dept_en: 'Data', role: 'KPI·이벤트 로그·QA 검증·테스트 시나리오. 모든 산출물의 게이트 판정(QA) 담당', role_en: 'KPIs, event logs, QA and test scenarios; gate review of every deliverable', skills: ['kpi-event-tracking', 'quality-gate'], stages: ['08_test_scenario', '09_test_run'] },
-  { id: 'hong', dept: '마케팅', dept_en: 'Marketing', role: '세그먼트·포지셔닝·캠페인·카피', role_en: 'Segments, positioning, campaigns and copy', skills: ['landing-copywriting'], stages: ['10_growth'] },
+  { id: 'hong', dept: '마케팅', dept_en: 'Marketing', role: '세그먼트·포지셔닝·캠페인·카피·제안 발표본·발표 노트', role_en: 'Segments, positioning, campaigns, copy, proposal presentation cut and speaker notes', skills: ['landing-copywriting'], stages: ['03_proposal', '10_growth'] },
 ].map((a) => ({ ...a, name: AGENT_NAME[a.id], name_en: NAME_EN[a.id], persona: AGENT_PERSONA[a.id], builtin: true }));
 
 export const ROSTER = [...BUILTIN];

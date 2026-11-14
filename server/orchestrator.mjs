@@ -23,6 +23,7 @@ import { planningBefore, planningChecks, planningOnApproved } from './planning.m
 import { exportDocx } from './docxExport.mjs';
 import { exportXlsx } from './xlsxExport.mjs';
 import { rfpChecks } from './rfpCheck.mjs';
+import { proposalChecks, changeLogCheck, wantsChangeLog } from './proposalCheck.mjs';
 import { fence } from './fence.mjs';
 import { nameOf, AGENT_IDS } from './roster.mjs';
 import { DELIVERABLES_DIR, INBOX_DIR, relData, absData, isInside } from './paths.mjs';
@@ -266,13 +267,15 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
   }
 
   // QA 반려 뒤 1회 보완(reflection) — 반려 지적을 다음 실행 지시에 붙이는 글.
-  function reviseNote(rev) {
+  //   changeLog: 산출물 끝에 '변경 기록' 표(CHG-nn)를 붙이게 한다 — 짧은 형식 요청·기획 팩 화면은 형식이 깨지므로 빼고(proposalCheck.wantsChangeLog).
+  function reviseNote(rev, { changeLog = false } = {}) {
     return [
       '## QA 보완 요청 (1회 — 반려된 산출물을 고친다)',
       `고지표(QA)가 앞 산출물을 FAIL 로 반려했다. 먼저 '${rev.output}' 을 Read 로 읽고, 아래 지적을 모두 반영해 같은 경로의 파일을 고쳐 쓴다. 지적과 관계없는 부분은 그대로 둔다.`,
       rev.summary ? `- 판정 요약: ${rev.summary}` : '',
       ...rev.issues.map((i) => `- 지적: ${i}`),
       '- 고칠 수 없는 지적은 지어내서 메우지 말고 회신의 "남은 제한"에 이유와 함께 적는다.',
+      changeLog ? '- 산출물 맨 끝에 "## 변경 기록" 표를 붙인다 — 칸: CHG id(CHG-01부터) | 지적 | 변경 전 | 변경 후 | 영향 위치(같은 수치·id 를 쓰는 다른 절·표도 함께 고쳤는지). 지적 하나에 한 행, 고치지 못한 지적은 "변경 후"에 "미반영 — 이유"라고 적는다.' : '',
     ].filter(Boolean).join('\n');
   }
 
@@ -348,7 +351,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
 
     for (;;) {
       // 2-2) 실행
-      const runContext = [context, plan?.context, revision ? reviseNote(revision) : ''].filter(Boolean).join('\n\n');
+      const runContext = [context, plan?.context, revision ? reviseNote(revision, { changeLog: wantsChangeLog(task, b) }) : ''].filter(Boolean).join('\n\n');
       let r;
       try {
         r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capTokens: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [] });
@@ -430,6 +433,23 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
         const rc = await rfpChecks(r.file, b, { required: mode === 'claude_code' });
         const gate = combineGate(rc.checks, verdict.gate);
         verdict = { ...verdict, gate, checks: [...verdict.checks, ...rc.checks], issues: gate === 'FAIL' && rc.issues.length ? [...rc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
+      }
+      // 제안·견적 단계 — 근거표(EV id)·대응표 역채움·AI 검수 표기·인력 카드/갭 분석 제목 등(단계 정의의 checks·sections). 앞 산출물은 같은 브리핑의 끝난 작업에서
+      if (task.process === 'proposal' || task.process === 'estimate') {
+        const siblings = (await hive.tasksOf(briefingId))
+          .filter((t) => t.id !== task.id && t.output && ['완료', '승인대기'].includes(t.status))
+          .map((t) => ({ step: t.step || '', file: absData(t.output) }))
+          .filter((s) => s.file);
+        const pc = await proposalChecks(task, r.file, { siblings, required: mode === 'claude_code' });
+        if (pc.checks.length) {
+          const gate = combineGate(pc.checks, verdict.gate);
+          verdict = { ...verdict, gate, checks: [...verdict.checks, ...pc.checks], issues: gate === 'FAIL' && pc.issues.length ? [...pc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
+        }
+      }
+      // 보완 재작업 뒤 — 변경 기록(CHG-nn) 표가 있는지(참고, 판정에는 넣지 않는다)
+      if (revision && wantsChangeLog(task, b)) {
+        const cc = await changeLogCheck(r.file, revision.issues.length);
+        verdict = { ...verdict, checks: [...verdict.checks, ...cc.checks] };
       }
       costUsd += verdict.costUsd || 0;
       tokensAll = addTokens(tokensAll, verdict.tokens);
