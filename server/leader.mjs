@@ -232,7 +232,7 @@ export async function decompose(briefing, { mode, model, log }) {
     const system = await loadLeaderPersona(settings);
     const lang = languageLine(settings);
     // 팀장이 골라 붙일 수 있는 등록 스킬 — 이 PC 에 있고 에이전트 실행에서 쓸 수 있는 것만
-    const pickable = (await registryStatus()).entries.filter((e) => e.available && e.usable);
+    const pickable = (await registryStatus()).entries.filter((e) => e.available && e.usable && e.pick !== false); // 통합 스킬처럼 표준 절차 전용(pick:false)은 빼고
     const names = new Set(pickable.map((e) => e.spec));
     const r = await runStructured({ system, prompt: decomposePrompt(b, pickable) + lang, schema: decomposeSchema([...names], ownerName(settings)), model });
     if (r.ok) {

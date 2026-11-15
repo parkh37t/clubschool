@@ -286,8 +286,10 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
   // (구 live 경로는 참고 스킬을 구분하지 못하고 본문을 다 넣으므로 자동 스킬을 붙이지 않는다)
   const auto = mode === 'live' ? [] : autoSkills(`${task.title}\n${task.done_when || ''}`);
   const specs = [...new Set([...base, ...extra, ...auto])];
-  const skills = await resolveSkills(specs);
-  const used = skills.applied.map((s) => s.name);
+  // 브리핑 글 — 통합 스킬의 건별 이력 절(':match')에서 이 브리핑 고객사 항목만 고르는 데 쓴다
+  const briefText = [briefing?.title, briefing?.result, briefing?.context, ...(Array.isArray(briefing?.constraints) ? briefing.constraints : [])].filter(Boolean).join('\n');
+  const skills = await resolveSkills(specs, { text: briefText });
+  const used = skills.applied.map((s) => (s.sections ? `${s.name}(${s.sections.replace(/:match/g, '*')}절)` : s.name));
   const stageDir = path.join(outDir, task.stage || '00_sales');
   await fs.mkdir(stageDir, { recursive: true });
   log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}${capTokens ? ` (한도 ${fmtTokens(capTokens)} 토큰)` : ''}`);

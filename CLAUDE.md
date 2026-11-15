@@ -159,6 +159,9 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   견적 단계는 인력 카드·갭 분석, 검수는 'AI 검수' 표기·렌더·시각 not_run('시각 미평가'). 서버가 `server/proposalCheck.mjs` 로 다시 본다 — ev_table·ev_refs·req_coverage·ai_label·sections 는
   claude_code 에서 판정에 넣고 unconfirmed_numbers·render 는 참고. QA 보완 재작업은 산출물 끝에 변경 기록(CHG-nn) 표를 붙이고 chg_log(참고)로 본다(짧은 형식·기획 화면 제외).
   사내 스킬이 붙으면 지침 충돌 시 고객사 전용 → 사내 → 공용 순, proposal-maker 는 목차 후보로만(`agentRunner.skillPriorityLines`).
+  통합 스킬 `wylie-proposal-master`(사용자 스킬 폴더, 저장소·설치 파일에 두지 않음)가 이 PC 에 있으면 제안·견적 단계마다 필요한 절만 넣는다 —
+  스펙 `이름#절,절:match|대체`(`skills.mjs` 의 `parseAlt`·`sliceSections`). `:match` 절(건별 이력)은 '###' 제목의 고객사 낱말이 브리핑에 나오는 항목만 넣고
+  (`clientKeys` — 일반 낱말·두 글자 약어 제외), 세션 기록·자료 간 불일치 절은 넣지 않는다. 없으면 예전 개별 사내 스킬·공용 스킬로 대체, 팀장이 골라 붙이는 목록에서는 뺀다(`pick:false`).
 - **견적 프로세스**: 결과 줄이 견적서·인력투입계획(제안서 없이 견적만)인 브리핑은 `ESTIMATE_STEPS` 3단계(범위·가정 → 견적기준표·인력투입계획·인력 카드·견적서(안)·갭 분석 → 견적 검수(AI 검수, 승인 '수치확정')).
   견적 단계(`task.export: ['xlsx']`)의 마크다운 표는 서버가 엑셀로도 저장한다(`server/xlsxExport.mjs`, 표 하나 = 시트 하나, `task.xlsx`). 방법은 공용 스킬 `proposal-estimate`.
   사내(`wylie-*` 등)·고객사 전용(`<고객>-…-proposal`) 제안 스킬은 사용자 스킬 폴더에만 두고 이름으로 찾는다(공개 저장소에 두지 않음).

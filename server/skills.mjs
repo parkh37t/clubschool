@@ -85,17 +85,80 @@ async function findSkillDir(name) {
   return (await locateSkill(name))?.dir || null;
 }
 
-/** 스펙('a|b') 하나 → 쓸 수 있는 첫 이름과 위치. 화면(등록부·스킬 탭)이 쓴다. */
+/**
+ * 스펙 조각 'name#1,3,13:match' → { name, sections }. '#' 뒤는 넣을 절('## N.') 번호, ':match' 는 그 절의 '###' 항목 가운데
+ * 브리핑에 이름이 나오는 것만 넣으라는 뜻(건별 고객 이력처럼 고객끼리 섞이면 안 되는 절). '#' 이 없으면 sections=null(본문 전체).
+ */
+export function parseAlt(alt) {
+  const [name, sec] = String(alt).split('#');
+  if (!sec) return { name, sections: null };
+  const sections = sec.split(',').map((s) => s.trim()).filter(Boolean).map((s) => {
+    const [n, flag] = s.split(':');
+    return { n: Number(n), match: flag === 'match' };
+  }).filter((s) => Number.isInteger(s.n) && s.n > 0);
+  return { name, sections: sections.length ? sections : null };
+}
+
+/** 스펙('a|b', 'a#1,3|b') 하나 → 쓸 수 있는 첫 이름과 위치(+ 넣을 절). 화면(등록부·스킬 탭)이 쓴다. */
 export async function locateSpec(spec) {
   for (const alt of String(spec).split('|')) {
-    const hit = await locateSkill(alt);
-    if (hit) return { name: alt, ...hit };
+    const { name, sections } = parseAlt(alt);
+    const hit = await locateSkill(name);
+    if (hit) return { name, sections, ...hit };
   }
   return null;
 }
 
+// 건별 이력 절(':match')의 '###' 제목에서 고객사 이름으로 쓸 낱말 — 일반 낱말은 뺀다(이것으로 다른 고객 이력이 잘못 붙지 않게).
+// 두 글자 영문 약어(DB·KB 등)는 다른 뜻으로도 흔해 쓰지 않는다. 회사 이름 끝말(화재·은행·손해보험…)을 뗀 이름도 3자 이상이면 쓴다.
+const GENERIC_WORDS = new Set(['시스템', '구축', '제안', '운영', '플랫폼', '고도화', '홈페이지', '재구축', '인터넷', '마케팅', '서비스', '차세대', '신규', '스마트',
+  '보장분석', '커머스', '수발주', '기업뱅킹', '인터넷뱅킹', '모바일', '리뉴얼', '사업부문', '프로젝트', '디지털', '밖의', '종료', '실주', '고객사', '통합']);
+const COMPANY_TAIL = /(화재|은행|손해보험|금융지주|금융|푸드|캐피탈|그룹|카드|생명|증권)$/;
+/** '### 제목' → 고객사로 볼 낱말 목록(없으면 빈 배열 — 그 항목은 넣지 않는다). */
+export function clientKeys(heading) {
+  const keys = new Set();
+  for (const raw of String(heading).split(/[\s·()[\],/~:]+/)) {
+    const w = raw.trim();
+    if (w.length < 3 || /^\d+$/.test(w) || GENERIC_WORDS.has(w)) continue;
+    keys.add(w);
+    const stem = w.replace(COMPANY_TAIL, '');
+    if (stem !== w && stem.length >= 3) keys.add(stem);
+    if (/손해보험$/.test(w)) keys.add(w.replace(/손해보험$/, '손보'));
+  }
+  return [...keys];
+}
+
+/**
+ * 긴 스킬 본문에서 고른 절만 남긴다. 머리 제목(# …) 한 줄은 두고, 고른 절이 무엇인지 알린다.
+ * match 절은 그 절의 머리말과, 제목의 고객사 낱말이 text(브리핑)에 나오는 '###' 항목만 남긴다 — 맞는 항목이 없으면 그렇다고만 적는다.
+ * 번호 절('## N.')이 없는 본문은 그대로 돌려준다.
+ */
+export function sliceSections(body, sections, text = '') {
+  const src = String(body);
+  const re = /^## (\d+)\.[^\n]*$/gm;
+  const marks = [...src.matchAll(re)].map((m) => ({ n: Number(m[1]), at: m.index }));
+  if (!marks.length || !sections?.length) return src;
+  const title = (/^# [^\n]+/m.exec(src.slice(0, marks[0].at)) || [''])[0];
+  const hay = String(text || '').toLowerCase();
+  const out = [title, `(이 작업에 필요한 절만 넣었다: ${sections.map((s) => `${s.n}절`).join('·')})`].filter(Boolean);
+  for (const s of sections) {
+    const i = marks.findIndex((m) => m.n === s.n);
+    if (i < 0) continue;
+    const part = src.slice(marks[i].at, i + 1 < marks.length ? marks[i + 1].at : src.length).trimEnd();
+    if (!s.match) { out.push('', part); continue; }
+    const subs = [...part.matchAll(/^### [^\n]*$/gm)];
+    const head = subs.length ? part.slice(0, subs[0].index).trimEnd() : part;
+    const picked = subs.map((m, k) => ({ h: m[0], text: part.slice(m.index, k + 1 < subs.length ? subs[k + 1].index : part.length).trimEnd() }))
+      .filter((x) => clientKeys(x.h.replace(/^###\s*/, '')).some((key) => hay.includes(key.toLowerCase())));
+    out.push('', head);
+    if (picked.length) out.push(...picked.map((x) => `\n${x.text}`));
+    else out.push('', '(이 브리핑의 고객사 항목이 없다 — 다른 고객의 이력은 넣지 않았다.)');
+  }
+  return out.join('\n');
+}
+
 // 여러 고객에 두루 쓰는 제안 스킬 — 단계별 스펙에 이미 들어 있으므로 '고객사 전용'으로 다시 붙이지 않는다.
-const SHARED_PROPOSAL_SKILLS = new Set(['wylie-proposal', 'proposal-writing', 'proposal-review', 'proposal-maker', 'proposal-skills', 'strategy-proposal-analyzer']);
+const SHARED_PROPOSAL_SKILLS = new Set(['wylie-proposal', 'wylie-proposal-master', 'proposal-writing', 'proposal-review', 'proposal-maker', 'proposal-skills', 'strategy-proposal-analyzer']);
 
 /**
  * 고객사 전용 제안 스킬 — 사용자 스킬 폴더(②·③)의 '<고객>-…-proposal' 가운데 브리핑에 그 고객사가 나오는 것.
@@ -156,7 +219,7 @@ export async function registryStatus() {
     const hit = await locateSpec(e.name);
     entries.push({
       spec: e.name, name: hit?.name || null, available: Boolean(hit), source: hit?.source || null,
-      cat: e.cat, inline: e.inline !== false, exec: Boolean(e.exec), usable: e.usable !== false, auto: Boolean(e.auto), agents: e.agents,
+      cat: e.cat, inline: e.inline !== false, exec: Boolean(e.exec), usable: e.usable !== false, pick: e.pick !== false, auto: Boolean(e.auto), agents: e.agents,
       ko: e.ko, en: e.en, use_ko: e.useKo, use_en: e.useEn, note_ko: e.noteKo || '', note_en: e.noteEn || '', why_ko: e.whyKo || '', why_en: e.whyEn || '',
     });
   }
@@ -191,11 +254,13 @@ export function skillDescription(raw) {
 
 /**
  * 스펙 목록을 실제 지침으로 바꾼다.
- * @param specs ['rfp-analysis', 'wylie-proposal|proposal-writing', 'clubschool:rfp-evaluation']
- * @returns { applied: [{ name, body, refs, dir, inline, desc, note }], missing: ['원래 스펙'] }
+ * @param specs ['rfp-analysis', 'wylie-proposal|proposal-writing', 'wylie-proposal-master#1,3,13:match|wylie-proposal', 'clubschool:rfp-evaluation']
+ * @param opts.text  브리핑 글 — '#N:match' 절에서 이 브리핑의 고객사 항목만 고를 때 쓴다
+ * @returns { applied: [{ name, body, refs, dir, inline, desc, note, sections }], missing: ['원래 스펙'] }
  *   refs = 참고자료 폴더 절대경로(없으면 null). inline=false 면 본문 대신 '참고 스킬'(경로·설명)로 알리고 dir 를 열어 준다.
+ *   sections = 고른 절('1,3,13:match', 본문 전체면 '') — 같은 스킬이 앞에서 이미 붙었으면 뒤 스펙은 건너뛴다(이름 기준).
  */
-export async function resolveSkills(specs) {
+export async function resolveSkills(specs, { text = '' } = {}) {
   const applied = [];
   const missing = [];
   const seen = new Set();
@@ -207,15 +272,17 @@ export async function resolveSkills(specs) {
     }
     if (seen.has(hit.name)) continue;
     seen.add(hit.name);
-    const { name, dir } = hit;
+    const { name, dir, sections } = hit;
     const raw = await fs.readFile(path.join(dir, 'SKILL.md'), 'utf8');
-    const body = raw.replace(/^---[\s\S]*?---\s*/, '').trim(); // 프론트매터 제거
+    const full = raw.replace(/^---[\s\S]*?---\s*/, '').trim(); // 프론트매터 제거
+    // 긴 통합 스킬은 단계에 필요한 절만 넣는다(사용 토큰을 줄이고, 다른 고객 이력이 섞이지 않게)
+    const body = sections ? sliceSections(full, sections, text) : full;
     // 참고자료(references/)는 절대경로로 알려 주고, 실행기가 그 폴더를 --add-dir 로 열어 준다.
     // 에이전트의 작업 폴더(산출물 폴더)와 스킬 폴더가 다른 위치에 있기 때문이다.
     const refDir = path.join(dir, 'references');
     const refs = (await exists(refDir)) ? refDir : null;
     const entry = registryEntry(name) || registryEntry(spec);
-    applied.push({ name, body, refs, dir, inline: entry ? entry.inline !== false : true, desc: skillDescription(raw).slice(0, 300), note: entry?.noteKo || '' });
+    applied.push({ name, body, refs, dir, inline: sections ? true : (entry ? entry.inline !== false : true), desc: skillDescription(raw).slice(0, 300), note: entry?.noteKo || '', sections: sections ? sections.map((s) => `${s.n}${s.match ? ':match' : ''}`).join(',') : '' });
   }
   return { applied, missing };
 }

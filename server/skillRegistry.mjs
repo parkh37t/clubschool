@@ -10,6 +10,7 @@
 //   auto     작업 제목·완료 기준에 이 말이 있으면 자동으로 붙인다(참고 스킬만 — 지시문이 길어지지 않게)
 //   agents   이 스킬을 쓰는 담당(화면 표시·팀장 안내용). 표준 절차 단계의 스킬은 proposal.mjs·planning.mjs 가 정한다
 //   usable   false — 이 PC 에 있어도 에이전트 실행에서는 못 쓴다(외부 도구 연결·웹 검색·데이터 연결이 필요). 등록부에는 보이되 붙이지 않는다
+//   pick     false — 표준 절차 단계에서만 붙고 팀장이 골라 붙이는 목록(extra_skills)에는 내지 않는다
 // 고객사 전용 제안 스킬('<고객>-…-proposal')은 이름을 적지 않는다 — 사용자 스킬 폴더에서 찾아 브리핑에 그 고객사가 나오면 붙는다(findClientProposalSkills).
 
 const EXEC_NOTE_KO = '스크립트 실행 전제 — 에이전트는 형식·구성 지침으로만 씀';
@@ -17,6 +18,9 @@ const EXEC_NOTE_EN = 'Assumes running scripts — agents use it for format and s
 
 export const SKILL_REGISTRY = [
   // ── 제안·견적 ──
+  // 통합 스킬은 제안·견적 표준 절차 단계마다 필요한 절만 넣는다(proposal.mjs). 통째로 넣으면 길고 다른 고객 이력이 섞이므로
+  // 팀장이 골라 붙이는 목록에서는 뺀다(pick:false). 절 없이 붙으면 참고 스킬(경로만)로 알린다.
+  { name: 'wylie-proposal-master', cat: 'proposal', inline: false, pick: false, agents: ['kim', 'han', 'cha', 'go', 'jeong', 'hong'], ko: '와일리 제안서 통합', en: 'Wylie proposal master', useKo: '제작 방법·근거·스토리·디자인·시각·검수·견적·건별 이력을 한 스킬로. 제안·견적 단계마다 필요한 절만 넣고, 건별 이력은 브리핑에 나온 고객사 것만 넣는다(없으면 개별 사내 스킬·공용 스킬)', useEn: 'Method, evidence, story, design, visuals, review, estimates and per-client history in one skill. Each proposal or estimate step gets only the sections it needs, and per-client history only for the client named in the briefing (falls back to the separate company skills or public skills)', noteKo: '단계별로 필요한 절만 넣음', noteEn: 'Only the sections each step needs' },
   { name: 'wylie-proposal|proposal-writing', cat: 'proposal', inline: true, agents: ['han'], ko: '와일리 제안서 작성', en: 'Wylie proposal writing', useKo: 'RFP 분석·요구·평가 대응, 전략·목차·본문(사내 스킬이 없으면 공용 proposal-writing)', useEn: 'RFP analysis, requirement-scoring, strategy, outline and body (falls back to the public proposal-writing)' },
   { name: 'wylie-proposal-visual|ui-review', cat: 'proposal', inline: true, agents: ['cha', 'han'], ko: '제안 장표 시각 규격', en: 'Proposal visual spec', useKo: '색·서체·16:9 그리드·장표 유형별 규격', useEn: 'Colors, type, 16:9 grid and slide-type specs' },
   { name: 'wylie-proposal-review|proposal-review', cat: 'proposal', inline: true, agents: ['go'], ko: '제안서 검수', en: 'Proposal review', useKo: '필수 게이트·품질 루브릭·장표 단위 질문으로 제출 준비 판정', useEn: 'Required gates, quality rubric and per-slide questions for a submit verdict' },
@@ -73,5 +77,5 @@ export function autoSkills(text) {
 
 /** 팀장이 작업에 골라 붙일 수 있는 스킬(쓸 수 있는 것만). */
 export function pickableSkills() {
-  return SKILL_REGISTRY.filter((e) => e.usable);
+  return SKILL_REGISTRY.filter((e) => e.usable && e.pick !== false);
 }
