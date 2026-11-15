@@ -11,13 +11,15 @@ interface QuestionsTabProps {
 }
 
 /**
- * 질문 탭(ask me) — 에이전트·팀장이 재하에게 묻는 것. 작업은 멈추지 않고 가정으로 진행한다.
+ * 질문 탭(ask me) — 에이전트·팀장이 결정권자에게 묻는 것. 작업은 멈추지 않고 가정으로 진행한다.
  * 답하면 역할 에이전트는 다음 작업 때 inbox 로 읽고(hive 규칙), 팀장은 상주 세션 대기열로 바로 받는다.
  */
 export function QuestionsTab({ connected, apiBase, selected }: QuestionsTabProps) {
-  const { t, lang, name } = useOfficeLang();
+  const { t, name, owner } = useOfficeLang();
   const { data, refresh } = usePolling<{ questions: Question[] }>(connected ? `${apiBase}/api/questions` : undefined, 4000);
-  const [by, setBy] = useState(lang === 'en' ? 'Jaeha' : '재하');
+  // 답한 사람 기본값은 설정의 결정권자 이름(설정을 늦게 받아도 따라 바뀌게 null 로 시작)
+  const [byInput, setBy] = useState<string | null>(null);
+  const by = byInput ?? owner;
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState('');
   const [failed, setFailed] = useState(false);

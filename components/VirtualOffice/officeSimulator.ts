@@ -3,7 +3,7 @@
  * 순수 TS 클래스로 포팅. React는 VirtualOfficeView가 함수형 래퍼로 감싼다.
  * 좌표/색상은 hi-fi 원본 그대로 보존. onRender 콜백으로 React 재렌더를 유발한다. */
 
-import { SIM_TEXT } from './simText';
+import { SIM_TEXT, simTextFor } from './simText';
 import type { Lang, SimText } from './simText';
 
 type Pt = { x: number; y: number };
@@ -312,11 +312,12 @@ export class OfficeSimulator {
     this.opts.onRender();
   }
 
-  /** 화면 언어 전환(ko | en). */
-  setLang(lang: Lang): void {
-    if (lang === this.lang) return;
+  /** 화면 언어 전환(ko | en) — owner 는 결정권자 표시 이름(설정 창에서 바꿈). 둘 다 그대로면 다시 그리지 않는다. */
+  setLang(lang: Lang, owner?: string): void {
+    const next = simTextFor(lang, owner);
+    if (lang === this.lang && next.owner === this.T.owner) return;
     this.lang = lang;
-    this.T = SIM_TEXT[lang];
+    this.T = next;
     this.applyText();
     this.rebuild();
   }

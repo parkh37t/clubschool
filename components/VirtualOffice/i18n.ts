@@ -3,7 +3,7 @@
 
 import { createContext, useContext } from 'react';
 import type { Lang } from './simText';
-import { SIM_TEXT } from './simText';
+import { DEFAULT_OWNER, simTextFor } from './simText';
 
 export type { Lang };
 
@@ -41,10 +41,10 @@ const ko: Dict = {
   'tasks.title': '작업판', 'tasks.offline': '서버에 연결하면 팀장이 나눈 작업 원장이 여기에 보입니다. 지금은 데모 시나리오가 돕니다.',
   'tasks.stale': '승인 뒤 바뀜', 'tasks.staleNote': '승인한 뒤 산출물 파일이 바뀌었습니다. 승인은 그때 내용에 대한 것이므로 바뀐 내용을 다시 확인하세요.', 'tasks.approved': '승인 {h}', 'tasks.approvedNote': '승인한 산출물의 지문(sha256 앞 8자리) — 파일이 바뀌면 「승인 뒤 바뀜」으로 바뀝니다',
   'tasks.empty': '브리핑을 보내면 팀장이 나눈 작업이 여기에 쌓입니다. 선행 작업이 없는 작업은 담당이 겹치지 않는 한 동시에 시작합니다.', 'tasks.gate': '게이트 {g}', 'tasks.needsApproval': '승인 필요', 'tasks.cap': '한도 {v} 토큰',
-  'ap.pending': '승인 대기 {n}건 — 해당 작업만 멈춤', 'ap.none': '승인 대기 없음', 'ap.by': '행위자', 'ap.reason': '사유 (필수 — 없으면 기록되지 않음)', 'ap.approve': '승인', 'ap.reject': '반려',
+  'ap.pending': '{owner} 결정 대기 {n}건 — 해당 작업만 멈춤', 'ap.none': '승인 대기 없음', 'ap.by': '행위자', 'ap.reason': '사유 (필수 — 없으면 기록되지 않음)', 'ap.approve': '승인', 'ap.reject': '반려',
   'ap.needReason': '사유를 적어야 기록됩니다.', 'ap.done': '{id} {d} 기록됨', 'ap.failed': '실패: {e}', 'ap.history': '결정 기록', 'ap.approved': '승인', 'ap.rejected': '반려',
   'ap.demoNone': '데모: 결재 대기가 생기면 여기에 카드가 뜹니다.', 'ap.demoApprove': '결재하기(데모)', 'ap.budgetNote': '한도 {cap} 토큰 · 지금까지 {used} 토큰(구독 사용량, 청구 아님) — 승인하면 한도 두 배로 이어서 실행', 'ap.resumeNote': '서킷 브레이커 중지 — 승인하면 다시 배정',
-  'qs.offline': '서버에 연결하면 에이전트가 재하에게 묻는 질문이 여기에 쌓입니다.', 'qs.open': '답을 기다리는 질문 {n}건', 'qs.none': '열린 질문 없음 — 작업은 멈추지 않고 가정으로 진행합니다.',
+  'qs.offline': '서버에 연결하면 에이전트가 {owner}에게 묻는 질문이 여기에 쌓입니다.', 'qs.open': '답을 기다리는 질문 {n}건', 'qs.none': '열린 질문 없음 — 작업은 멈추지 않고 가정으로 진행합니다.',
   'qs.answerPh': '답 — 질문한 에이전트가 다음 작업 때 읽습니다(팀장은 바로 받음)', 'qs.send': '답하기', 'qs.answered': '답한 질문', 'qs.by': '답한 사람', 'qs.need': '답과 답한 사람을 적어 주세요.', 'qs.sent': '{id} 답을 보냈습니다.',
   'mem.offline': '서버에 연결하면 에이전트별 기억(hive/memory)이 보입니다.', 'mem.agent': '에이전트', 'mem.choose': '선택…', 'mem.pick': '아래 에이전트 카드를 누르거나 위에서 고르면 그 사람의 기억 파일을 보여 줍니다.',
   'mem.fail': '기억 파일을 읽지 못했습니다.', 'mem.empty': "{name}의 기억이 아직 없습니다. 작업이 끝날 때 회신의 '기억할 것'이 3줄 이내로 쌓이고, 다음 작업 시작 때 읽힙니다.",
@@ -119,9 +119,9 @@ const ko: Dict = {
   'ev.trigger_add': '예약 추가 {id} {title}', 'ev.trigger_update': '예약 변경 {id} {title}', 'ev.trigger_on': '예약 켬 {id}', 'ev.trigger_off': '예약 끔 {id}',
   'ev.trigger_delete': '예약 삭제 {id} {title}', 'ev.trigger_run': '예약 실행 {id} {title} → {item}', 'ev.trigger_missed': '예약 놓침 {id} {title}', 'ev.triggerWho': '예약',
   'tl.start': '시작', 'tl.assign': '배정', 'tl.tool': '도구', 'tl.text': '글', 'tl.tool_result': '결과', 'tl.note': '메모', 'tl.end': '끝', 'tl.error': '오류', 'tl.qa_start': 'QA', 'tl.qa': 'QA 판정',
-  'tl.approval': '승인 요청', 'tl.approval_done': '승인 결과', 'tl.budget_stop': '상한 초과', 'tl.done': '완료', 'tl.user_msg': '재하', 'tl.briefing_queued': '브리핑 등록', 'tl.session_new': '새 세션',
+  'tl.approval': '승인 요청', 'tl.approval_done': '승인 결과', 'tl.budget_stop': '상한 초과', 'tl.done': '완료', 'tl.user_msg': '{owner}', 'tl.briefing_queued': '브리핑 등록', 'tl.session_new': '새 세션',
   'tab.talk': '대화', 'tab.templates': '템플릿',
-  'talk.offline': '서버에 연결하면 팀장·에이전트·재하가 주고받은 메시지(배정·회신·질문·승인 요청·보고)가 여기에 보입니다.', 'talk.title': '대화 {n}건',
+  'talk.offline': '서버에 연결하면 팀장·에이전트·{owner} 사이에 오간 메시지(배정·회신·질문·승인 요청·보고)가 여기에 보입니다.', 'talk.title': '대화 {n}건',
   'talk.all': '받은 편지함과 처리한 편지를 4초마다 다시 읽습니다. 고객 원문 같은 자료 울타리 안 내용은 줄여서 보여 줍니다.', 'talk.filtered': '{name} 관련 메시지만 보입니다.',
   'talk.empty': '아직 주고받은 메시지가 없습니다. 브리핑을 보내면 팀장의 배정부터 쌓입니다.', 'talk.fail': '메시지를 불러오지 못했습니다. 다음 갱신 때 다시 읽습니다.',
   'talk.more': '펼치기', 'talk.less': '접기', 'talk.cut': '앞 600자만 보임', 'talk.to': '→',
@@ -141,6 +141,8 @@ const ko: Dict = {
   'set.behavior': '동작', 'set.autoRevise': 'QA 반려 시 같은 담당이 1회 자동 보완', 'set.concurrency': '동시에 도는 작업 수',
   'set.concurrencyNote': '새 브리핑부터 적용됩니다. 같은 담당자의 작업은 동시에 돌지 않습니다.',
   'set.lang': '언어', 'set.env': '환경', 'set.data': '작업 기록(hive) 위치', 'set.dataNote': '승인·대화·기억이 저장되는 곳입니다. 이 화면에서는 옮길 수 없습니다.',
+  'set.owner': '결정권자 이름', 'set.ownerKo': '한국어 이름', 'set.ownerEn': '영어 이름', 'set.ownerKoPh': '예: 홍길동', 'set.ownerEnPh': '예: Gildong Hong',
+  'set.ownerNote': '브리핑을 보내고 승인·반려하는 사람입니다. 화면·승인 카드·보고서와 팀장·에이전트 지시문에 이 이름이 쓰입니다. 비워 두면 기본 이름({def})을 쓰고, 한쪽만 적으면 다른 언어 화면에서도 그 이름을 씁니다. 지난 기록에 남은 이름은 바뀌지 않습니다.',
   'tasks.open': '열기', 'tasks.word': 'Word', 'tasks.excel': '엑셀', 'tasks.folder': '폴더', 'tasks.openFail': '열지 못함 — {e}',
   'tasks.progress': '완료 {d}/{n}', 'tasks.cost': '사용 토큰 {v}', 'tasks.tokens': '{v} 토큰', 'tasks.tokenNote': '구독 사용 토큰(실행 + QA). 금액이 아님',
   'mo.partsToday': '오늘 — 입력 {i} · 캐시 생성 {cw} · 캐시 읽기 {cr} · 출력 {o}', 'mo.partsTask': '입력 {i} · 캐시 생성 {cw} · 캐시 읽기 {cr} · 출력 {o}', 'mo.capShort': '한도',
@@ -172,7 +174,7 @@ const ko: Dict = {
   'plan.pass': '통과', 'plan.violations': '위반 {n}', 'plan.view': '보기', 'plan.unlinked': '요구 미연결', 'plan.noFile': '파일 없음',
   'plan.viewer': '화면설계서 {id}', 'plan.prev': '이전 화면', 'plan.next': '다음 화면', 'plan.newWindow': '새 창', 'plan.checkResult': '검사 결과',
   'plan.briefTitle': '[{name}] 화면설계 — 다음 차수', 'plan.briefResult': '2단 화면설계서(좌 화면 · 우 사양) 핵심 화면 최대 6개와 요구 원장·작업가이드·IA·리뷰·추적 매트릭스',
-  'plan.briefContext': '팩: {id}\n이번 차수에 만들 화면·바뀐 요구를 적는다. 요구사항 정의서·회의록이 있으면 첨부한다.', 'plan.briefC1': '작업가이드·규칙·IA 는 재하가 승인(가이드확정)한 뒤 화면 생성',
+  'plan.briefContext': '팩: {id}\n이번 차수에 만들 화면·바뀐 요구를 적는다. 요구사항 정의서·회의록이 있으면 첨부한다.', 'plan.briefC1': '작업가이드·규칙·IA 는 {owner} 승인(가이드확정) 뒤 화면 생성',
   'plan.briefC2': '요구사항에 없는 기능은 "제안"으로 구분', 'plan.briefC3': '실기관·실인물 이름은 쓰지 않음(익명화)',
   'bc.hintEnter': 'Enter 보내기 · Shift+Enter 줄바꿈', 'bc.hintCtrlEnter': 'Ctrl+Enter 보내기', 'bc.templates': '템플릿 고르기', 'tpl.context': '맥락', 'tpl.constraints': '제약', 'tpl.moreC': '외 {n}개',
   'tpl.empty': '내 템플릿이 아직 없습니다.', 'tpl.loading': '템플릿을 불러오는 중…',
@@ -223,7 +225,7 @@ const en: Dict = {
   'tasks.title': 'Task board', 'tasks.offline': "Connect a server to see the lead's task ledger here. The demo is running now.",
   'tasks.stale': 'Changed after approval', 'tasks.staleNote': 'The deliverable file changed after it was approved. The approval covered the earlier content — review the change.', 'tasks.approved': 'Approved {h}', 'tasks.approvedNote': 'Fingerprint of the approved deliverable (first 8 of sha256) — shows "Changed after approval" if the file changes',
   'tasks.empty': "Send a briefing and the lead's tasks appear here. Tasks without prerequisites start in parallel unless they share an owner.", 'tasks.gate': 'Gate {g}', 'tasks.needsApproval': 'Needs approval', 'tasks.cap': 'Cap {v}',
-  'ap.pending': '{n} pending — only those tasks wait', 'ap.none': 'No pending approvals', 'ap.by': 'Actor', 'ap.reason': 'Reason (required — not recorded without it)', 'ap.approve': 'Approve', 'ap.reject': 'Reject',
+  'ap.pending': '{n} awaiting {owner} — only those tasks wait', 'ap.none': 'No pending approvals', 'ap.by': 'Actor', 'ap.reason': 'Reason (required — not recorded without it)', 'ap.approve': 'Approve', 'ap.reject': 'Reject',
   'ap.needReason': 'A reason is required.', 'ap.done': '{id} {d} recorded', 'ap.failed': 'Failed: {e}', 'ap.history': 'Decisions', 'ap.approved': 'Approved', 'ap.rejected': 'Rejected',
   'ap.demoNone': 'Demo: approval cards show up here.', 'ap.demoApprove': 'Approve (demo)', 'ap.budgetNote': 'Limit {cap} tokens · used {used} tokens (subscription usage, not billed) — approve to continue with double the limit', 'ap.resumeNote': 'Circuit breaker stop — approve to assign again',
   'qs.offline': 'Connect a server to see the questions agents ask you.', 'qs.open': '{n} open questions', 'qs.none': 'No open questions — work continues on stated assumptions.',
@@ -301,9 +303,9 @@ const en: Dict = {
   'ev.trigger_add': 'Trigger added {id} {title}', 'ev.trigger_update': 'Trigger changed {id} {title}', 'ev.trigger_on': 'Trigger on {id}', 'ev.trigger_off': 'Trigger off {id}',
   'ev.trigger_delete': 'Trigger deleted {id} {title}', 'ev.trigger_run': 'Trigger ran {id} {title} → {item}', 'ev.trigger_missed': 'Trigger missed {id} {title}', 'ev.triggerWho': 'Trigger',
   'tl.start': 'start', 'tl.assign': 'assigned', 'tl.tool': 'tool', 'tl.text': 'says', 'tl.tool_result': 'result', 'tl.note': 'note', 'tl.end': 'end', 'tl.error': 'error', 'tl.qa_start': 'QA', 'tl.qa': 'QA verdict',
-  'tl.approval': 'approval', 'tl.approval_done': 'decision', 'tl.budget_stop': 'cap hit', 'tl.done': 'done', 'tl.user_msg': 'Jaeha', 'tl.briefing_queued': 'briefing queued', 'tl.session_new': 'new session',
+  'tl.approval': 'approval', 'tl.approval_done': 'decision', 'tl.budget_stop': 'cap hit', 'tl.done': 'done', 'tl.user_msg': '{owner}', 'tl.briefing_queued': 'briefing queued', 'tl.session_new': 'new session',
   'tab.talk': 'Talk', 'tab.templates': 'Templates',
-  'talk.offline': 'Connect a server to see the messages the lead, agents and Jaeha exchange (assignments, replies, questions, approvals, reports).', 'talk.title': '{n} messages',
+  'talk.offline': 'Connect a server to see the messages the lead, agents and {owner} exchange (assignments, replies, questions, approvals, reports).', 'talk.title': '{n} messages',
   'talk.all': 'Rereads the inboxes and handled mail every 4 seconds. Fenced material such as client documents is shortened.', 'talk.filtered': "Showing {name}'s messages only.",
   'talk.empty': "No messages yet. Send a briefing and the lead's assignments show up first.", 'talk.fail': "Couldn't load messages. Retrying on the next refresh.",
   'talk.more': 'Expand', 'talk.less': 'Collapse', 'talk.cut': 'first 600 chars only', 'talk.to': '→',
@@ -323,6 +325,8 @@ const en: Dict = {
   'set.behavior': 'Behavior', 'set.autoRevise': 'Auto-revise once after a QA fail', 'set.concurrency': 'Tasks running at once',
   'set.concurrencyNote': 'Applies from the next briefing. One person never runs two tasks at once.',
   'set.lang': 'Language', 'set.env': 'Environment', 'set.data': 'Work records (hive)', 'set.dataNote': 'Approvals, messages and memory are stored here. It cannot be moved from this screen.',
+  'set.owner': 'Decision maker', 'set.ownerKo': 'Korean name', 'set.ownerEn': 'English name', 'set.ownerKoPh': 'e.g. 홍길동', 'set.ownerEnPh': 'e.g. Gildong Hong',
+  'set.ownerNote': 'The person who sends briefings and approves or rejects. This name appears on screens, approval cards and reports, and in the lead\'s and agents\' instructions. Leave blank for the default ({def}); fill in only one and the other language uses it too. Names already in past records stay as they are.',
   'tasks.open': 'Open', 'tasks.word': 'Word', 'tasks.excel': 'Excel', 'tasks.folder': 'Folder', 'tasks.openFail': 'Could not open — {e}',
   'tasks.progress': '{d}/{n} done', 'tasks.cost': 'Tokens {v}', 'tasks.tokens': '{v} tokens', 'tasks.tokenNote': 'Subscription tokens (run + QA). Not money',
   'mo.partsToday': 'Today — input {i} · cache write {cw} · cache read {cr} · output {o}', 'mo.partsTask': 'input {i} · cache write {cw} · cache read {cr} · output {o}', 'mo.capShort': 'limit',
@@ -354,7 +358,7 @@ const en: Dict = {
   'plan.pass': 'Pass', 'plan.violations': '{n} violations', 'plan.view': 'View', 'plan.unlinked': 'No requirement', 'plan.noFile': 'No file',
   'plan.viewer': 'Screen spec {id}', 'plan.prev': 'Previous screen', 'plan.next': 'Next screen', 'plan.newWindow': 'New window', 'plan.checkResult': 'Check results',
   'plan.briefTitle': '[{name}] screen spec — next round', 'plan.briefResult': 'Two-pane screen specs (left screen · right spec) for up to six key screens, plus requirements ledger, work guide, IA, review and trace matrix',
-  'plan.briefContext': 'Pack: {id}\nList the screens for this round and any changed requirements. Attach the requirements spec or meeting notes if you have them.', 'plan.briefC1': 'Screens are generated only after Jaeha approves the work guide, rules and IA',
+  'plan.briefContext': 'Pack: {id}\nList the screens for this round and any changed requirements. Attach the requirements spec or meeting notes if you have them.', 'plan.briefC1': 'Screens are generated only after {owner} approves the work guide, rules and IA',
   'plan.briefC2': 'Mark features not in the requirements as "proposal"', 'plan.briefC3': 'No real organization or person names (anonymized)',
   'bc.hintEnter': 'Enter to send · Shift+Enter for a new line', 'bc.hintCtrlEnter': 'Ctrl+Enter to send', 'bc.templates': 'Pick a template', 'tpl.context': 'Context', 'tpl.constraints': 'Constraints', 'tpl.moreC': '+{n} more',
   'tpl.empty': 'No templates of your own yet.', 'tpl.loading': 'Loading templates…',
@@ -377,11 +381,14 @@ const DICTS: Record<Lang, Dict> = { ko, en };
 
 export type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-export function makeT(lang: Lang): TFn {
+/** owner — 결정권자 표시 이름. 문구의 {owner} 는 따로 넘기지 않아도 이 이름으로 채운다. */
+export function makeT(lang: Lang, owner?: string): TFn {
   const d = DICTS[lang] ?? ko;
+  const who = owner || DEFAULT_OWNER[lang];
   return (key, vars) => {
     let s = d[key] ?? ko[key] ?? key;
-    if (vars) for (const k in vars) s = s.split(`{${k}}`).join(String(vars[k]));
+    const all: Record<string, string | number> = { owner: who, ...vars };
+    for (const k in all) s = s.split(`{${k}}`).join(String(all[k]));
     return s;
   };
 }
@@ -402,10 +409,10 @@ export function breakerReason(lang: Lang, b: { reason?: string; reason_code?: st
   return `${BREAKER_EN[b.reason_code]}${b.reason_detail ? ` — ${b.reason_detail}` : ''}`;
 }
 
-/** 표시 이름 — 기본 12인·팀장·재하는 표, 추가 인원은 명단 API 의 name/name_en. */
-export function displayName(lang: Lang, id: string | undefined, roster?: { id: string; name: string; name_en?: string }[] | null): string {
+/** 표시 이름 — 기본 12인·팀장·결정권자(id jaeha, 이름은 owner)는 표, 추가 인원은 명단 API 의 name/name_en. */
+export function displayName(lang: Lang, id: string | undefined, roster?: { id: string; name: string; name_en?: string }[] | null, owner?: string): string {
   if (!id) return '';
-  const fixed = SIM_TEXT[lang].names[id];
+  const fixed = simTextFor(lang, owner).names[id];
   if (fixed) return fixed;
   const m = roster?.find((x) => x.id === id);
   if (m) return lang === 'en' ? m.name_en || m.name : m.name;
@@ -416,9 +423,11 @@ export interface OfficeLang {
   lang: Lang;
   t: TFn;
   name: (id: string | undefined) => string;
+  /** 결정권자 표시 이름(설정의 owner_name·owner_name_en, 비면 기본) — 승인·질문의 행위자 기본값 */
+  owner: string;
 }
 
-export const OfficeLangContext = createContext<OfficeLang>({ lang: 'ko', t: makeT('ko'), name: (id) => displayName('ko', id) });
+export const OfficeLangContext = createContext<OfficeLang>({ lang: 'ko', t: makeT('ko'), name: (id) => displayName('ko', id), owner: DEFAULT_OWNER.ko });
 
 export function useOfficeLang(): OfficeLang {
   return useContext(OfficeLangContext);

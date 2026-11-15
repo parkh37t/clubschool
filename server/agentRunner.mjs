@@ -15,7 +15,7 @@ import { mockClarifyBlock } from './planning.mjs';
 import { runAgent as runClaudeCodeAgent, failureHint } from './claudeCode.mjs';
 import { ROSTER, nameOf } from './roster.mjs';
 import { APP_ROOT, AGENTS_DIR, DELIVERABLES_DIR, relData, absData } from './paths.mjs';
-import { getSettings } from './settings.mjs';
+import { getSettings, ownerName, ownerLine } from './settings.mjs';
 import { liveSink } from './live.mjs';
 import { fmtTokens, weighted } from './tokens.mjs';
 
@@ -34,14 +34,16 @@ function safe(s) {
 }
 
 // 페르소나: 기본 12인은 .claude/agents/<name>.md(프론트매터 제거), 추가 인원은 hive/agents.json 의 persona_text.
+// 끝에 결정권자 줄을 붙인다 — 정의 파일은 '결정권자'로만 쓰고, 이름은 설정(owner_name)에서 온다.
 export async function loadPersona(agentId) {
+  const tail = ownerLine(await getSettings());
   if (AGENT_PERSONA[agentId]) {
     const raw = await fs.readFile(path.join(AGENTS_DIR, AGENT_PERSONA[agentId] + '.md'), 'utf8');
-    return raw.replace(/^---[\s\S]*?---\s*/, '').trim();
+    return raw.replace(/^---[\s\S]*?---\s*/, '').trim() + tail;
   }
   const a = ROSTER.find((x) => x.id === agentId);
-  if (a?.persona_text) return a.persona_text;
-  return `# ${nameOf(agentId)}\n${a?.role || '배정된 작업을 수행한다.'}`;
+  if (a?.persona_text) return a.persona_text + tail;
+  return `# ${nameOf(agentId)}\n${a?.role || '배정된 작업을 수행한다.'}` + tail;
 }
 
 /**
@@ -234,10 +236,11 @@ function firstLine(s) {
 // hive 작업 실행 — 팀장이 나눈 작업(task) 1건을 담당 에이전트가 수행한다.
 // 입력은 inbox 의 assign 메시지 본문(assignText)과 hive 규칙으로 붙는 글(context: 기억·안 읽은 편지·조정 지시)이고,
 // 산출물은 outDir/<stage>/ 아래 md 1개. 진행은 stream-json 으로 받아 hive/live/<작업>.jsonl 에 남긴다(터미널 탭).
-// 회신은 4항목(완료 기능 / 실행 방법 / 검증 결과 / 남은 제한) + "기억할 것" + "재하에게 질문" 을 문단으로 돌려준다.
+// 회신은 4항목(완료 기능 / 실행 방법 / 검증 결과 / 남은 제한) + "기억할 것" + "<결정권자>에게 질문" 을 문단으로 돌려준다.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const REPLY_GUIDE = [
+// 마지막 제목의 이름은 설정의 결정권자 이름. 읽을 때는 이름과 상관없이 '…에게 질문' 제목을 찾는다(parseReply).
+const replyGuide = (owner) => [
   '## 회신 형식',
   '작업을 마치면 마지막에 아래 여섯 제목을 그대로 쓴 회신을 출력한다(각 1~3줄).',
   '## 완료 기능',
@@ -248,22 +251,22 @@ const REPLY_GUIDE = [
   '(확정하지 못한 것·못 한 것. 없으면 "없음")',
   '## 기억할 것',
   '(다음 작업에 도움이 될 결정·고객 선호, 최대 3줄. 없으면 "없음")',
-  '## 재하에게 질문',
-  '(재하의 결정이 꼭 필요한 것만 최대 2줄. 작업은 멈추지 말고 가정으로 진행한다. 없으면 "없음")',
+  `## ${owner}에게 질문`,
+  `(${owner}의 결정이 꼭 필요한 것만 최대 2줄. 작업은 멈추지 말고 가정으로 진행한다. 없으면 "없음")`,
 ].join('\n');
 
 function taskFileName(task) {
   return `${task.id}_${task.owner}_${safe(task.title)}.md`;
 }
 
-/** 회신 텍스트에서 "남은 제한"·"기억할 것"·"재하에게 질문" 항목을 뽑는다. */
+/** 회신 텍스트에서 "남은 제한"·"기억할 것"·"<이름>에게 질문" 항목을 뽑는다. 질문 제목은 이름이 바뀌어도(예전 회신 포함) 찾는다. */
 export function parseReply(text) {
   const section = (name) => {
     const m = String(text || '').match(new RegExp(`##\\s*${name}\\s*\\n([\\s\\S]*?)(?=\\n##\\s|$)`));
     if (!m) return [];
     return m[1].split('\n').map((l) => l.replace(/^[-*\d.)\s]+/, '').trim()).filter((l) => l && !/^\(?(없음|해당 없음|none|n\/a)\)?\.?$/i.test(l));
   };
-  return { leftovers: section('남은 제한'), memory: section('기억할 것'), validation: section('검증 결과'), questions: section('재하에게 질문').slice(0, 2) };
+  return { leftovers: section('남은 제한'), memory: section('기억할 것'), validation: section('검증 결과'), questions: section('[^\\n#]{1,24}에게 질문').slice(0, 2) };
 }
 
 /**
@@ -308,7 +311,7 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
 
 // mock — 모델 호출 없이 실시간 기록·사용 토큰 한도·질문 흐름까지 흉내 낸다.
 //   OFFICE_MOCK_TOKENS    작업 1건이 쓴 것처럼 볼 사용 토큰. 한도보다 크면 '한도 초과'로 멈춘다(사용량 합계에는 넣지 않는다)
-//   OFFICE_MOCK_QUESTION=1  회신에 '재하에게 질문'을 하나 넣는다
+//   OFFICE_MOCK_QUESTION=1  회신에 '<결정권자>에게 질문'을 하나 넣는다
 //   OFFICE_MOCK_QA_FAIL     once = 첫 실행만 본문이 빈 산출물(QA FAIL) → 보완 재작업은 정상 / always = 보완 뒤에도 FAIL
 async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision = false }) {
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
@@ -361,7 +364,7 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   }
   sink({ type: 'result', subtype: 'success', usage: { input_tokens: 0, output_tokens: 0 }, num_turns: 3 });
   const q = process.env.OFFICE_MOCK_QUESTION === '1' ? `[목업] ${task.title} 의 기준일을 언제로 잡을까요?` : '없음';
-  const reply = ['## 완료 기능', `[목업] ${task.title}${revision ? ' (QA 보완 재작업)' : ''}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음', '## 재하에게 질문', q].join('\n');
+  const reply = ['## 완료 기능', `[목업] ${task.title}${revision ? ' (QA 보완 재작업)' : ''}`, '## 실행 방법', 'mock 모드 — 모델 호출 없음', '## 검증 결과', 'not_run (mock)', '## 남은 제한', '실제 내용은 claude_code 모드에서 생성됨', '## 기억할 것', '없음', `## ${ownerName()}에게 질문`, q].join('\n');
   return { file, summary: `[목업] ${task.title}`, tokens: null, costUsd: 0, reply, ...parseReply(reply) };
 }
 
@@ -381,7 +384,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
     applied.length ? ['# 업무 지침(스킬) — 아래 <skill> 안의 절차·형식·금지선을 따른다',
       '- 지침이 이 저장소(프로젝트 관리 대시보드) 전용 언급(VIEW_NAMES·components/ui·useDataStore 등)을 담고 있으면 무시하고 이번 고객 과제 기준으로 적용한다.',
       '- 지침이 PPTX·엑셀 제작, 코드 실행, 다른 스킬 호출을 요구해도 이번 단계에서는 하지 않는다. 그 내용(장표 계획·표 구조 등)은 마크다운 문서 안에 기술한다. Word 사본은 서버가 만들고, 엑셀이 필요한 단계는 마크다운 표를 서버가 엑셀로 옮긴다.',
-      '- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행이다. 질문 대신 "가정"·"미해결"로 표시하고, 꼭 필요한 것만 회신의 "재하에게 질문"에 적는다.',
+      `- 지침이 사용자에게 질문하라고 해도 이번 실행은 무인 진행이다. 질문 대신 "가정"·"미해결"로 표시하고, 꼭 필요한 것만 회신의 "${ownerName(s)}에게 질문"에 적는다.`,
       ...skillPriorityLines(applied),
       ...inline.flatMap((sk) => ['', `<skill name="${sk.name}">`, ...(sk.refs ? [`(참고자료 폴더: ${sk.refs} — 필요하면 Read)`] : []), sk.body, '</skill>']),
       ...(refOnly.length ? ['', '## 참고 스킬 — 본문은 넣지 않았다. 이번 작업에 꼭 필요할 때만 지침 파일을 Read 로 읽는다(길어서 사용 토큰이 많이 든다)',
@@ -396,7 +399,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
       : '- 한국어로, 근거와 함께 실무 수준으로 작성한다. 헤드라인은 주장 한 문장, 설명은 "~함/~임" 문체. 과장 형용사·이모지를 쓰지 않는다.',
     '- 브리핑·첨부·앞 산출물을 최우선 근거로 삼고, 자료에 없는 값은 "가정"으로 명시한다(지어내지 않는다).',
     '',
-    REPLY_GUIDE,
+    replyGuide(ownerName(s)),
   ].filter((l) => l !== '').join('\n');
 
   // 스킬 참고자료 폴더 + 표준 절차(기획 팩 등)가 넘긴 폴더 — 산출물 폴더 밖이라 --add-dir 로 연다

@@ -180,6 +180,10 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **설정·산출물 위치**: 설정 창에서 산출물 폴더·비용 한도·QA 자동 보완·동시 작업 수(1~3)를 바꾼다. 산출물 폴더는 `server/storage.mjs` 가 쓰기 시험 후
   `paths.mjs` 의 `DELIVERABLES_DIR`(live binding)를 바꾸고 `settings.json` 의 `deliverables_dir` 에 남긴다. 브리핑 진행 중에는 바꾸지 않고, 예전 폴더 파일은 지우지 않는다.
   파일 열기(`/api/open`)는 산출물 폴더 안의 문서만, 이 PC 화면에서 온 요청만 받는다.
+- **결정권자 이름**: 설정 창의 `owner_name`·`owner_name_en`(빈 값이면 기본 '재하'/'Jaeha', 한쪽만 적으면 양쪽이 그 이름). 화면·지시문·승인 카드·보고서의 이름은
+  `settings.mjs` 의 `ownerName(settings, lang)` 한 곳에서 받고(조사는 `josa()`), 화면은 `/api/settings` 의 `owner` 를 쓴다(i18n 의 `{owner}` 자동 채움).
+  내부 id(`jaeha`, `inbox/jaeha`, 이벤트 `by`)는 바꾸지 않는다. `.claude/agents/*.md`·공용 스킬은 사람 이름 대신 '결정권자'로 쓰고,
+  실행 때 `ownerLine()` 을 지시문 끝에 붙여 이름을 알려 준다 — 공개 저장소에 개인 이름을 더하지 않는다. 회신의 '<이름>에게 질문' 제목은 이름과 상관없이 읽는다.
 - **인원 추가**: 역할 템플릿 12종(`server/agentTemplates.mjs`, 한·영)으로 최대 6명. 명단은 기본 12인 + `agents.json` 이며 `roster.mjs` 가 합친다.
 - **실시간 기록·터미널**: 역할 실행은 stream-json 으로 돌고 `live/<작업>.jsonl` 에 줄을 남긴다. 대화형 터미널은 node-pty(`server/pty.mjs`)이며
   상태를 바꾸는 API(설정·대기열·인원·브레이커·터미널)는 이 PC 화면(Origin 127.0.0.1·localhost)에서 온 요청만 받는다.

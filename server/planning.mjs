@@ -13,7 +13,7 @@
 import { promises as fs } from 'node:fs';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { getSettings } from './settings.mjs';
+import { getSettings, ownerName } from './settings.mjs';
 import { absData } from './paths.mjs';
 import { fence } from './fence.mjs';
 
@@ -342,7 +342,7 @@ export async function planningBefore(task, { tasks, log = () => {} }) {
       '```json',
       '{"screens":[{"id":"abc-admin-memberList","type":"list","title":"회원 목록","portal":"admin","menu":"member","menu_label":"회원 관리","purpose":"회원을 조건으로 찾고 상세로 이동","req":["REQ-01"],"hidden":false}]}',
       '```',
-      '- 확정 못 한 것은 [확인 필요] 로 표시한다. 재하가 승인하면 규칙·IA·작업가이드가 확정(confirmed)되고 화면 생성이 시작된다.',
+      `- 확정 못 한 것은 [확인 필요] 로 표시한다. ${ownerName()} 승인이 나면 규칙·IA·작업가이드가 확정(confirmed)되고 화면 생성이 시작된다.`,
       kitNote].filter(Boolean).join('\n') };
   }
   if (task.step === 'build') {

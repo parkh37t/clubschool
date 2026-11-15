@@ -5,6 +5,7 @@ import { EnvCard } from './EnvCard';
 import { AccountSection } from './AccountSection';
 import { useOfficeLang } from './i18n';
 import type { Lang } from './i18n';
+import { DEFAULT_OWNER } from './simText';
 import { BAD_FG, FONT, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, PAPER, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle, smallMuted } from './officeTheme';
 
 interface SettingsDialogProps {
@@ -32,7 +33,7 @@ const h3 = { fontSize: 13, fontWeight: 800, color: WYLIE_DARK, margin: 0 } as co
 const pathBox = { fontFamily: MONO, fontSize: 12, background: '#fff', border: `1px solid ${LINE_SOFT}`, borderRadius: 6, padding: '5px 8px', overflowWrap: 'anywhere', flex: '1 1 240px', minWidth: 0 } as const;
 
 /**
- * 설정 — 산출물 저장 위치(바꾸기·열기·기존 산출물 복사), 비용 한도, QA 자동 보완·동시 작업 수, 언어, 환경 점검, 작업 기록 위치.
+ * 설정 — Claude 계정, 결정권자 이름, 산출물 저장 위치(바꾸기·열기·기존 산출물 복사), 비용 한도, QA 자동 보완·동시 작업 수, 언어, 환경 점검, 작업 기록 위치.
  * 값은 서버의 hive/settings.json 에 남는다(산출물 위치는 /api/settings/deliverables 가 쓰기 시험을 한 뒤에만 바꾼다).
  */
 export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLogin = false }: SettingsDialogProps) {
@@ -46,6 +47,9 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
   const [cap, setCap] = useState('');
   const [daily, setDaily] = useState('');
   const [costMsg, setCostMsg] = useState<Msg>(null);
+  const [ownerKo, setOwnerKo] = useState('');
+  const [ownerEn, setOwnerEn] = useState('');
+  const [ownerMsg, setOwnerMsg] = useState<Msg>(null);
   const [behaviorMsg, setBehaviorMsg] = useState<Msg>(null);
   const [kitDir, setKitDir] = useState('');
   const [kitMsg, setKitMsg] = useState<Msg>(null);
@@ -62,12 +66,14 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  // 비용 칸은 처음 받은 값으로 한 번만 채운다(입력 중에 4초 갱신이 덮어쓰지 않게)
+  // 비용·이름 칸은 처음 받은 값으로 한 번만 채운다(입력 중에 4초 갱신이 덮어쓰지 않게)
   useEffect(() => {
     if (!data || loaded.current) return;
     loaded.current = true;
     setCap(String(Math.round(data.max_task_tokens / 1000)));
     setDaily(String(Math.round(data.agent_daily_tokens / 1000)));
+    setOwnerKo(data.owner_name ?? '');
+    setOwnerEn(data.owner_name_en ?? '');
   }, [data]);
 
   const open = async (body: Record<string, unknown>, setMsg: (m: Msg) => void) => {
@@ -137,6 +143,18 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
     onSaved();
   };
 
+  // 결정권자 이름 — 빈 칸이면 서버가 기본 이름을 쓴다. 서버가 정리한 값(줄바꿈·꺾쇠 제거, 20자)으로 칸을 다시 채운다.
+  const saveOwner = async () => {
+    setOwnerMsg(null);
+    const r = await postJson(`${apiBase}/api/settings`, { owner_name: ownerKo, owner_name_en: ownerEn });
+    if (!r.ok) { setOwnerMsg({ ok: false, text: String(r.error) }); return; }
+    setOwnerKo(String(r.data?.owner_name ?? ownerKo.trim()));
+    setOwnerEn(String(r.data?.owner_name_en ?? ownerEn.trim()));
+    setOwnerMsg({ ok: true, text: t('set.saved') });
+    refresh();
+    onSaved();
+  };
+
   const saveBehavior = async (patch: Record<string, unknown>) => {
     setBehaviorMsg(null);
     const r = await postJson(`${apiBase}/api/settings`, patch);
@@ -163,6 +181,25 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
           <section style={section} aria-label={t('acc.title')}>
             <h3 style={h3}>{t('acc.title')}</h3>
             <AccountSection apiBase={apiBase} running={Boolean(data?.running)} autoLogin={autoLogin} />
+          </section>
+        )}
+
+        {connected && data && (
+          <section style={section} aria-label={t('set.owner')}>
+            <h3 style={h3}>{t('set.owner')}</h3>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, flex: '1 1 160px' }}>
+                {t('set.ownerKo')}
+                <input value={ownerKo} maxLength={20} onChange={(e) => setOwnerKo(e.target.value)} placeholder={t('set.ownerKoPh')} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
+              </label>
+              <label style={{ fontSize: 11.5, fontWeight: 800, color: MUTED, flex: '1 1 160px' }}>
+                {t('set.ownerEn')}
+                <input value={ownerEn} maxLength={20} onChange={(e) => setOwnerEn(e.target.value)} placeholder={t('set.ownerEnPh')} style={{ ...inputStyle, marginTop: 4, resize: undefined }} />
+              </label>
+              <button type="button" style={primary} onClick={saveOwner}>{t('set.save')}</button>
+            </div>
+            {note(ownerMsg)}
+            <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.ownerNote', { def: DEFAULT_OWNER[lang] })}</p>
           </section>
         )}
 

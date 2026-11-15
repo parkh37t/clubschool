@@ -1,5 +1,5 @@
 // 앱 설정 — hive/settings.json. 화면 언어(한·영), 작업당 사용 토큰 한도, 에이전트별 하루 사용 토큰 한도, QA 반려 시 자동 보완, 동시 작업 수,
-// 산출물 폴더(storage.mjs 가 검사한 뒤에만 바꾼다), 팀장 상주 세션 id.
+// 산출물 폴더(storage.mjs 가 검사한 뒤에만 바꾼다), 결정권자 표시 이름, 팀장 상주 세션 id.
 // 환경 변수(OFFICE_MAX_TOKENS 등)는 기본값이고, 화면(설정 창·모니터 탭·언어 전환)에서 바꾼 값이 이 파일에 남아 우선한다.
 
 import { promises as fs } from 'node:fs';
@@ -18,8 +18,21 @@ export const DEFAULTS = {
   concurrency: Math.max(1, Math.min(3, Math.floor(Number(process.env.OFFICE_CONCURRENCY || 2)) || 2)), // 브리핑 안에서 동시에 도는 작업 수(1~3). 새 브리핑부터 적용
   deliverables_dir: '', // 산출물 폴더(절대경로). 빈 값이면 기본 위치(OFFICE_DELIVERABLES_DIR)
   plan_kit_dir: '', // 기획 에이전트 패키지 폴더(절대경로) — 표준 기획 프로세스·기획 탭이 쓴다(planning.mjs). 빈 값이면 꺼짐
+  // 결정권자(브리핑을 보내고 승인·반려하는 사람)의 표시 이름. 빈 값이면 기본 이름(OWNER_DEFAULT) — ownerName() 으로만 읽는다.
+  // 내부 id('jaeha', inbox/jaeha, 이벤트 by)는 바꾸지 않는다. 사람마다 자기 PC 에서 자기 이름을 넣는다.
+  owner_name: '',
+  owner_name_en: '',
   leader_session_id: '', // 팀장 상주 세션(claude --resume) id
 };
+
+export const OWNER_DEFAULT = { ko: '재하', en: 'Jaeha' };
+const OWNER_MAX = 20;
+
+/** 이름 칸 정리 — 줄바꿈·제어 문자·꺾쇠·백틱(지시문·마크다운·자료 울타리를 깨뜨릴 수 있는 것)을 빼고 20자까지. */
+export function cleanOwnerName(v) {
+  // eslint-disable-next-line no-control-regex -- 제어 문자를 지우는 것이 목적
+  return String(v ?? '').replace(/[\u0000-\u001f\u007f<>`]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, OWNER_MAX);
+}
 
 let cache = null;
 let tail = Promise.resolve();
@@ -54,6 +67,8 @@ export function updateSettings(patch) {
     if (patch.concurrency !== undefined) next.concurrency = Math.round(clampNum(patch.concurrency, 1, 3, cur.concurrency));
     if (typeof patch.deliverables_dir === 'string') next.deliverables_dir = patch.deliverables_dir;
     if (typeof patch.plan_kit_dir === 'string') next.plan_kit_dir = patch.plan_kit_dir;
+    if (typeof patch.owner_name === 'string') next.owner_name = cleanOwnerName(patch.owner_name);
+    if (typeof patch.owner_name_en === 'string') next.owner_name_en = cleanOwnerName(patch.owner_name_en);
     if (typeof patch.leader_session_id === 'string') next.leader_session_id = patch.leader_session_id;
     await fs.mkdir(HIVE_DIR, { recursive: true });
     await fs.writeFile(FILE + '.tmp', JSON.stringify(next, null, 2), 'utf8');
@@ -71,10 +86,10 @@ export async function currentConcurrency() {
   return Number.isFinite(n) ? Math.max(1, Math.min(3, Math.round(n))) : DEFAULTS.concurrency;
 }
 
-/** 화면에 내보낼 값(세션 id 는 빼고). */
+/** 화면에 내보낼 값(세션 id 는 빼고). owner 는 빈 칸을 기본 이름으로 채운 표시 이름(ownerName) — 화면은 이 값을 쓴다. */
 export function publicSettings(s) {
   const { leader_session_id: _id, max_task_usd: _u1, agent_daily_usd: _u2, ...rest } = s;
-  return { ...rest, leader_session: Boolean(s.leader_session_id) };
+  return { ...rest, leader_session: Boolean(s.leader_session_id), owner: { ko: ownerName(s, 'ko'), en: ownerName(s, 'en') } };
 }
 
 /** 서버가 만들어 화면에 보내는 상태 문구(사무실 말풍선·팀장 요약). 작업 제목 같은 내용은 번역하지 않는다. */
@@ -95,4 +110,36 @@ export function stateText(s) {
 /** 영어 모드일 때 프롬프트 끝에 붙이는 한 줄. */
 export function languageLine(s) {
   return s.lang === 'en' ? '\n\n# Language\nWrite every reply, file and heading in English.' : '';
+}
+
+/**
+ * 결정권자 표시 이름 — 화면·지시문·승인 카드·보고서의 이름은 모두 여기서 받는다.
+ * lang 은 그 문구의 언어(서버 문구는 대개 한국어라 기본 'ko'). 한쪽만 적었으면 다른 쪽도 그 이름을 쓰고, 둘 다 비면 기본 이름.
+ * s 를 주지 않으면 마지막으로 읽은 설정(getSettings 캐시)을 쓴다 — 동기 함수에서도 부를 수 있게.
+ */
+export function ownerName(s, lang = 'ko') {
+  const src = s || cache || DEFAULTS;
+  const ko = cleanOwnerName(src.owner_name);
+  const en = cleanOwnerName(src.owner_name_en);
+  return lang === 'en' ? en || ko || OWNER_DEFAULT.en : ko || en || OWNER_DEFAULT.ko;
+}
+
+/** 한국어 조사 — 이름 끝 글자의 받침으로 고른다(pair 예: '이/가', '을/를', '은/는'). 한글이 아니면 '이(가)' 꼴. */
+export function josa(name, pair) {
+  const [withB, without] = pair.split('/');
+  const code = String(name || '').trim().slice(-1).charCodeAt(0) - 0xac00;
+  if (!(code >= 0 && code <= 11171)) return `${name}${withB}(${without})`;
+  return `${name}${code % 28 ? withB : without}`;
+}
+
+/**
+ * 결정권자 줄 — 에이전트 정의(.claude/agents/*.md)·공용 스킬은 사람 이름 대신 '결정권자'로 쓰고,
+ * 실행 때 이 줄을 지시문(system) 끝에 붙여 이름을 알려 준다. 공개 저장소에 개인 이름을 두지 않기 위해서다.
+ */
+export function ownerLine(s) {
+  const ko = ownerName(s, 'ko');
+  const en = ownerName(s, 'en');
+  const lines = ['', '', '# 결정권자', `결정권자: ${ko} — 브리핑을 보내고 승인·반려하며 질문에 답하는 사람. 지침에 나오는 '결정권자'는 ${josa(ko, '을/를')} 가리킨다.`];
+  if ((s || cache || DEFAULTS).lang === 'en' && en !== ko) lines.push(`In English output, call them ${en}.`);
+  return lines.join('\n');
 }

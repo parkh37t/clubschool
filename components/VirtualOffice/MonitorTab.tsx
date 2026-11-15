@@ -23,7 +23,7 @@ function localDay(d: Date): string {
  * 중지된 에이전트의 재개는 승인 탭 카드로 한다.
  */
 export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabProps) {
-  const { t, lang, name } = useOfficeLang();
+  const { t, lang, name, owner } = useOfficeLang();
   const { data, refresh } = usePolling<UsageResponse>(connected ? `${apiBase}/api/usage` : undefined, 5000);
   const settings = usePolling<OfficeSettings>(connected ? `${apiBase}/api/settings` : undefined, 10000);
   const [revise, setRevise] = useState<boolean | null>(null); // 방금 바꾼 값(서버 값을 다시 읽기 전까지 화면에 먼저 보인다)
@@ -63,7 +63,7 @@ export function MonitorTab({ connected, apiBase, roster, selected }: MonitorTabP
   };
   const doReset = async (agent: string) => {
     if (!resetReason.trim()) { setResetMsg(t('mo.needReason')); return; }
-    const r = await postJson(`${apiBase}/api/breakers/${encodeURIComponent(agent)}/reset`, { by: lang === 'en' ? 'Jaeha' : '재하', reason: resetReason.trim() });
+    const r = await postJson(`${apiBase}/api/breakers/${encodeURIComponent(agent)}/reset`, { by: owner, reason: resetReason.trim() });
     setResetMsg(r.ok ? '' : String(r.error));
     if (r.ok) { setResetFor(null); setResetReason(''); }
   };

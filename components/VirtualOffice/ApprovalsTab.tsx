@@ -21,10 +21,12 @@ interface ApprovalsTabProps {
   demo: DemoApproval;
 }
 
-/** 승인 탭 — 재하 결정 대기 카드(사유 필수)와 결정 기록. 사용 토큰 한도 초과('사용량')·재개(서킷 브레이커) 카드도 여기로 온다. */
+/** 승인 탭 — 결정권자 결정 대기 카드(사유 필수)와 결정 기록. 사용 토큰 한도 초과('사용량')·재개(서킷 브레이커) 카드도 여기로 온다. */
 export function ApprovalsTab({ connected, apiBase, tasks, pending, approvals, demo }: ApprovalsTabProps) {
-  const { t, lang, name } = useOfficeLang();
-  const [by, setBy] = useState(lang === 'en' ? 'Jaeha' : '재하');
+  const { t, lang, name, owner } = useOfficeLang();
+  // 행위자 기본값은 설정의 결정권자 이름. 직접 고친 뒤에는 고친 값을 쓴다(설정을 늦게 받아도 기본값이 따라 바뀌게 null 로 시작).
+  const [byInput, setBy] = useState<string | null>(null);
+  const by = byInput ?? owner;
   const [reason, setReason] = useState('');
   const [msg, setMsg] = useState('');
   const [failed, setFailed] = useState(false);
@@ -49,7 +51,7 @@ export function ApprovalsTab({ connected, apiBase, tasks, pending, approvals, de
   const decide = async (id: string, decision: 'approved' | 'rejected') => {
     if (!reason.trim()) { setFailed(true); setMsg(t('ap.needReason')); return; }
     setBusy(true);
-    const r = await postJson(`${apiBase}/api/approve`, { id, decision, by: by.trim() || '재하', reason: reason.trim() });
+    const r = await postJson(`${apiBase}/api/approve`, { id, decision, by: by.trim() || owner, reason: reason.trim() });
     setBusy(false);
     setFailed(!r.ok);
     setMsg(r.ok ? t('ap.done', { id, d: t(decision === 'approved' ? 'ap.approved' : 'ap.rejected') }) : t('ap.failed', { e: r.error ?? '' }));

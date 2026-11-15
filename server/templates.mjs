@@ -4,13 +4,14 @@
 //          결과 줄은 '끝나면 손에 쥘 것'을 구체적으로 적고, [대괄호] 부분은 쓰는 사람이 고친다. 지울 수 없다.
 //   사용자 hive/templates.json(TPL-0001…, 최대 30개). 입력창의 [템플릿으로 저장]으로 만들고 템플릿 탭에서 지운다.
 //          쓴 언어 그대로 돌려준다(번역하지 않는다).
-// 화면은 채우기만 하고, 보내기는 사람이 누른다.
+// 화면은 채우기만 하고, 보내기는 사람이 누른다. 기본 템플릿의 {owner} 는 내보낼 때 설정의 결정권자 이름으로 채운다.
 
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { HIVE_DIR } from './paths.mjs';
 import * as hive from './hive.mjs';
 import { OWNER } from './roster.mjs';
+import { getSettings, ownerName } from './settings.mjs';
 
 const FILE = path.join(HIVE_DIR, 'templates.json');
 export const MAX_TEMPLATES = 30;
@@ -23,13 +24,13 @@ const DEFAULTS = [
       title: '[고객사] RFP 검토·Go/No-Go',
       result: 'RFP 요약 1쪽과 Go/No-Go 권고서(마크다운) — 핵심 요구·예산·일정·평가 배점 표, 5축(적합성·승산·수익성·리스크·전략가치) 판단과 근거, 발주처에 질의할 것 목록',
       context: 'RFP 원문은 파일·폴더로 첨부한다. 발주처: [고객사] · 사업명: [사업명] · 제출 마감: [YYYY-MM-DD]. 우리 강점(유사 구축 경험)과 투입 가능한 인력 상황을 적으면 판단이 정확해진다.',
-      constraints: ['RFP 에 없는 예산·일정은 지어내지 않고 "확인 필요"로 표시', '외부 발송 금지 — 내부 검토용', 'Go/No-Go 최종 결정은 재하가 한다(권고까지만)'],
+      constraints: ['RFP 에 없는 예산·일정은 지어내지 않고 "확인 필요"로 표시', '외부 발송 금지 — 내부 검토용', 'Go/No-Go 최종 결정은 {owner}의 몫(권고까지만)'],
     },
     en: {
       title: '[Client] RFP review · Go/No-Go',
       result: 'A one-page RFP summary and a Go/No-Go recommendation (markdown) — table of key requirements, budget, schedule and scoring; a 5-axis call (fit, win odds, margin, risk, strategic value) with evidence; questions to ask the client',
       context: 'Attach the RFP as files or a folder. Client: [Client] · Project: [Project] · Due: [YYYY-MM-DD]. Note our strengths (similar builds) and who is available — it sharpens the call.',
-      constraints: ['Do not invent budget or dates missing from the RFP — mark them "to confirm"', 'No external sending — internal review only', 'Jaeha makes the final Go/No-Go call (recommend only)'],
+      constraints: ['Do not invent budget or dates missing from the RFP — mark them "to confirm"', 'No external sending — internal review only', '{owner} makes the final Go/No-Go call (recommend only)'],
     },
   },
   {
@@ -39,15 +40,15 @@ const DEFAULTS = [
       title: '[고객사] [사업명] 제안서 — 전체 프로세스',
       result: '제안서 초안 묶음(마크다운) — 조사·근거표, RFP 요구·평가 대응표와 Go/No-Go, 전략·목차, UX·디자인 섹션, KPI, 견적·인력 투입 계획, 장표 구성안·대응표 역채움, 본문, 검수 보고서(AI 검수)',
       context: 'RFP 원문·과업지시서는 파일·폴더로 첨부한다. 발주처: [고객사] · 사업명: [사업명] · 대상 서비스: [웹/앱/플랫폼] · 제출 마감: [YYYY-MM-DD] · 발표 시간: [분]. 강조할 레퍼런스: [유사 사업]. 투입 가능한 인력 상황을 적으면 Go/No-Go 판단이 정확해진다.',
-      constraints: ['Go/No-Go 는 재하가 승인한 뒤 다음 단계로 넘어감', '견적 금액·투입 M/M 은 견적 단계에서 재하가 승인(수치확정)한 값만 본문에 씀', '근거 없는 효과 수치·상투어 금지, 확인 못 한 값은 "미확인"', '외부 발송 금지 — 내부 검토용'],
-      steps: ['① 조사 — 김영업', '② RFP 분석·Go/No-Go — 한도전 (재하 승인)', '③ 전략·스토리·목차 — 한도전', '④ UX·디자인 섹션 — 차도안 (화면·서비스 과제일 때)', '⑤ KPI 설계 — 고지표 (성과·지표 언급 시)', '⑥ 견적·인력 투입 계획·인력 카드·갭 분석 — 정우선 (재하 승인, 엑셀 함께 저장)', '⑦ 장표 구성안·대응표 역채움 — 차도안', '⑧ 본문 — 한도전', '⑨ 발표본·발표 노트 — 홍보라 (결과·제약에 발표가 있을 때)', '⑩ 검수(AI 검수) — 고지표'],
+      constraints: ['Go/No-Go 는 {owner} 승인 뒤 다음 단계로 넘어감', '견적 금액·투입 M/M 은 견적 단계에서 {owner} 승인(수치확정)을 받은 값만 본문에 씀', '근거 없는 효과 수치·상투어 금지, 확인 못 한 값은 "미확인"', '외부 발송 금지 — 내부 검토용'],
+      steps: ['① 조사 — 김영업', '② RFP 분석·Go/No-Go — 한도전 ({owner} 승인)', '③ 전략·스토리·목차 — 한도전', '④ UX·디자인 섹션 — 차도안 (화면·서비스 과제일 때)', '⑤ KPI 설계 — 고지표 (성과·지표 언급 시)', '⑥ 견적·인력 투입 계획·인력 카드·갭 분석 — 정우선 ({owner} 승인, 엑셀 함께 저장)', '⑦ 장표 구성안·대응표 역채움 — 차도안', '⑧ 본문 — 한도전', '⑨ 발표본·발표 노트 — 홍보라 (결과·제약에 발표가 있을 때)', '⑩ 검수(AI 검수) — 고지표'],
     },
     en: {
       title: '[Client] [Project] proposal — full process',
       result: 'A proposal draft set (markdown) — research and evidence table, RFP requirement-scoring matrix and Go/No-Go, strategy and outline, UX/design section, KPIs, estimate and staffing plan, slide plan and requirement backfill, body, review report (AI review)',
       context: 'Attach the RFP and statement of work as files or a folder. Client: [client] · Project: [project] · Service: [web/app/platform] · Due: [YYYY-MM-DD] · Pitch length: [minutes]. References to stress: [similar projects]. Note who is available to staff it for a sharper Go/No-Go.',
-      constraints: ['Moves past Go/No-Go only after Jaeha approves', 'The body uses only the price and man-months Jaeha approved in the estimate step', 'No unsupported effect numbers or clichés; unverified values marked "unverified"', 'No external sending — internal review only'],
-      steps: ['① Research — Kim Youngeop', '② RFP analysis · Go/No-Go — Han Dojeon (Jaeha approves)', '③ Strategy · story · outline — Han Dojeon', '④ UX/design section — Cha Doan (screen or service projects)', '⑤ KPI design — Go Jipyo (when results or metrics are mentioned)', '⑥ Estimate · staffing plan · staffing cards · gap analysis — Jeong Useon (Jaeha approves, also saved as Excel)', '⑦ Slide plan · requirement backfill — Cha Doan', '⑧ Body — Han Dojeon', '⑨ Presentation cut · speaker notes — Hong Bora (when the result or constraints mention a presentation)', '⑩ Review (AI review) — Go Jipyo'],
+      constraints: ['Moves past Go/No-Go only after {owner} approves', 'The body uses only the price and man-months {owner} approved in the estimate step', 'No unsupported effect numbers or clichés; unverified values marked "unverified"', 'No external sending — internal review only'],
+      steps: ['① Research — Kim Youngeop', '② RFP analysis · Go/No-Go — Han Dojeon ({owner} approves)', '③ Strategy · story · outline — Han Dojeon', '④ UX/design section — Cha Doan (screen or service projects)', '⑤ KPI design — Go Jipyo (when results or metrics are mentioned)', '⑥ Estimate · staffing plan · staffing cards · gap analysis — Jeong Useon ({owner} approves, also saved as Excel)', '⑦ Slide plan · requirement backfill — Cha Doan', '⑧ Body — Han Dojeon', '⑨ Presentation cut · speaker notes — Hong Bora (when the result or constraints mention a presentation)', '⑩ Review (AI review) — Go Jipyo'],
     },
   },
   {
@@ -57,15 +58,15 @@ const DEFAULTS = [
       title: '[고객사] [사업명] 견적서·인력투입계획',
       result: '견적기준표·인력투입계획·인력 카드·견적서(안)·갭 분석 — 기준안과 낮은안·높은안, 정합 점검표(표는 엑셀로도 저장)',
       context: 'RFP·과업지시서·요구사항 목록은 파일로 첨부한다. 사업 기간: [N개월] · 예산 상한: [금액 또는 미정] · 제외 범위: [예: 개발·인프라]. 사내 단가표가 있으면 첨부한다(없으면 단가 칸은 [확인 필요]).',
-      constraints: ['금액·인력 수치는 재하 승인(수치확정) 전까지 안', '확인 못 한 단가·수량은 [확인 필요]로 표시하고 지어내지 않음', '다른 고객사 견적의 금액·단가를 옮겨 쓰지 않음', '외부 발송 금지 — 내부 검토용'],
-      steps: ['① 견적 범위·가정 정리 — 정우선', '② 견적기준표·인력투입계획·견적서(안) — 정우선 (엑셀 함께 저장)', '③ 견적 검수 — 고지표 (재하 승인)'],
+      constraints: ['금액·인력 수치는 {owner} 승인(수치확정) 전까지 안', '확인 못 한 단가·수량은 [확인 필요]로 표시하고 지어내지 않음', '다른 고객사 견적의 금액·단가를 옮겨 쓰지 않음', '외부 발송 금지 — 내부 검토용'],
+      steps: ['① 견적 범위·가정 정리 — 정우선', '② 견적기준표·인력투입계획·견적서(안) — 정우선 (엑셀 함께 저장)', '③ 견적 검수 — 고지표 ({owner} 승인)'],
     },
     en: {
       title: '[Client] [Project] estimate and staffing plan',
       result: 'Cost basis, staffing plan, staffing cards, draft quote and gap analysis — base/low/high cases and a consistency check (tables also saved as Excel)',
       context: 'Attach the RFP, statement of work or requirement list. Duration: [N months] · Budget cap: [amount or none] · Out of scope: [e.g. development, infrastructure]. Attach the company rate card if you have one (otherwise price cells are [to confirm]).',
-      constraints: ['Prices and staffing numbers stay drafts until Jaeha approves', 'Unconfirmed prices or quantities are marked [to confirm], never invented', 'Do not copy prices from other clients\' quotes', 'No external sending — internal review only'],
-      steps: ['① Estimate scope and assumptions — Jeong Useon', '② Cost basis, staffing plan, draft quote — Jeong Useon (also saved as Excel)', '③ Estimate review — Go Jipyo (Jaeha approves)'],
+      constraints: ['Prices and staffing numbers stay drafts until {owner} approves', 'Unconfirmed prices or quantities are marked [to confirm], never invented', 'Do not copy prices from other clients\' quotes', 'No external sending — internal review only'],
+      steps: ['① Estimate scope and assumptions — Jeong Useon', '② Cost basis, staffing plan, draft quote — Jeong Useon (also saved as Excel)', '③ Estimate review — Go Jipyo ({owner} approves)'],
     },
   },
   {
@@ -120,25 +121,30 @@ const DEFAULTS = [
       title: '[서비스명] 화면설계 — 기획 에이전트 프로세스',
       result: '2단 화면설계서(좌 화면 · 우 사양) 핵심 화면 최대 6개와 요구 원장·작업가이드·IA·리뷰·추적 매트릭스',
       context: '팩: [영문-소문자-팩id — 기존 팩이면 이어서, 없으면 새로 만듦]\n요구사항 정의서나 RFP 기능 목록을 첨부한다. 주요 사용자: [역할] · 채널: [앱/웹] · 핵심 과업: [예: 비대면 계좌 개설].',
-      constraints: ['작업가이드·규칙·IA 는 재하가 승인(가이드확정)한 뒤 화면 생성', '요구사항에 없는 기능은 "제안"으로 구분', '실기관·실인물 이름은 쓰지 않음(익명화)'],
-      steps: ['① 요구 원장·미확정 — 정우선', '② 작업가이드·규칙·IA — 나기획 (재하 승인: 가이드확정)', '③ 2단 화면설계서 — 나기획·표준수 (서버가 뼈대 생성, 린트·verify 게이트)', '④ 리뷰 — 고지표', '⑤ 추적 매트릭스·3키 인계 — 정우선 (재하 승인: 컨펌)'],
+      constraints: ['작업가이드·규칙·IA 는 {owner} 승인(가이드확정) 뒤 화면 생성', '요구사항에 없는 기능은 "제안"으로 구분', '실기관·실인물 이름은 쓰지 않음(익명화)'],
+      steps: ['① 요구 원장·미확정 — 정우선', '② 작업가이드·규칙·IA — 나기획 ({owner} 승인: 가이드확정)', '③ 2단 화면설계서 — 나기획·표준수 (서버가 뼈대 생성, 린트·verify 게이트)', '④ 리뷰 — 고지표', '⑤ 추적 매트릭스·3키 인계 — 정우선 ({owner} 승인: 컨펌)'],
     },
     en: {
       title: '[Service] screen spec — planning-agent process',
       result: 'Two-pane screen specs (left screen · right spec) for up to six key screens, plus requirements ledger, work guide, IA, review and trace matrix',
       context: 'Pack: [lowercase-pack-id — continues an existing pack or creates one]\nAttach the requirements spec or the RFP feature list. Main users: [roles] · Channel: [app/web] · Key job: [e.g. opening an account online].',
-      constraints: ['Screens are generated only after Jaeha approves the work guide, rules and IA', 'Mark features not in the requirements as "proposal"', 'No real organization or person names (anonymized)'],
-      steps: ['① Requirements ledger · open items — Jeong Useon', '② Work guide · rules · IA — Na Gihoek (Jaeha approves the guide)', '③ Two-pane specs — Na Gihoek · Pyo Junsu (server scaffolds; lint/verify gate)', '④ Review — Go Jipyo', '⑤ Trace matrix · three-key handoff — Jeong Useon (Jaeha confirms)'],
+      constraints: ['Screens are generated only after {owner} approves the work guide, rules and IA', 'Mark features not in the requirements as "proposal"', 'No real organization or person names (anonymized)'],
+      steps: ['① Requirements ledger · open items — Jeong Useon', '② Work guide · rules · IA — Na Gihoek ({owner} approves the guide)', '③ Two-pane specs — Na Gihoek · Pyo Junsu (server scaffolds; lint/verify gate)', '④ Review — Go Jipyo', '⑤ Trace matrix · three-key handoff — Jeong Useon ({owner} confirms)'],
     },
   },
 ];
 
 const BUILTIN_IDS = new Set(DEFAULTS.map((d) => d.id));
 
-/** 기본 템플릿(현재 언어). */
+/** 기본 템플릿(현재 언어). {owner} 는 결정권자 이름으로 채운다(조사가 받침에 따라 바뀌지 않게 문장을 짰다). */
 export function builtinTemplates(lang = 'ko') {
   const l = lang === 'en' ? 'en' : 'ko';
-  return DEFAULTS.map((d) => ({ id: d.id, builtin: true, ...d[l], constraints: [...d[l].constraints] }));
+  const who = ownerName(undefined, l);
+  const fill = (v) => (typeof v === 'string' ? v.split('{owner}').join(who) : Array.isArray(v) ? v.map(fill) : v);
+  return DEFAULTS.map((d) => {
+    const x = Object.fromEntries(Object.entries(d[l]).map(([k, v]) => [k, fill(v)]));
+    return { id: d.id, builtin: true, ...x, constraints: [...x.constraints] };
+  });
 }
 
 let tail = Promise.resolve();
@@ -180,7 +186,7 @@ export function cleanTemplate(input) {
 
 /** 기본 + 사용자 템플릿. 사용자 것은 최근에 만든 것부터. */
 export async function listTemplates(lang = 'ko') {
-  const d = await load();
+  const [d] = await Promise.all([load(), getSettings()]); // 설정을 읽어 둬야 기본 템플릿의 {owner} 가 지금 이름으로 채워진다
   const mine = d.templates.slice().reverse().map((x) => ({ ...x, builtin: false }));
   return [...builtinTemplates(lang), ...mine];
 }

@@ -23,7 +23,7 @@ import { resolveSkills, registryStatus } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
 import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
 import { kitStatus, kitGuide, listPacks, packDetail, kitFile } from './planning.mjs';
-import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency } from './settings.mjs';
+import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency, ownerName, josa } from './settings.mjs';
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
 import { startQueue, enqueue, loadQueue, cancelItem, isBriefingRunning } from './leaderSession.mjs';
@@ -658,7 +658,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const q = await hive.answerQuestion(id, { answer: String(body?.answer || '').trim(), by: String(body?.by || '').trim() });
         // 답은 질문한 쪽 inbox 로 — 역할 에이전트는 다음 작업 때 읽고(hive 규칙), 팀장은 상주 세션 대기열로 받는다.
-        if (q.from === LEADER.id) await enqueue({ kind: 'message', text: `[${q.id} 재하 답변] 질문: ${q.text}\n답: ${q.answer}`, by: OWNER.id, source: q.id });
+        if (q.from === LEADER.id) await enqueue({ kind: 'message', text: `[${q.id} ${ownerName()} 답변] 질문: ${q.text}\n답: ${q.answer}`, by: OWNER.id, source: q.id });
         else {
           await hive.sendMessage({ from: OWNER.id, to: q.from, type: 'answer', task: q.task, body: `${q.id} 답 — 질문: ${q.text}\n\n${q.answer}` });
           await hive.routeMail();
@@ -799,7 +799,7 @@ const server = http.createServer(async (req, res) => {
           const project = last ? String(last.output).split('/')[0] : '';
           const cwd = (project && absData(project)) || DELIVERABLES_DIR;
           await import('node:fs').then((m) => m.promises.mkdir(cwd, { recursive: true }));
-          const persona = `${await loadPersona(agent)}\n\n# 지금 위치\n이 폴더는 ${project ? `과제 '${project}' 의 산출물 폴더` : '산출물 폴더'}다. 재하가 직접 대화하며 일을 시킨다. 외부 발송·비용·삭제·범위 변경·수치 확정은 재하에게 먼저 확인한다.`;
+          const persona = `${await loadPersona(agent)}\n\n# 지금 위치\n이 폴더는 ${project ? `과제 '${project}' 의 산출물 폴더` : '산출물 폴더'}다. ${josa(ownerName(), '이/가')} 직접 대화하며 일을 시킨다. 외부 발송·비용·삭제·범위 변경·수치 확정은 ${ownerName()}에게 먼저 확인한다.`;
           opened = await openPty({ agent, cwd, title: `${nameOf(agent)} — ${project || '산출물 폴더'}`, persona, cols: body.cols, rows: body.rows });
         }
         log(`터미널 열기: ${agent} (${opened.id})`);

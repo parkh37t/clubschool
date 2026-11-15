@@ -8,9 +8,15 @@ import path from 'node:path';
 import { AGENT_NAME, AGENT_PERSONA } from './gates.mjs';
 import { HIVE_DIR } from './paths.mjs';
 import { templateById } from './agentTemplates.mjs';
+import { ownerName } from './settings.mjs';
 
 export const LEADER = { id: 'lead', name: '팀장', name_en: 'Team Lead', persona: 'leader' };
-export const OWNER = { id: 'jaeha', name: '재하', name_en: 'Jaeha' }; // 브리핑을 보내고 승인하는 사람. inbox/jaeha 에 보고가 쌓인다.
+// 결정권자 — 브리핑을 보내고 승인하는 사람. inbox/jaeha 에 보고가 쌓인다. id 는 고정이고, 이름은 설정(owner_name·owner_name_en)을 따른다.
+export const OWNER = {
+  id: 'jaeha',
+  get name() { return ownerName(undefined, 'ko'); },
+  get name_en() { return ownerName(undefined, 'en'); },
+};
 
 export const STAGES = ['00_sales', '01_rfp', '02_requirements', '03_proposal', '04_rebaseline', '05_plan', '06_design', '07_publish', '08_test_scenario', '09_test_run', '10_growth'];
 

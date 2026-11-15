@@ -15,7 +15,7 @@ import { postJson, useEventStream, usePolling } from './officeApi';
 import type { AgentStatus, AuthState, OfficeSettings, RosterResponse } from './officeApi';
 import { OfficeLangContext, breakerReason, displayName, makeT } from './i18n';
 import type { Lang } from './i18n';
-import { SIM_TEXT } from './simText';
+import { DEFAULT_OWNER, simTextFor } from './simText';
 import { AGENT_ORDER, BAD_FG, FONT, GATE_NAMES, INK, LINE, MONO, MUTED, WYLIE, WYLIE_DARK, WYLIE_TINT, inputStyle } from './officeTheme';
 import './virtualOffice.css';
 
@@ -83,7 +83,9 @@ export function VirtualOfficeView({
   const closeSettings = useCallback(() => { setSettingsOpen(false); setAutoLogin(false); }, []);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const lang: Lang = settings.data?.lang ?? localLang;
-  const t = useMemo(() => makeT(lang), [lang]);
+  // 결정권자 표시 이름 — 서버 설정(owner_name·owner_name_en, 빈 칸은 서버가 기본 이름으로 채움). 서버가 없으면 기본 이름
+  const owner = settings.data?.owner?.[lang] || DEFAULT_OWNER[lang];
+  const t = useMemo(() => makeT(lang, owner), [lang, owner]);
   const changeLang = async (next: Lang) => {
     setLocalLang(next);
     if (apiBase !== undefined) { await postJson(`${apiBase}/api/settings`, { lang: next }); settings.refresh(); }
@@ -146,7 +148,7 @@ export function VirtualOfficeView({
   }, []);
 
   useEffect(() => { simRef.current?.highlightAgent(selected); }, [selected]);
-  useEffect(() => { simRef.current?.setLang(lang); }, [lang]);
+  useEffect(() => { simRef.current?.setLang(lang, owner); }, [lang, owner]);
 
   // 실전 연동: stateUrl 지정 시 상태 JSON을 폴링해 applyOfficeState로 주입.
   useEffect(() => {
@@ -181,7 +183,7 @@ export function VirtualOfficeView({
     simRef.current?.syncCustomAgents(list);
   }, [members, lang]);
 
-  const langValue = useMemo(() => ({ lang, t, name: (id: string | undefined) => displayName(lang, id, members) }), [lang, t, members]);
+  const langValue = useMemo(() => ({ lang, t, owner, name: (id: string | undefined) => displayName(lang, id, members, owner) }), [lang, t, owner, members]);
 
   // [로그인] — 설정 창을 열어 Claude 계정 칸이 바로 앱 안 로그인을 시작한다(따로 창이 뜨지 않음)
   const startLogin = () => { setAutoLogin(true); setSettingsOpen(true); };
@@ -193,13 +195,13 @@ export function VirtualOfficeView({
   const hive: HiveState | null = sim ? sim.getHive() : null;
   const question = sim ? sim.getQuestion() : '';
   const connected = Boolean(hive) && apiBase !== undefined;
-  const S = SIM_TEXT[lang];
+  const S = simTextFor(lang, owner);
 
   // 서버 연결 시 명단 API, 데모일 때는 시뮬레이터 자리 상태로 카드를 만든다(많아야 19장이라 매번 계산해도 가볍다).
   const demoStates = sim && !connected ? sim.getAgentStates() : null;
   const cards: AgentCardData[] = connected && members
     ? members.map((m) => ({
-      id: m.id, name: displayName(lang, m.id, members),
+      id: m.id, name: displayName(lang, m.id, members, owner),
       role: S.roles[m.id] ?? (lang === 'en' ? m.dept_en || m.dept : m.dept),
       status: m.status, task: m.task, tokens: m.tokens, custom: m.custom, look: m.look ?? null,
       level: m.breaker?.level, levelReason: breakerReason(lang, m.breaker),
