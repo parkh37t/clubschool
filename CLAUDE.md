@@ -173,6 +173,11 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **표준 기획 프로세스**: 화면설계 브리핑은 설정의 기획 에이전트 패키지(`plan_kit_dir`, 이 PC 폴더 — 저장소에 두지 않음)가 있으면 `server/planning.mjs` 의 6단계
   (요구 원장 → 작업가이드·IA(승인 '가이드확정' → 팩 계층 confirmed) → 화면 생성 ×2(서버가 new_screen 뼈대) → 리뷰 → 추적·3키 인계(승인 '컨펌'))로 나눈다.
   패키지 스크립트는 서버가 돌리고(에이전트는 명령 실행 금지), 화면 생성 QA 에 verify(L01~L13·V01~V08)를 넣는다. 기획 탭·`/plan-files`(CSP sandbox)로 본다.
+  설치 파일에 패키지 사본이 들어간다 — `npm run desktop:build` 가 `desktop/scripts/stage-plan-kit.cjs` 로 빌드한 PC 의 연결된 패키지(또는 `OFFICE_PLAN_KIT_SRC`)에서
+  core·scripts·prompts·packs/_template·.claude·README 만 `desktop/plan-kit/`(gitignore)에 옮기고(프로젝트·데모 팩·맨 위 전략 문서 제외, 절대 경로·출처 문장 일반화),
+  처음 켤 때 `desktop/planKitSeed.cjs` 가 `문서\Clubschool AX Office\기획 에이전트 패키지\wylie-plan-agent` 로 복사해 `plan_kit_dir` 에 연결한다
+  (한 번만 — `plan_kit_seeded`, 이미 연결된 패키지가 있으면 그대로, [끄기] 뒤 다시 연결하지 않음). `fs.cpSync` 는 한글 경로에서 프로세스가 죽어 쓰지 않는다.
+  설정 창은 Python 3 유무(`planning.pythonVersion`)를 보이고 없으면 설치 안내를 띄운다.
 - **문서·제안 스킬 등록부**: `server/skillRegistry.mjs` 에 이 PC 의 문서·제안 스킬(사내·계정 동기화·플러그인 `플러그인:스킬`)을 이름·쓰임새·담당·넣는 방식으로 등록한다(스킬 파일은 저장소에 두지 않음).
   짧은 지침은 지시문에 본문을 넣고, 긴 지침·스크립트 전제 스킬(docx·pptx·xlsx·pdf)은 '참고 스킬'로 경로만 알려 필요할 때 읽게 한다(스킬 폴더를 --add-dir).
   표준 절차 단계·작업 글 자동 부착(`auto`)·팀장 분해의 선택(`extra_skills`, 작업당 최대 2개)으로 붙는다. 외부 도구·웹·데이터 연결이 필요한 스킬은 `usable:false`(보이되 붙이지 않음). 스킬 탭에서 본다.

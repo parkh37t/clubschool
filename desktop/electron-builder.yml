@@ -13,6 +13,7 @@ directories:
 files:
   - main.cjs
   - preload.cjs
+  - planKitSeed.cjs
   - package.json
   - assets/**
 # 앱 본체는 의존성이 없다. 이 훅이 없으면 루트의 화면용 의존성이 app.asar 에 들어간다(scripts/before-build.cjs 참고).
@@ -40,6 +41,9 @@ extraResources:
     to: .claude/agents
   - from: .claude/skills
     to: .claude/skills
+  # 기획 에이전트 패키지 사본(빌드한 PC 에 연결된 패키지에서 고객 팩·전략 문서를 빼고 만든 것 — stage-plan-kit.cjs). 처음 켤 때 문서 폴더로 복사·연결된다
+  - from: desktop/plan-kit
+    to: plan-kit
 win:
   target:
     - target: nsis

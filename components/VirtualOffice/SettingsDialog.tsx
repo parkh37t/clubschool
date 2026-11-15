@@ -248,6 +248,8 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
               {data.plan_kit_dir && <button type="button" style={btn} onClick={() => setKit('')}>{t('set.kitDisable')}</button>}
             </div>
             {!data.plan_kit?.ok && data.plan_kit?.error && data.plan_kit_dir && <p style={{ ...smallMuted, fontSize: 11.5, color: BAD_FG }}>{data.plan_kit.error}</p>}
+            {data.plan_kit?.ok && data.python === null && <p style={{ ...smallMuted, fontSize: 11.5, color: BAD_FG }}>{t('set.kitNoPython')}</p>}
+            {data.plan_kit?.ok && data.python && <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.kitPython', { v: data.python })}</p>}
             <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
               <input value={kitDir} onChange={(e) => setKitDir(e.target.value)} placeholder={t('set.kitPh')} spellCheck={false} aria-label={t('set.kit')}
                 style={{ ...inputStyle, marginTop: 0, fontFamily: MONO, fontSize: 12, flex: 1, resize: undefined }} />

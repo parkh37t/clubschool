@@ -123,6 +123,29 @@ export async function kitGuide(dir, { deliverablesDir = '' } = {}) {
   return { kind: 'not_kit', docs };
 }
 
+/**
+ * 이 PC 에 Python 3 이 있는지 — 패키지 스크립트(화면 뼈대·린트·검증)를 돌릴 수 있는지. 설정 창이 보여 준다(다른 PC 에서 없으면 화면 생성 단계에서야 실패하므로).
+ * @returns {Promise<string|null>} 'Python 3.12.10' 같은 버전 글, 없으면 null. 1분 캐시
+ */
+let pyCache = { at: 0, v: undefined };
+export async function pythonVersion() {
+  if (pyCache.v !== undefined && Date.now() - pyCache.at < 60000) return pyCache.v;
+  const v = await new Promise((resolve) => {
+    let out = '';
+    let child;
+    try {
+      child = spawn(process.platform === 'win32' ? 'python' : 'python3', ['--version'], { windowsHide: true });
+    } catch { resolve(null); return; }
+    const timer = setTimeout(() => { try { child.kill(); } catch { /* 이미 끝남 */ } resolve(null); }, 8000);
+    child.stdout.on('data', (d) => { out += d; });
+    child.stderr.on('data', (d) => { out += d; }); // 예전 Python 은 버전을 stderr 로 낸다
+    child.on('error', () => { clearTimeout(timer); resolve(null); });
+    child.on('close', (code) => { clearTimeout(timer); const m = /Python\s+3\.\d+(\.\d+)?/.exec(out); resolve(code === 0 && m ? m[0] : null); });
+  });
+  pyCache = { at: Date.now(), v };
+  return v;
+}
+
 function runPy(kit, args, { timeoutMs = 120000 } = {}) {
   return new Promise((resolve) => {
     let stdout = '';

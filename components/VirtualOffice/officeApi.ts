@@ -78,7 +78,7 @@ export interface LiveLine {
 export interface OfficeSettings {
   lang: 'ko' | 'en'; max_task_tokens: number; agent_daily_tokens: number; auto_revise: boolean; leader_session: boolean; concurrency: number; task_timeout_min: number;
   deliverables_dir: string; deliverables_default: string; deliverables_custom: boolean; hive_dir: string; mode: string; desktop: boolean; running: boolean;
-  plan_kit_dir: string; plan_kit: { ok: boolean; error: string };
+  plan_kit_dir: string; plan_kit: { ok: boolean; error: string }; python?: string | null;
   /** 결정권자 이름 — 설정 창에 적은 값(빈 값 가능)과, 빈 칸을 기본 이름으로 채운 표시 이름(owner, 서버 ownerName) */
   owner_name?: string; owner_name_en?: string; owner?: { ko: string; en: string };
 }

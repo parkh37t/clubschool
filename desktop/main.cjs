@@ -19,6 +19,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const http = require('node:http');
 const { spawn, spawnSync } = require('node:child_process');
+const { seedPlanKit } = require('./planKitSeed.cjs');
 
 const APP_NAME = 'Wylie AX Office';
 // 데이터 폴더 이름(문서\…) — 0.17 에서 바꾼 이름을 그대로 쓴다. 0.16 이하에서 올리면 예전 폴더(LEGACY_DATA_NAME)를 이 이름으로 옮긴다
@@ -338,6 +339,14 @@ async function start() {
   for (const d of [hiveDir, outDir, logDir]) fs.mkdirSync(d, { recursive: true });
   logFile = path.join(logDir, 'office-server.log');
   readSavedLang();
+  // 기획 에이전트 패키지 — 설치 파일에 든 사본을 처음 켤 때 문서 폴더로 복사해 설정에 연결한다(이미 연결된 패키지가 있으면 그대로)
+  try {
+    const seeded = seedPlanKit({ bundledRoot: app.isPackaged ? path.join(RES, 'plan-kit') : path.join(__dirname, 'plan-kit'), dataRoot, hiveDir, version: app.getVersion() });
+    if (seeded.action === 'connected') log(`기획 에이전트 패키지를 연결함: ${seeded.dir}`);
+    else if (seeded.action === 'kept') log(`기획 에이전트 패키지: 이미 연결된 폴더를 그대로 씀(${seeded.dir})`);
+  } catch (e) {
+    log(`기획 에이전트 패키지 자동 연결 실패: ${e.message}`);
+  }
   log(`앱 시작 v${app.getVersion()} packaged=${app.isPackaged} hidden=${START_HIDDEN} lang=${lang}`);
   if (migrateNote) log(migrateNote);
 

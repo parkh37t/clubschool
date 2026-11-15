@@ -90,3 +90,6 @@ release/
 desktop/node_modules/
 # 설치형 앱 아이콘 원본(electron-builder buildResources) — 위의 build/ 무시 규칙에서 뺀다
 !desktop/build/
+
+# 설치 파일에 넣는 기획 에이전트 패키지 사본 — 빌드 때 이 PC 의 패키지에서 만든다(desktop/scripts/stage-plan-kit.cjs). 저장소에 두지 않는다
+desktop/plan-kit/

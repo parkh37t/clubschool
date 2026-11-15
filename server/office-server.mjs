@@ -22,7 +22,7 @@ import { ALL_MAIL_IDS, ROSTER, LEADER, OWNER, AGENT_IDS, QA_AGENT, MAX_CUSTOM, l
 import { resolveSkills, registryStatus } from './skills.mjs';
 import { DELIVERABLES_DIR, DELIVERABLES_DEFAULT, INBOX_DIR, DIST_DIR, HIVE_DIR, relData, absData, isInside } from './paths.mjs';
 import { checkDeliverablesDir, changeDeliverablesDir, openLocal } from './storage.mjs';
-import { kitStatus, kitGuide, listPacks, packDetail, kitFile } from './planning.mjs';
+import { kitStatus, kitGuide, listPacks, packDetail, kitFile, pythonVersion } from './planning.mjs';
 import { getSettings, updateSettings, publicSettings, stateText, currentConcurrency, ownerName, josa } from './settings.mjs';
 import { templateSummaries } from './agentTemplates.mjs';
 import { allBreakers, resetBreaker } from './breaker.mjs';
@@ -186,6 +186,8 @@ async function settingsView(local) {
     hive_dir: shown(HIVE_DIR),
     plan_kit_dir: shown(String(s.plan_kit_dir || '')),
     plan_kit: await kitStatus().then((k) => ({ ok: k.ok, error: k.error || '' })),
+    // 패키지 스크립트를 돌릴 Python 3 — 없으면 설정 창이 설치 안내를 보인다
+    python: await pythonVersion(),
     mode: MODE,
     desktop: process.env.OFFICE_DESKTOP === '1',
     running: running(),
