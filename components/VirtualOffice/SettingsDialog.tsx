@@ -321,8 +321,20 @@ export function SettingsDialog({ apiBase, lang, onLang, onClose, onSaved, autoLo
                 ))}
               </span>
             </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', fontSize: 12.5 }}>
+              <span>{t('set.timeout')}</span>
+              <span role="group" aria-label={t('set.timeout')} style={{ display: 'inline-flex', border: `1px solid ${LINE}`, borderRadius: 6, overflow: 'hidden' }}>
+                {[10, 20, 30, 45, 60].map((n, i) => (
+                  <button key={n} type="button" aria-pressed={data.task_timeout_min === n} onClick={() => saveBehavior({ task_timeout_min: n })}
+                    style={{ font: 'inherit', fontSize: 12, fontWeight: 800, cursor: 'pointer', padding: '4px 10px', border: 'none', borderLeft: i > 0 ? `1px solid ${LINE}` : 'none', background: data.task_timeout_min === n ? WYLIE_TINT : '#fff', color: data.task_timeout_min === n ? WYLIE_DARK : INK }}>
+                    {n}
+                  </button>
+                ))}
+              </span>
+            </div>
             {note(behaviorMsg)}
             <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.concurrencyNote')}</p>
+            <p style={{ ...smallMuted, fontSize: 11.5 }}>{t('set.timeoutNote')}</p>
           </section>
         )}
 

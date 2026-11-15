@@ -203,6 +203,8 @@ export async function addTasks(briefingId, drafts) {
         ...(d.pack ? { pack: String(d.pack) } : {}),
         ...(Number.isInteger(d.slice) ? { slice: d.slice } : {}),
         ...(Number(d.cap_tokens) > 0 ? { cap_tokens: Math.round(Number(d.cap_tokens)) } : {}),
+        // 역할 실행 시간 제한 배수(설정 task_timeout_min × 이 값). 1~3 만 받는다
+        ...(Number(d.timeout_factor) > 1 ? { timeout_factor: Math.min(3, Number(d.timeout_factor)) } : {}),
         // 팀장이 골라 붙인 등록 스킬(담당의 기본 스킬에 더해진다, 최대 3개)
         ...(Array.isArray(d.extra_skills) && d.extra_skills.length ? { extra_skills: d.extra_skills.map(String).slice(0, 3) } : {}),
         // 산출물을 함께 저장할 형식(견적 단계의 표 → 엑셀). 정해 둔 형식만 받는다
@@ -249,6 +251,57 @@ export async function getTask(id) {
 export async function tasksOf(briefingId) {
   const ledger = await loadTasks();
   return ledger.tasks.filter((t) => t.briefing === briefingId);
+}
+
+/** 저장해 둔 브리핑(briefings/<id>.json) — [다시 실행]이 같은 과제 폴더·첨부로 이어 돌 때 쓴다. 없으면 null. */
+export async function loadBriefing(id) {
+  if (!/^[\w가-힣.-]+$/.test(String(id || ''))) return null;
+  return readJson(p('briefings', `${id}.json`), null);
+}
+
+// 선행 작업이 실패·보류로 끝나 닫힌 작업인지(오케스트레이터가 남긴 요약으로 안다). 반려·환경 문제로 보류된 작업은 되살리지 않는다.
+const PREREQ_HOLD = /^선행 작업.*미완료로 보류/;
+
+/**
+ * [다시 실행] — 실패한 작업 1건을 대기로 되돌리고, 그 작업 때문에 보류된 같은 브리핑의 뒤 작업도 대기로 되돌린다.
+ * 끝난 작업(완료)은 건드리지 않는다. 앞 실행에서 쓴 파일이 있으면 그 파일을 읽고 이어서 완성하라는 안내(resume_note)를 붙인다.
+ * @returns {Promise<{ briefing, reset: string[] }>}  실패가 아니거나 없으면 예외
+ */
+export async function rerunTask(taskId, { by = '' } = {}) {
+  const r = await ledgerLock(async () => {
+    const ledger = await loadTasks();
+    const t = ledger.tasks.find((x) => x.id === taskId);
+    if (!t) throw Object.assign(new Error(`작업이 없습니다: ${taskId}`), { code: 'not_found' });
+    if (t.status !== '실패') throw Object.assign(new Error(`실패한 작업만 다시 실행할 수 있습니다(지금 '${t.status}').`), { code: 'bad_status' });
+    const prev = t.qa?.summary || '';
+    const reset = [t.id];
+    Object.assign(t, {
+      status: '대기', gate: '미점검', qa: null, revised: 0, revise: null, timeout_continued: 0,
+      rerun_count: (t.rerun_count || 0) + 1, rerun_at: nowIso(), rerun_by: by, prev_failure: prev,
+      resume_note: t.output
+        ? `앞 실행이 끝나지 않았다(${prev || '실패'}). 이미 쓴 파일('${t.output}')이 있으면 먼저 Read 로 읽고 이어서 완성한다. 긴 글은 장마다 나눠 저장한다.`
+        : `앞 실행이 끝나지 않았다(${prev || '실패'}). 이번에는 제목·목차 뼈대를 먼저 저장하고 장마다 채운다.`,
+      updated: nowIso(),
+    });
+    // 이 작업에 (직간접으로) 걸려 보류된 뒤 작업 — 선행 보류 요약이 있는 것만
+    const same = ledger.tasks.filter((x) => x.briefing === t.briefing);
+    const freed = new Set([t.id]);
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const x of same) {
+        if (freed.has(x.id) || x.status !== '보류' || !PREREQ_HOLD.test(x.qa?.summary || '')) continue;
+        if (!(x.depends_on || []).some((d) => freed.has(d))) continue;
+        Object.assign(x, { status: '대기', gate: '미점검', qa: null, updated: nowIso() });
+        freed.add(x.id);
+        reset.push(x.id);
+        changed = true;
+      }
+    }
+    await saveTasks(ledger);
+    return { briefing: t.briefing, reset };
+  });
+  await appendEvent({ kind: 'rerun', id: taskId, by, reset: r.reset });
+  return r;
 }
 
 /** 선행 작업이 전부 완료된 대기 작업. 실행 순서는 이 함수가 정한다. */

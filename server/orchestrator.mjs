@@ -123,40 +123,52 @@ function resolveAttachment(p) {
  * @param deps { setState(OfficeState), deliverablesRoot?, mode:'mock'|'claude_code'|'live', log(msg) }
  */
 export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABLES_DIR, mode, log }) {
-  const b = normalizeBriefing(raw);
+  // [다시 실행] — 저장해 둔 브리핑을 같은 과제 폴더·작업 원장으로 이어 돈다(분해·첨부 복사 없이, 대기로 되돌린 작업부터)
+  const resumeRec = raw?._resume?.briefing ? await hive.loadBriefing(raw._resume.briefing) : null;
+  if (raw?._resume && !resumeRec) { log(`다시 실행할 브리핑 기록이 없습니다: ${raw._resume.briefing}`); return { failed: '브리핑 기록 없음(작업 초기화로 보관했을 수 있음)' }; }
+  const b = normalizeBriefing(resumeRec || raw);
   if (!b.title) { log('브리핑에 제목이 없습니다.'); return; }
   await hive.ensureHive([LEADER.id, OWNER.id, ...AGENT_IDS]);
 
-  // 첨부(_inbox 업로드본)를 과제 폴더로 복사한다 — 산출물 폴더 밖을 가리키는 경로는 무시한다.
-  // 같은 제목의 과제 폴더가 이미 있으면 덮어쓰지 않고 _2, _3 … 을 붙인다(같은 날 예약이 두 번 돌거나 같은 브리핑을 다시 보낼 때).
-  let outDir = path.join(deliverablesRoot, slug(b.title));
-  for (let n = 2; n < 100; n += 1) {
-    try { await fs.access(path.join(outDir, 'briefing.json')); } catch { break; }
-    outDir = path.join(deliverablesRoot, `${slug(b.title)}_${n}`);
-  }
-  await fs.mkdir(outDir, { recursive: true });
-  const outDirRel = relData(outDir);
-  if (Array.isArray(raw.attachments) && raw.attachments.length) {
-    const attachDir = path.join(outDir, '_attachments');
-    await fs.mkdir(attachDir, { recursive: true });
-    for (const att of raw.attachments) {
-      if (!att || !att.path) continue;
-      const src = resolveAttachment(att.path);
-      if (!src) { log(`첨부 무시(허용 경로 밖): ${att.path}`); continue; }
-      try {
-        // _inbox 안의 상대경로를 그대로 살린다 — 폴더 첨부는 <묶음>/<하위 폴더>/<파일> 구조가 과제 폴더에도 남는다.
-        const sub = isInside(src, INBOX_DIR) ? path.relative(INBOX_DIR, src) : path.basename(src);
-        const dest = path.join(attachDir, sub);
-        if (!isInside(dest, attachDir)) { log(`첨부 무시(경로 이상): ${att.path}`); continue; }
-        await fs.mkdir(path.dirname(dest), { recursive: true });
-        await fs.copyFile(src, dest);
-        b.attachmentPaths.push(relData(dest));
-      } catch (e) { log(`첨부 처리 실패: ${att.name || att.path} — ${e.message}`); }
+  let outDir;
+  let outDirRel;
+  let briefingId;
+  if (resumeRec) {
+    outDir = absData(resumeRec.outDir) || path.join(deliverablesRoot, slug(b.title));
+    outDirRel = relData(outDir);
+    briefingId = resumeRec.id;
+  } else {
+    // 첨부(_inbox 업로드본)를 과제 폴더로 복사한다 — 산출물 폴더 밖을 가리키는 경로는 무시한다.
+    // 같은 제목의 과제 폴더가 이미 있으면 덮어쓰지 않고 _2, _3 … 을 붙인다(같은 날 예약이 두 번 돌거나 같은 브리핑을 다시 보낼 때).
+    outDir = path.join(deliverablesRoot, slug(b.title));
+    for (let n = 2; n < 100; n += 1) {
+      try { await fs.access(path.join(outDir, 'briefing.json')); } catch { break; }
+      outDir = path.join(deliverablesRoot, `${slug(b.title)}_${n}`);
     }
-  }
+    await fs.mkdir(outDir, { recursive: true });
+    outDirRel = relData(outDir);
+    if (Array.isArray(raw.attachments) && raw.attachments.length) {
+      const attachDir = path.join(outDir, '_attachments');
+      await fs.mkdir(attachDir, { recursive: true });
+      for (const att of raw.attachments) {
+        if (!att || !att.path) continue;
+        const src = resolveAttachment(att.path);
+        if (!src) { log(`첨부 무시(허용 경로 밖): ${att.path}`); continue; }
+        try {
+          // _inbox 안의 상대경로를 그대로 살린다 — 폴더 첨부는 <묶음>/<하위 폴더>/<파일> 구조가 과제 폴더에도 남는다.
+          const sub = isInside(src, INBOX_DIR) ? path.relative(INBOX_DIR, src) : path.basename(src);
+          const dest = path.join(attachDir, sub);
+          if (!isInside(dest, attachDir)) { log(`첨부 무시(경로 이상): ${att.path}`); continue; }
+          await fs.mkdir(path.dirname(dest), { recursive: true });
+          await fs.copyFile(src, dest);
+          b.attachmentPaths.push(relData(dest));
+        } catch (e) { log(`첨부 처리 실패: ${att.name || att.path} — ${e.message}`); }
+      }
+    }
 
-  const { id: briefingId } = await hive.saveBriefing({ ...b, mode, outDir: outDirRel });
-  await fs.writeFile(path.join(outDir, 'briefing.json'), JSON.stringify({ ...b, mode, briefingId }, null, 2), 'utf8');
+    ({ id: briefingId } = await hive.saveBriefing({ ...b, mode, outDir: outDirRel }));
+    await fs.writeFile(path.join(outDir, 'briefing.json'), JSON.stringify({ ...b, mode, briefingId }, null, 2), 'utf8');
+  }
   const CONCURRENCY = await currentConcurrency();
   log(`브리핑 접수: "${b.title}" (${mode} 모드, 동시 ${CONCURRENCY}건) → ${briefingId}`);
   let costUsd = 0; // API 환산 참고값(보고서 각주) — 판단은 사용 토큰으로
@@ -171,41 +183,50 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     return publishTail;
   };
 
-  // 1) 팀장 분해 — 회의실 소집 안무
-  await publish('meeting', { stage: 0 });
-  await delay(1200);
-  const plan = await decompose(b, { mode, model: process.env.OFFICE_MODEL, log });
-  costUsd += plan.costUsd || 0;
-  tokensAll = addTokens(tokensAll, plan.tokens);
-  await hive.recordUsage({ agent: LEADER.id, tokens: plan.tokens, usd: plan.costUsd, briefing: briefingId, what: '브리핑 분해' });
-  log(`팀장 분해: 작업 ${plan.tasks.length}건 · 되물음 ${plan.questions?.length || 0}건 (${plan.via}, 사용 토큰 ${fmtTokens(weighted(plan.tokens))})`);
-  // 팀장이 되물은 것은 질문(ask me) 탭에도 올린다. 작업이 있으면 진행하고, 없으면 여기서 멈춘다.
-  for (const text of plan.questions || []) {
-    const q = await hive.addQuestion({ from: LEADER.id, task: '', text, briefing: briefingId });
-    log(`질문 ${q.id}: 팀장 → ${ownerName()} — ${text}`);
+  let tasks;
+  if (resumeRec) {
+    tasks = await hive.tasksOf(briefingId);
+    log(`다시 실행: "${b.title}" — 대기 ${tasks.filter((t) => t.status === '대기').length}건부터 이어서(완료 ${tasks.filter((t) => t.status === '완료').length}건은 그대로) → ${briefingId}`);
+    await hive.writeBlackboard(buildReport(b, tasks, { outDirRel, mode, costUsd, tokens: tokensAll }));
+    await publish('working');
+  } else {
+    // 1) 팀장 분해 — 회의실 소집 안무
+    await publish('meeting', { stage: 0 });
+    await delay(1200);
+    const plan = await decompose(b, { mode, model: process.env.OFFICE_MODEL, log });
+    costUsd += plan.costUsd || 0;
+    tokensAll = addTokens(tokensAll, plan.tokens);
+    await hive.recordUsage({ agent: LEADER.id, tokens: plan.tokens, usd: plan.costUsd, briefing: briefingId, what: '브리핑 분해' });
+    log(`팀장 분해: 작업 ${plan.tasks.length}건 · 되물음 ${plan.questions?.length || 0}건 (${plan.via}, 사용 토큰 ${fmtTokens(weighted(plan.tokens))})`);
+    // 팀장이 되물은 것은 질문(ask me) 탭에도 올린다. 작업이 있으면 진행하고, 없으면 여기서 멈춘다.
+    for (const text of plan.questions || []) {
+      const q = await hive.addQuestion({ from: LEADER.id, task: '', text, briefing: briefingId });
+      log(`질문 ${q.id}: 팀장 → ${ownerName()} — ${text}`);
+    }
+    if (plan.blocked) {
+      await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'report', task: '', body: `브리핑 "${b.title}" 을 시작하지 못했습니다.\n\n${plan.blocked}` });
+      await hive.routeMail();
+      await hive.writeBlackboard(`# 현황판 — ${b.title}\n\n시작하지 못함: ${plan.blocked}\n`);
+      log(`브리핑 시작 안 함(${plan.blockedCode}): ${b.title}`);
+      await publish('awaiting', { stage: 0, question: plan.blocked });
+      return { failed: plan.blocked };
+    }
+    if (!plan.tasks.length) {
+      const q = plan.questions.join('\n- ');
+      await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'question', task: '', body: `브리핑 "${b.title}" 을 작업으로 나누지 못했습니다.\n\n- ${q}\n\n결과 줄을 고쳐 다시 보내 주세요.` });
+      await hive.routeMail();
+      await hive.writeBlackboard(`# 현황판 — ${b.title}\n\n팀장이 되물었습니다:\n\n- ${q}\n`);
+      log(`팀장 되물음: ${plan.questions[0]}`);
+      await publish('awaiting', { stage: 0, question: plan.questions[0] });
+      return;
+    }
+    tasks = await hive.addTasks(briefingId, plan.tasks);
+    log(`팀장 분해(${plan.via}): 작업 ${tasks.length}건 — ${tasks.map((t) => `${t.id} ${nameOf(t.owner)}·${t.title}`).join(' / ')}`);
+    await hive.writeBlackboard(buildReport(b, tasks, { outDirRel, mode, costUsd, tokens: tokensAll }));
   }
-  if (plan.blocked) {
-    await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'report', task: '', body: `브리핑 "${b.title}" 을 시작하지 못했습니다.\n\n${plan.blocked}` });
-    await hive.routeMail();
-    await hive.writeBlackboard(`# 현황판 — ${b.title}\n\n시작하지 못함: ${plan.blocked}\n`);
-    log(`브리핑 시작 안 함(${plan.blockedCode}): ${b.title}`);
-    await publish('awaiting', { stage: 0, question: plan.blocked });
-    return { failed: plan.blocked };
-  }
-  if (!plan.tasks.length) {
-    const q = plan.questions.join('\n- ');
-    await hive.sendMessage({ from: LEADER.id, to: OWNER.id, type: 'question', task: '', body: `브리핑 "${b.title}" 을 작업으로 나누지 못했습니다.\n\n- ${q}\n\n결과 줄을 고쳐 다시 보내 주세요.` });
-    await hive.routeMail();
-    await hive.writeBlackboard(`# 현황판 — ${b.title}\n\n팀장이 되물었습니다:\n\n- ${q}\n`);
-    log(`팀장 되물음: ${plan.questions[0]}`);
-    await publish('awaiting', { stage: 0, question: plan.questions[0] });
-    return;
-  }
-  const tasks = await hive.addTasks(briefingId, plan.tasks);
-  log(`팀장 분해(${plan.via}): 작업 ${tasks.length}건 — ${tasks.map((t) => `${t.id} ${nameOf(t.owner)}·${t.title}`).join(' / ')}`);
-  await hive.writeBlackboard(buildReport(b, tasks, { outDirRel, mode, costUsd, tokens: tokensAll }));
 
   const produced = []; // 완료 산출물(산출물 폴더 기준 상대경로). 선행이 없는 뒤 작업이 이어받는다.
+  if (resumeRec) for (const t of tasks) if (t.status === '완료' && t.output) produced.push(t.output);
 
   // 2-4) 승인 게이트 — 그 작업만 재하 결정까지 멈춘다. 풀 자리는 차지하지 않는다.
   async function awaitDecision(task, a, outRel, verdict) {
@@ -303,6 +324,8 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
     // 보완 재작업도 같은 한도로 돈다(따로 늘리지 않는다). 두 번 쓴 토큰은 tokens 에 더해진다.
     const cap = Math.round((task.cap_tokens || settings.max_task_tokens) * eff.factor);
     const maxTurns = Math.max(8, Math.floor(BASE_MAX_TURNS * eff.factor));
+    // 역할 실행 시간 제한 — 설정(task_timeout_min, 기본 20분) × 작업의 배수(제안 RFP 분석·본문 1.5 등)
+    const timeoutMs = Math.round((Number(settings.task_timeout_min) || 20) * 60000 * (Number(task.timeout_factor) || 1));
 
     // 2-1) 배정 — 팀장 → 담당 assign 메시지(봉투)
     const all = await hive.tasksOf(briefingId);
@@ -347,14 +370,16 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
 
     // 보완 재작업 중 사용 토큰 한도로 멈췄다가 승인으로 다시 들어온 작업이면 QA 지적을 이어 붙이고, 더는 보완하지 않는다.
     let revision = task.revised && Array.isArray(task.revise?.issues) && task.revise.issues.length ? task.revise : null;
+    // 시간 초과로 끊겼는데 쓴 파일이 있으면 그 파일을 이어서 완성하는 실행을 1회 더 한다(서킷 브레이커는 최종 결과에서만 센다)
+    let continueNote = '';
     const asked = new Set(); // 보완 재작업에서 같은 질문을 또 올리지 않게
 
     for (;;) {
       // 2-2) 실행
-      const runContext = [context, plan?.context, revision ? reviseNote(revision, { changeLog: wantsChangeLog(task, b) }) : ''].filter(Boolean).join('\n\n');
+      const runContext = [context, plan?.context, revision ? reviseNote(revision, { changeLog: wantsChangeLog(task, b) }) : '', continueNote].filter(Boolean).join('\n\n');
       let r;
       try {
-        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capTokens: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [] });
+        r = await runTask({ task, briefing: b, outDir, assignText: assign.body, mode, log, priorFiles, capTokens: cap, maxTurns, context: runContext, revision: Boolean(revision), extraDirs: plan?.addDirs || [], timeoutMs });
       } catch (e) {
         r = { file: null, summary: '', tokens: null, costUsd: 0, reply: '', leftovers: [`실행 예외: ${e.message}`], memory: [], questions: [], failure: 'exception' };
       }
@@ -386,6 +411,18 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
         return;
       }
 
+      // 2-2b) 시간 초과 — 쓴 파일이 있으면 그 파일을 읽고 이어서 완성하는 실행을 1회만 더 한다
+      if (!r.file && r.failure === 'timeout' && r.partial && !continueNote) {
+        const partRel = relData(r.partial);
+        const mins = Math.round(timeoutMs / 60000);
+        continueNote = `## 이어 하기(시간 제한)\n앞 실행이 시간 제한(${mins}분)으로 끊겼다. 이미 쓴 파일('${partRel}')을 먼저 Read 로 읽고, 빠졌거나 덜 쓴 장만 Edit 로 채워 완성한다. 이미 쓴 부분은 다시 쓰지 않는다. 앞 산출물은 필요한 곳만 다시 읽는다.`;
+        await hive.updateTask(task.id, { tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso(), output: partRel, timeout_continued: 1 });
+        await hive.appendEvent({ kind: 'timeout_continue', id: task.id, owner: task.owner, minutes: mins, partial: partRel });
+        liveNote(task.id, meta, `시간 제한 ${mins}분 — 쓴 파일로 이어 하기`, 'revise');
+        log(`${task.id}: 시간 제한(${mins}분)으로 끊김 — 쓴 파일(${partRel})로 1회 이어 하기`);
+        await publish();
+        continue;
+      }
       if (!r.file) {
         await hive.updateTask(task.id, { status: '실패', gate: 'FAIL', tokens: totalTokens, cost_usd: totalCost, cost_at: hive.nowIso(), qa: { summary: r.leftovers?.[0] || '산출물 없음' } });
         await hive.sendMessage({ from: task.owner, to: LEADER.id, type: 'result', task: task.id, body: `실패: ${r.leftovers?.[0] || '산출물 없음'}` });
@@ -393,7 +430,7 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
         // CLI 없음·로그인 풀림·사용 한도·서버 붐빔은 환경 문제라 담당자의 연속 문제(서킷 브레이커)로 세지 않는다.
         if (ENV_FAILURES.includes(r.failure)) log(`${task.id}: 환경 문제(${r.failure})라 서킷 브레이커에 넣지 않음`);
         else await recordOutcome(task.owner, 'fail', r.leftovers?.[0] || '');
-        leftovers.push(`${task.id} ${nameOf(task.owner)}: ${r.leftovers?.[0] || '산출물 없음'}${revision ? ' (보완 재작업 중)' : ''}`);
+        leftovers.push(`${task.id} ${nameOf(task.owner)}: ${r.leftovers?.[0] || '산출물 없음'}${revision ? ' (보완 재작업 중)' : ''}${continueNote ? ' (시간 제한 이어 하기 뒤)' : ''}${r.failure === 'timeout' ? ' — 작업판의 [다시 실행]으로 이 작업부터 다시 돌릴 수 있음' : ''}`);
         log(`${task.id} 실패${revision ? '(보완 재작업 중)' : ''}`);
         await publish();
         return;

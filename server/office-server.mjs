@@ -667,6 +667,29 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, { ok: true, archive: r.name, counts: r.counts, moved: r.moved, ...(localViewer(req) ? { path: r.dir } : {}) });
       return;
     }
+    // [다시 실행] — 실패한 작업 1건과 그 때문에 보류된 뒤 작업을 대기로 되돌리고, 같은 브리핑을 이어 돌도록 대기열에 넣는다.
+    // 끝난 작업은 다시 하지 않는다. 이 PC 화면에서만, 브리핑이 돌지 않을 때만(같은 원장을 두 루프가 만지지 않게).
+    if (req.method === 'POST' && /^\/api\/tasks\/T-\d{4,}\/rerun$/.test(url.pathname)) {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 다시 실행할 수 있습니다.' }); return; }
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 빈 몸체 허용 */ }
+      const by = String(body?.by || '').trim().slice(0, 40) || ownerName();
+      if (running()) { sendJson(res, 409, { error: '브리핑이 진행 중입니다. 끝난 뒤에 다시 실행하세요.' }); return; }
+      const id = url.pathname.split('/')[3];
+      const ledger = await hive.loadTasks();
+      const task = ledger.tasks.find((t) => t.id === id);
+      const rec = task ? await hive.loadBriefing(task.briefing) : null;
+      if (task && !rec) { sendJson(res, 409, { error: '이 작업의 브리핑 기록이 없습니다(작업 초기화로 보관했을 수 있음).' }); return; }
+      try {
+        const r = await hive.rerunTask(id, { by });
+        const item = await enqueue({ kind: 'briefing', briefing: { title: rec.title, result: rec.result, _resume: { briefing: r.briefing, task: id } }, by: OWNER.id });
+        log(`다시 실행: ${id} — 대기로 되돌림 ${r.reset.join(', ')} → 대기열 ${item.id}`);
+        sendJson(res, 200, { ok: true, reset: r.reset, queued: item.id });
+      } catch (e) {
+        sendJson(res, e.code === 'not_found' ? 404 : 400, { error: e.message });
+      }
+      return;
+    }
     if (req.method === 'GET' && url.pathname === '/api/work/archives') {
       sendJson(res, 200, { archives: await hive.listArchives(), ...(localViewer(req) ? { dir: path.join(HIVE_DIR, '_archive') } : {}) });
       return;

@@ -56,7 +56,7 @@ AX Office finds the new Claude Code without a restart. Briefings sent while sign
 
 | Tab | What it does |
 | --- | --- |
-| Tasks | Tasks of the current briefing with status (waiting, working, in QA, awaiting, done, on hold, failed) and the deliverable verdict. **[Reset]** — with a reason, moves the board, approvals, questions, queue and mail into the archive (`hive\_archive`) and starts empty (nothing deleted; deliverables, settings and today's usage stay; agent memory only if chosen) |
+| Tasks | Tasks of the current briefing with status (waiting, working, in QA, awaiting, done, on hold, failed) and the deliverable verdict. A failed card has **[Run again]** — it restarts from that task and continues the steps held behind it (finished steps are not redone). Settings → Behavior sets the time limit per task run (default 20 min; RFP analysis and the body get 1.5x), and a run that timed out after writing part of its file continues once. **[Reset]** — with a reason, moves the board, approvals, questions, queue and mail into the archive (`hive\_archive`) and starts empty (nothing deleted; deliverables, settings and today's usage stay; agent memory only if chosen) |
 | Approvals | Decisions for Jaeha — external sends, cost, deletion, scope change, committing numbers, **cost cap exceeded**, **circuit breaker resume**. Actor and reason required |
 | Ask me | Questions the lead or agents asked. The lead reads an answer right away; an agent reads it at its next task |
 | Memory · Activity · Skills | Each agent's memory file, the event log, available skills |

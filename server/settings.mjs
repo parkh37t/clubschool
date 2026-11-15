@@ -16,6 +16,9 @@ export const DEFAULTS = {
   agent_daily_tokens: Number(process.env.OFFICE_AGENT_DAILY_TOKENS || 1200000), // 에이전트 1명의 하루 사용 토큰 한도. 80% 제한, 100% 중지
   auto_revise: true, // QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(orchestrator.mjs)
   concurrency: Math.max(1, Math.min(3, Math.floor(Number(process.env.OFFICE_CONCURRENCY || 2)) || 2)), // 브리핑 안에서 동시에 도는 작업 수(1~3). 새 브리핑부터 적용
+  // 역할 실행 1건의 시간 제한(분). 넘으면 끊고, 쓴 파일이 있으면 1회 이어 하기(orchestrator.mjs). 무거운 단계는 작업의 timeout_factor 를 곱한다
+  // (예: 제안 RFP 분석·본문 1.5배). 10분으로 두었을 때 큰 RFP PDF 를 읽은 RFP 분석이 쓰는 도중에 끊긴 일이 있었다(2026-11-15).
+  task_timeout_min: Math.max(5, Math.min(90, Math.floor(Number(process.env.OFFICE_TASK_TIMEOUT_MIN || 20)) || 20)),
   deliverables_dir: '', // 산출물 폴더(절대경로). 빈 값이면 기본 위치(OFFICE_DELIVERABLES_DIR)
   plan_kit_dir: '', // 기획 에이전트 패키지 폴더(절대경로) — 표준 기획 프로세스·기획 탭이 쓴다(planning.mjs). 빈 값이면 꺼짐
   // 결정권자(브리핑을 보내고 승인·반려하는 사람)의 표시 이름. 빈 값이면 기본 이름(OWNER_DEFAULT) — ownerName() 으로만 읽는다.
@@ -65,6 +68,7 @@ export function updateSettings(patch) {
     delete next.agent_daily_usd;
     if (typeof patch.auto_revise === 'boolean') next.auto_revise = patch.auto_revise;
     if (patch.concurrency !== undefined) next.concurrency = Math.round(clampNum(patch.concurrency, 1, 3, cur.concurrency));
+    if (patch.task_timeout_min !== undefined) next.task_timeout_min = Math.round(clampNum(patch.task_timeout_min, 5, 90, cur.task_timeout_min));
     if (typeof patch.deliverables_dir === 'string') next.deliverables_dir = patch.deliverables_dir;
     if (typeof patch.plan_kit_dir === 'string') next.plan_kit_dir = patch.plan_kit_dir;
     if (typeof patch.owner_name === 'string') next.owner_name = cleanOwnerName(patch.owner_name);

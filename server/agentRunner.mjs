@@ -276,7 +276,7 @@ export function parseReply(text) {
  *   context   hive 규칙으로 덧붙이는 글(기억·안 읽은 편지·조정 지시·이어 하기 안내·QA 보완 요청)
  *   revision  QA 반려 뒤 1회 보완 재작업인지. claude_code 는 context 의 'QA 보완 요청'으로 알고, mock 은 시험 동작에만 쓴다
  */
-export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capTokens, maxTurns, context = '', revision = false, extraDirs = [] }) {
+export async function runTask({ task, briefing, outDir, assignText, mode, log, priorFiles = [], capTokens, maxTurns, context = '', revision = false, extraDirs = [], timeoutMs }) {
   const name = nameOf(task.owner);
   const agent = ROSTER.find((a) => a.id === task.owner);
   // 표준 절차(제안 프로세스 등)가 단계별 스킬을 정해 둔 작업은 그 스킬을, 아니면 담당의 기본 스킬을 붙인다.
@@ -295,7 +295,7 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
   log(`${name}: ${task.id} · ${task.title} 착수${used.length ? ` — 스킬 ${used.join(', ')}` : ''}${capTokens ? ` (한도 ${fmtTokens(capTokens)} 토큰)` : ''}`);
   if (skills.missing.length) log(`${name}: 이 PC에 없는 스킬은 건너뜀 — ${skills.missing.join(', ')}`);
 
-  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs });
+  if (mode === 'claude_code') return runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs, timeoutMs });
   if (mode === 'live') {
     // 구 live 경로 재사용: 게이트 모양으로 감싸서 Agent SDK 로 실행한다.
     const ctx = {
@@ -308,14 +308,14 @@ export async function runTask({ task, briefing, outDir, assignText, mode, log, p
     const r = await runLive(ctx);
     return { ...r, reply: r.summary || '', leftovers: [], memory: [], questions: [] };
   }
-  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision });
+  return runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision, context });
 }
 
 // mock — 모델 호출 없이 실시간 기록·사용 토큰 한도·질문 흐름까지 흉내 낸다.
 //   OFFICE_MOCK_TOKENS    작업 1건이 쓴 것처럼 볼 사용 토큰. 한도보다 크면 '한도 초과'로 멈춘다(사용량 합계에는 넣지 않는다)
 //   OFFICE_MOCK_QUESTION=1  회신에 '<결정권자>에게 질문'을 하나 넣는다
 //   OFFICE_MOCK_QA_FAIL     once = 첫 실행만 본문이 빈 산출물(QA FAIL) → 보완 재작업은 정상 / always = 보완 뒤에도 FAIL
-async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision = false }) {
+async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name, capTokens, revision = false, context = '' }) {
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
   const file = path.join(stageDir, taskFileName(task));
   sink({ type: 'system', subtype: 'init', cwd: DELIVERABLES_DIR });
@@ -327,6 +327,12 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   }
   sink({ type: 'assistant', message: { content: [{ type: 'text', text: `[목업] ${task.title} — 완료 기준을 확인하고 초안을 씁니다.` }] } });
   await delay(400 + Math.floor(Math.random() * 500));
+  // 시험용 — 시간 초과 흉내(OFFICE_MOCK_TIMEOUT='단계:partial,단계:none'). 이어 하기(시간 제한) 실행이나 [다시 실행]으로 다시 돌 때는 끝까지 쓴다
+  const mt = String(process.env.OFFICE_MOCK_TIMEOUT || '').split(',').map((x) => x.trim().split(':')).find(([k]) => k && (k === task.step || k === task.id));
+  if (mt && !task.rerun_count && !/이어 하기\(시간 제한\)/.test(context)) {
+    if (mt[1] === 'partial') await fs.writeFile(file, `# [목업] ${task.title}\n\n## 1. 쓰다 끊긴 장\n- 앞부분만 씀\n`, 'utf8');
+    return { file: null, partial: mt[1] === 'partial' ? file : null, summary: '', tokens: null, costUsd: 0, reply: '', leftovers: [`실행 실패(timeout): ${failureHint('timeout')}`], memory: [], questions: [], failure: 'timeout' };
+  }
   const qaFail = process.env.OFFICE_MOCK_QA_FAIL;
   // 시험용 — 제목도 본문도 없는 산출물(기계 검사 non_empty 가 항상 판정에 들어가므로 짧은 형식 요청이어도 FAIL)
   const broken = (qaFail === 'once' && !revision) || qaFail === 'always';
@@ -370,7 +376,7 @@ async function runTaskMock({ task, briefing, stageDir, skills, priorFiles, name,
   return { file, summary: `[목업] ${task.title}`, tokens: null, costUsd: 0, reply, ...parseReply(reply) };
 }
 
-async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs = [] }) {
+async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFiles, log, name, capTokens, maxTurns, context, extraDirs = [], timeoutMs }) {
   const persona = await loadPersona(task.owner);
   const s = await getSettings();
   // 에이전트는 산출물 폴더(DELIVERABLES_DIR)를 작업 폴더로 돈다. 원장·지시문의 경로가 모두 그 기준이다.
@@ -396,6 +402,8 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
     '# 지시',
     priorFiles.length ? '- 작업 시작 전, 앞 산출물을 Read 도구로 모두 읽는다.' : '',
     `- 산출물을 '${rel}/${taskFileName(task)}' 경로에 마크다운 파일 1개로 저장한다(Write 도구). 다른 파일은 만들지 않는다.`,
+    // 한 번의 Write 로 긴 글을 쓰다 시간 제한에 걸리면 아무것도 남지 않는다(2026-11-15 RFP 분석이 그렇게 끊김) — 뼈대부터 저장하고 장마다 채운다
+    `- 산출물이 길면(장이 여럿이거나 큰 표가 있으면) 먼저 제목·목차 뼈대로 파일을 Write 하고, 장마다 Edit 로 채운다. 이 실행의 시간 제한은 약 ${Math.round((timeoutMs || 600000) / 60000)}분이다 — 끊겨도 쓴 만큼은 남아 이어서 완성할 수 있다.`,
     s.lang === 'en'
       ? '- Write in English, practical and evidence-based. Headlines state one claim. No hype adjectives or emoji.'
       : '- 한국어로, 근거와 함께 실무 수준으로 작성한다. 헤드라인은 주장 한 문장, 설명은 "~함/~임" 문체. 과장 형용사·이모지를 쓰지 않는다.',
@@ -409,7 +417,7 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   const addDirs = [...new Set([...inline.map((sk) => sk.refs).filter(Boolean), ...refOnly.map((sk) => sk.dir), ...extraDirs])];
   const before = new Set(await listDir(stageDir));
   const sink = liveSink(task.id, { agent: task.owner, task: task.id }, { cwd: DELIVERABLES_DIR });
-  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, tokenCap: capTokens, onEvent: sink });
+  const r = await runClaudeCodeAgent({ system: persona, prompt, cwd: DELIVERABLES_DIR, model: process.env.OFFICE_MODEL, maxTurns: maxTurns || MAX_TURNS, addDirs, tokenCap: capTokens, onEvent: sink, ...(timeoutMs ? { timeoutMs } : {}) });
   const expected = path.join(stageDir, taskFileName(task));
 
   // 지정 경로가 아니면 이번 실행에서 새로 생긴 md 중 이 작업 것만 산출물로 본다. 같은 단계 폴더에서
@@ -428,7 +436,9 @@ async function runTaskClaudeCode({ task, stageDir, assignText, skills, priorFile
   }
   if (!r.ok) {
     log(`${name}: 실행 실패(${r.code}) — ${r.message}`);
-    return { file: null, summary: '', tokens: r.tokens, costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${failureHint(r.code) || r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
+    // 시간 초과 — 끊기기 전에 쓴 파일이 있으면 알려 준다(오케스트레이터가 그 파일로 1회 이어 하기)
+    const partial = r.code === 'timeout' ? (await findOutput()).file : null;
+    return { file: null, partial, summary: '', tokens: r.tokens, costUsd: r.costUsd || 0, reply: '', leftovers: [`실행 실패(${r.code}): ${failureHint(r.code) || r.message.slice(0, 160)}`], memory: [], questions: [], failure: r.code };
   }
   const extraLeft = [];
   let { file, note } = await findOutput();

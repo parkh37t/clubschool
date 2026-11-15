@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, FolderOpen } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, FolderOpen, RotateCw } from 'lucide-react';
 import type { HiveState, HiveTask } from './officeSimulator';
 import { postJson } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
@@ -98,8 +98,18 @@ export function TasksTab({ connected, hive, selected, concurrency, apiBase }: Ta
 
 /** 작업 한 건. 산출물은 서버가 이 PC 의 기본 앱·탐색기로 연다(산출물 폴더 안의 문서만, POST /api/open). */
 function TaskCard({ task, dim, apiBase }: { task: HiveTask; dim: boolean; apiBase?: string }) {
-  const { t, lang, name } = useOfficeLang();
+  const { t, lang, name, owner } = useOfficeLang();
   const [openErr, setOpenErr] = useState('');
+  const [rerunMsg, setRerunMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [rerunning, setRerunning] = useState(false);
+  // [다시 실행] — 이 작업과 그 때문에 보류된 뒤 작업을 대기로 되돌리고 같은 브리핑을 이어 돌린다(끝난 작업은 다시 하지 않음)
+  const rerun = async () => {
+    setRerunning(true);
+    setRerunMsg(null);
+    const r = await postJson(`${apiBase}/api/tasks/${encodeURIComponent(task.id)}/rerun`, { by: owner });
+    setRerunning(false);
+    setRerunMsg(r.ok ? { ok: true, text: t('tasks.rerunDone', { n: Array.isArray(r.data?.reset) ? r.data.reset.length : 1 }) } : { ok: false, text: String(r.error) });
+  };
   const sc = STATUS_COLOR[task.status] ?? STATUS_COLOR['대기'];
   const file = task.output ? task.output.split('/').pop() : '';
   const gateColor = GATE_COLOR[task.gate] ?? MUTED;
@@ -138,6 +148,15 @@ function TaskCard({ task, dim, apiBase }: { task: HiveTask; dim: boolean; apiBas
         )}
       </div>
       {task.qa_summary && ['실패', '보류'].includes(task.status) && <div style={{ fontSize: 11, color: task.status === '실패' ? BAD_FG : MUTED, marginTop: 4, lineHeight: 1.45 }}>{task.qa_summary}</div>}
+      {task.status === '실패' && apiBase !== undefined && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5, flexWrap: 'wrap' }}>
+          <button type="button" style={{ ...action, color: INK, opacity: rerunning ? 0.6 : 1 }} disabled={rerunning} onClick={rerun} title={t('tasks.rerunNote')}>
+            <RotateCw size={12} aria-hidden />{rerunning ? t('tasks.rerunning') : t('tasks.rerun')}
+          </button>
+          <span style={{ fontSize: 10.5, color: MUTED }}>{t('tasks.rerunNote')}</span>
+        </div>
+      )}
+      {rerunMsg && <div role="status" style={{ fontSize: 11, color: rerunMsg.ok ? OK_FG : BAD_FG, marginTop: 4 }}>{rerunMsg.text}</div>}
       {openErr && <div role="status" style={{ fontSize: 11, color: BAD_FG, marginTop: 4 }}>{openErr}</div>}
     </article>
   );

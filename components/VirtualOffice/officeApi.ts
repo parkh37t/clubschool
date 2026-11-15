@@ -76,7 +76,7 @@ export interface LiveLine {
 /** auto_revise — QA FAIL 이면 같은 담당에게 지적을 붙여 1회만 다시 실행하고 다시 판정(server/orchestrator.mjs) */
 /** 설정(GET /api/settings) — 저장된 값 + 지금 쓰는 산출물·hive 위치(이 PC 화면이 아니면 사용자 폴더는 ~). running=브리핑 진행 중 */
 export interface OfficeSettings {
-  lang: 'ko' | 'en'; max_task_tokens: number; agent_daily_tokens: number; auto_revise: boolean; leader_session: boolean; concurrency: number;
+  lang: 'ko' | 'en'; max_task_tokens: number; agent_daily_tokens: number; auto_revise: boolean; leader_session: boolean; concurrency: number; task_timeout_min: number;
   deliverables_dir: string; deliverables_default: string; deliverables_custom: boolean; hive_dir: string; mode: string; desktop: boolean; running: boolean;
   plan_kit_dir: string; plan_kit: { ok: boolean; error: string };
   /** 결정권자 이름 — 설정 창에 적은 값(빈 값 가능)과, 빈 칸을 기본 이름으로 채운 표시 이름(owner, 서버 ownerName) */

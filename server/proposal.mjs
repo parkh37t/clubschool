@@ -42,7 +42,7 @@ const EV_CARRY_EN = 'cite evidence by the EV ids of earlier evidence tables (do 
 
 // 견적 단계 — 제안서 프로세스와 견적 프로세스가 같이 쓴다. 'xlsx' 는 엑셀 스킬을 참고용(필요할 때 읽기)으로 붙인다.
 const ESTIMATE = {
-  key: 'estimate', owner: 'jeong', stage: '03_proposal',
+  key: 'estimate', timeout: 1.25, owner: 'jeong', stage: '03_proposal',
   ko: '견적·인력 투입 계획 — 견적기준표·인력투입계획·견적서(안)', en: 'Estimate and staffing — cost basis, staffing plan, draft quote',
   skills: ['proposal-estimate', master('1,12,13:match', 'proposal-estimate'), 'xlsx'],
   done: '견적기준표(업무 분류·수량·난이도·필요 인원·근거 요구 id), 인력투입계획(역할·등급·월별 M/M·합계, 한 사람 월 1.0 이하), 인력 카드(역할마다 이번 과업 역할 · 관련 도메인·기술 · 유사 과업에서 실제 담당한 일 · 입증 가능한 산출물·기간 · 예정 투입률·기간 · 상태 — 실명 없이 역할로, 경력 프로필만으로 배정·가용성을 확정하지 않음), 견적서(안)(업무구분·등급·인원·M/M·단가·금액·할인율·제안가·소계·합계·천 원 미만 절사·평단가·부가세 별도/포함), 기준안과 낮은안·높은안, 갭 분석(요구 id · RFP 요구 · 제안 범위 · 수행 가능 범위 · 차이 · 사전 협의 필요 여부), 정합 점검표, 가정·제외 범위. 확인 못 한 단가는 [확인 필요]. 표는 마크다운 표로(엑셀로 함께 저장됨), 제목은 「인력 카드」「갭 분석」을 그대로 쓴다',
@@ -66,7 +66,7 @@ export const PROPOSAL_STEPS = [
     checks: ['ev_table'],
   },
   {
-    key: 'rfp', owner: 'han', stage: '01_rfp', client: true,
+    key: 'rfp', timeout: 1.5, owner: 'han', stage: '01_rfp', client: true,
     ko: 'RFP 분석 — 요구·평가 대응표와 Go/No-Go', en: 'RFP analysis — requirement-scoring matrix and Go/No-Go',
     skills: ['rfp-analysis', master('1,2,3,13:match', WRITE)],
     done: `RFP 요구사항을 빠짐없이 옮긴 요구·평가 대응표(요구 id · 원문 인용 · 원문 위치 · 평가 항목 · 대응할 장 · 근거(EV id) · 충족 상태 · 공백)와 Go/No-Go 5축(적합성·승산·수익성·리스크·전략가치) 권고. 원문 인용은 RFP 문장을 「」 안에 글자 그대로(서버가 원문에서 다시 찾는다), 요구 id 는 원문 번호를 그대로 쓰고 겹치지 않게(원문 번호가 없으면 internal: 을 붙인 내부 id), 비기능 6축(성능·가용성·보안·접근성·호환성·감리)은 근거 요구가 없어도 「해당 없음」이 아니라 「근거 없음(missing)」으로 적는다. ${EV_CARRY}`,
@@ -104,7 +104,7 @@ export const PROPOSAL_STEPS = [
   { ...ESTIMATE, deps: ['rfp', 'strategy'], approval: '수치확정' },
   {
     // 견적 승인 전에 돈다 — 금액·M/M·인원은 「확정 필요」로만(unconfirmed_numbers 는 참고 검사)
-    key: 'slides', owner: 'cha', stage: '03_proposal', client: true,
+    key: 'slides', timeout: 1.25, owner: 'cha', stage: '03_proposal', client: true,
     ko: '장표 구성안·대응표 역채움(구조 단계)', en: 'Slide plan and requirement backfill (structure pass)',
     skills: [master('1,3,7,9,13:match', WRITE), 'wylie-proposal-visual|ui-review'],
     done: '장표마다 장표 id(SLIDE-001부터) · 평가자 질문 · 결론형 제목 · 근거 id(앞 단계 근거표의 EV id) · 도식 유형 · 담당 요구 id 를 적은 구성안. 근거표는 새로 만들지 않고 앞 단계 근거표를 이어 쓴다(빠진 근거만 다음 번호로 \'근거표 추가분\'에 보강). 「대응표 역채움」 표 — RFP 분석의 요구 id 하나하나에 제출 장표 id · 발표 장표 id · 백업 장표 id · 발표 제외 사유(장표가 없으면 \'공백\'이라고 적음, 요구 id 를 하나도 빼지 않음). 견적이 아직 승인되지 않았으므로 금액·M/M·인원 수치는 쓰지 않고 「확정 필요」로만 적는다. 제목만 이어 읽어도 주장이 이어져야 함',
@@ -114,7 +114,7 @@ export const PROPOSAL_STEPS = [
     sections: ['대응표 역채움|requirement backfill'],
   },
   {
-    key: 'draft', owner: 'han', stage: '03_proposal', client: true,
+    key: 'draft', timeout: 1.5, owner: 'han', stage: '03_proposal', client: true,
     ko: '제안서 본문(본문 단계)', en: 'Proposal body (content pass)',
     skills: [master('1,3,4,7,8,13:match', WRITE), `${MASTER}|proposal-maker`],
     done: `구성안 순서대로 쓴 제안서 본문. 금액·투입 M/M·인력 구성은 승인된 견적 단계 값만 쓰고(새 숫자를 만들지 않음), 주장마다 근거 EV id 를 괄호로 붙이며, 근거 없는 효과 수치와 상투어 금지, 확인 못 한 값은 "미확인". ${EV_CARRY}`,
@@ -217,6 +217,8 @@ function buildTasks(steps, { process, client = [], lang }) {
       // 고객사 전용 스킬은 제안 문서를 쓰는 단계(RFP·전략·장표·본문)에만 — 조사·UX 섹션·KPI·견적·검수에는 섞지 않는다
       skills: s.client ? [...s.skills, ...client] : [...s.skills],
       ...(s.export ? { export: [...s.export] } : {}),
+      // 무거운 단계(큰 RFP 를 읽거나 긴 본문을 쓰는 단계)는 역할 실행 시간 제한(설정 task_timeout_min)에 이 배수를 곱한다
+      ...(s.timeout ? { timeout_factor: s.timeout } : {}),
       process,
       step: s.key,
     };
