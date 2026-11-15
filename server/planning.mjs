@@ -190,6 +190,9 @@ async function ensurePack(kit, id, { name = '' } = {}) {
   const dir = packDir(kit, id);
   if (await exists(path.join(dir, 'pack.json'))) return { dir, created: false };
   await fs.cp(path.join(kit, 'packs', '_template'), dir, { recursive: true, force: false, errorOnExist: false });
+  // 화면 폴더 — 템플릿의 빈 screens/ 는 자리표시(.gitkeep)만 있어 설치 파일에서 빠진다. new_screen.py 는 폴더를 만들지 않으므로 여기서 만든다
+  await fs.mkdir(path.join(dir, 'screens'), { recursive: true });
+  await fs.mkdir(path.join(dir, 'readme'), { recursive: true });
   const pj = await readJson(path.join(dir, 'pack.json'));
   pj.id = id;
   if (name && !pj.name) pj.name = name;
