@@ -1,4 +1,4 @@
-# hive — Clubschool AX Office 공유 작업 공간
+# hive — Wylie AX Office 공유 작업 공간
 
 팀장·역할 에이전트·가상 사무실이 전부 이 폴더의 **평문 파일**로만 대화한다. 사람이 그대로 열어 읽을 수 있고,
 서버를 재시작해도 상태가 남는다. 코드는 `server/hive.mjs` 하나가 읽고 쓴다.

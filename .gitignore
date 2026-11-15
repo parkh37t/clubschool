@@ -51,7 +51,7 @@ dist-standalone/
 DELIVERABLES/_inbox/
 DELIVERABLES/**/_attachments/
 
-# Clubschool AX Office hive 실행 데이터(server/hive) — 작업 원장·메일함·기억·이벤트
+# Wylie AX Office hive 실행 데이터(server/hive) — 작업 원장·메일함·기억·이벤트
 server/hive/tasks.json
 server/hive/tasks.json.tmp
 server/hive/approvals.json
@@ -85,7 +85,7 @@ server/hive/templates.json
 server/hive/templates.json.tmp
 server/office-state.json.tmp
 
-# Clubschool AX Office 설치형 앱 — 빌드 결과물(설치 파일)
+# Wylie AX Office 설치형 앱 — 빌드 결과물(설치 파일)
 release/
 desktop/node_modules/
 # 설치형 앱 아이콘 원본(electron-builder buildResources) — 위의 build/ 무시 규칙에서 뺀다

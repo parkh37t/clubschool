@@ -1,8 +1,8 @@
-# Clubschool AX Office — Desktop app (Windows)
+# Wylie AX Office — Desktop app (Windows)
 
 > 한국어: [README.md](README.md)
 
-Clubschool AX Office as a double-click app, no PowerShell needed. The app starts the orchestrator server (`server/`) inside itself
+Wylie AX Office as a double-click app, no PowerShell needed. The app starts the orchestrator server (`server/`) inside itself
 and opens the virtual office in a window. The layout and the way of working follow Munder Difflin (no code was copied).
 
 | Area | What it shows |
@@ -14,14 +14,15 @@ and opens the virtual office in a window. The layout and the way of working foll
 
 ## Install
 
-1. Run `release/Clubschool-AX-Office-Setup-<version>.exe`. The installer uses Korean on a Korean Windows and English otherwise.
+1. Run `release/Wylie-AX-Office-Setup-<version>.exe`. The installer uses Korean on a Korean Windows and English otherwise.
 2. **Windows SmartScreen** may warn you because the installer is not code-signed.
    Click [More info] → [Run anyway] to continue.
-3. It installs for your user account only, so no administrator rights are needed (default `%LOCALAPPDATA%\Programs\Clubschool AX Office`).
-4. Start **Clubschool AX Office** from the Start menu or the desktop.
+3. It installs for your user account only, so no administrator rights are needed (default `%LOCALAPPDATA%\Programs\Wylie AX Office`).
+4. Start **Wylie AX Office** from the Start menu or the desktop.
 
-> From 0.17 the name changed from **Wylie AX Office to Clubschool AX Office**. Upgrading from an older version keeps it the same app (same app id),
-> and on first start the data folder `Documents\Wylie AX Office` is renamed to `Documents\Clubschool AX Office` (renamed, not deleted). If a file is open and the rename fails, the old folder stays in use and it tries again next time.
+> The data folder is `Documents\Clubschool AX Office` (only 0.17 carried the app name Clubschool AX Office; 0.18 went back to the Wylie name and logo but kept the folder name).
+> Upgrading from 0.16 or older renames `Documents\Wylie AX Office` to `Documents\Clubschool AX Office` on first start (renamed, not deleted). If a file is open and the rename fails, the old folder stays in use and it tries again next time.
+> Any older version upgrades in place as the same app (same app id).
 
 ## Before you start — Claude Code and sign-in
 
@@ -129,4 +130,4 @@ npm run desktop:icon    # regenerate icons (desktop/scripts/make-icon.mjs)
 
 ## Uninstall
 
-Settings → Apps → Clubschool AX Office → Uninstall. Work records and deliverables in `Documents\Clubschool AX Office` stay (delete them yourself if you no longer need them).
+Settings → Apps → Wylie AX Office → Uninstall. Work records and deliverables in `Documents\Clubschool AX Office` stay (delete them yourself if you no longer need them).

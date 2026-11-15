@@ -133,7 +133,7 @@ const leaderSchema = (owner) => ({
 
 const sessionRules = (owner) => [
   '# 상주 세션 규칙',
-  `- 너는 Clubschool AX Office 팀장의 상주 세션이다. ${owner}의 메시지를 대기열에서 한 건씩 받는다. 같은 세션이 이어지므로 앞 대화를 기억한다.`,
+  `- 너는 Wylie AX Office 팀장의 상주 세션이다. ${owner}의 메시지를 대기열에서 한 건씩 받는다. 같은 세션이 이어지므로 앞 대화를 기억한다.`,
   '- 지금 작업 폴더는 hive 다. 현황·진행·산출물 질문에는 tasks.json · approvals.json · questions.json · blackboard.md · queue.json 과 산출물 폴더를 Read·Grep·Glob 으로 읽고 사실대로 답한다. 파일을 고치지 않는다.',
   '- 일을 맡기는 메시지면 브리핑 4요소(제목·결과·맥락·제약)로 정리해 create_briefing=true 와 briefing 에 넣는다. 서버가 그 브리핑을 대기열에 넣어 분해·배정한다.',
   '- 결과(끝났을 때 손에 쥘 것)가 불분명하면 create_briefing=false 로 두고 question 에 되물을 것 한 가지를 쓴다. 그 외에는 묻지 않는다.',

@@ -1,4 +1,4 @@
-// Clubschool AX Office 오케스트레이터 서버.
+// Wylie AX Office 오케스트레이터 서버.
 // 역할: (1) 가상 사무실이 폴링하는 office-state.json 제공, (2) 브리핑(POST /api/instruct) 수신 →
 //       팀장이 작업으로 나눠 12 에이전트에게 배정·실행·QA·승인 대기, (3) hive 조회·승인 API,
 //       (4) 빌드된 화면(dist/)을 같은 주소로 내보냄 — http://127.0.0.1:8787/ 에서 화면과 API 가 같은 오리진이 된다.
@@ -168,7 +168,7 @@ async function serveStatic(req, res, url) {
     res.end(req.method === 'HEAD' ? undefined : body);
   } catch {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    res.end(`<!doctype html><meta charset="utf-8"><title>Clubschool AX Office</title><body style="font-family:'Malgun Gothic',sans-serif;padding:40px;line-height:1.6"><h2>화면 빌드가 없습니다</h2><p>저장소 루트에서 <code>npm run build</code> 를 실행한 뒤 새로 고침하세요. API 는 동작 중입니다(<a href="/api/health">/api/health</a>).</p></body>`);
+    res.end(`<!doctype html><meta charset="utf-8"><title>Wylie AX Office</title><body style="font-family:'Malgun Gothic',sans-serif;padding:40px;line-height:1.6"><h2>화면 빌드가 없습니다</h2><p>저장소 루트에서 <code>npm run build</code> 를 실행한 뒤 새로 고침하세요. API 는 동작 중입니다(<a href="/api/health">/api/health</a>).</p></body>`);
   }
 }
 

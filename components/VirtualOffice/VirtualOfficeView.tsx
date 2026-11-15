@@ -10,7 +10,6 @@ import { AgentCards } from './AgentCards';
 import type { AgentCardData } from './AgentCards';
 import { AddAgentDialog } from './AddAgentDialog';
 import { SettingsDialog } from './SettingsDialog';
-import clubschoolLogo from './clubschool-logo.png'; // 화면 머리 로고(클럽스쿨 워드마크, 투명 배경)
 import { UsageMeter } from './UsageMeter';
 import { postJson, useEventStream, usePolling } from './officeApi';
 import type { AgentStatus, AuthState, OfficeSettings, RosterResponse } from './officeApi';
@@ -58,13 +57,13 @@ const chip = { fontWeight: 700, fontSize: 11.5, padding: '1px 8px', borderRadius
 const bar = { margin: '8px 12px 0', borderRadius: 6, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5 } as const;
 
 /**
- * Clubschool AX Office — 팀장이 브리핑을 나눠 AI 에이전트에게 배정하고, hive 상태를 픽셀 사무실로 보여 주는 화면.
+ * Wylie AX Office — 팀장이 브리핑을 나눠 AI 에이전트에게 배정하고, hive 상태를 픽셀 사무실로 보여 주는 화면.
  * 배치는 Munder Difflin 과 같다: 상단 바 · [왼쪽 사무실 | 오른쪽 커맨드 센터(탭·대기열·입력)] · 하단 에이전트 바.
  * 창 전체를 고정 배치로 쓰고(페이지 스크롤 없음), 좁은 창에서는 세로로 쌓는다(virtualOffice.css).
  * 화면 언어는 한국어(기본)·영어 — 서버 설정(hive/settings.json)에 남아 트레이 메뉴와 에이전트 출력 언어도 따라간다.
  */
 export function VirtualOfficeView({
-  teamLabel = '와일리 컨버전스',
+  teamLabel = '와일리 컨버전스 · AX Office',
   autoApprove = false,
   initialSpeed = 1,
   stateUrl,
@@ -236,8 +235,8 @@ export function VirtualOfficeView({
       <div className="axo-app" lang={lang} style={{ fontFamily: FONT, fontSize: 14, lineHeight: 1.5 }}>
         {/* 상단 바 — 앱 이름 · 모드 · 동시 작업 · 시계 · 재생 제어 · 언어 */}
         <header className="axo-top">
-          <img src={clubschoolLogo} alt="clubschool" style={{ height: 17, width: 'auto', display: 'block', flexShrink: 0 }} />
-          <strong style={{ fontSize: 15, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>AX Office</strong>
+          <span aria-hidden style={{ width: 14, height: 14, background: WYLIE, boxShadow: 'inset -3px -3px 0 rgba(0,0,0,.2)', flexShrink: 0 }} />
+          <strong style={{ fontSize: 15, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>Wylie AX Office</strong>
           <span style={{ fontSize: 12, color: MUTED, whiteSpace: 'nowrap' }}>{rv.teamLabel}</span>
           {hive ? (
             <span style={{ display: 'flex', gap: 5, flexWrap: 'wrap', minWidth: 0 }}>

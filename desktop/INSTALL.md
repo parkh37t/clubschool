@@ -1,6 +1,6 @@
-# Clubschool AX Office 설치·로그인 안내 (받는 사람용)
+# Wylie AX Office 설치·로그인 안내 (받는 사람용)
 
-이 안내서와 함께 받은 `Clubschool-AX-Office-Setup-<버전>.exe` 하나로 설치합니다. 설치한 PC 에서 **자기 Claude 계정**으로 로그인해 씁니다.
+이 안내서와 함께 받은 `Wylie-AX-Office-Setup-<버전>.exe` 하나로 설치합니다. 설치한 PC 에서 **자기 Claude 계정**으로 로그인해 씁니다.
 사용량은 로그인한 계정의 Claude 구독에 잡히고, 돈이 따로 청구되지 않습니다(API 키를 쓰지 않음).
 
 ## 준비물
@@ -11,13 +11,13 @@
 
 ## 1. 설치
 
-1. `Clubschool-AX-Office-Setup-<버전>.exe` 를 더블클릭합니다.
+1. `Wylie-AX-Office-Setup-<버전>.exe` 를 더블클릭합니다.
 2. **"Windows의 PC 보호"(SmartScreen) 창**이 뜨면 **[추가 정보] → [실행]** 을 누릅니다. 코드 서명을 하지 않은 사내 설치 파일이라 뜨는 경고입니다.
    - 메신저·메일로 받은 zip 은 압축을 풀기 전에 zip 파일 오른쪽 클릭 → **속성** → 아래쪽 **'차단 해제'** 체크 → 확인을 먼저 하면 덜 막힙니다.
    - **"스마트 앱 컨트롤이 안전하지 않을 수 있는 앱을 차단했습니다"** 가 뜨면 앱별 예외가 없습니다. Windows 보안 → 앱 및 브라우저 컨트롤 →
      스마트 앱 컨트롤 설정 → **끄기** 를 해야 설치됩니다(끄면 다시 켜기 어려울 수 있으니 PC 주인·담당자와 정합니다).
-3. 설치 위치를 확인하고 진행합니다. 내 사용자 계정에만 설치되므로 **관리자 권한이 필요 없습니다**(기본 `%LOCALAPPDATA%\Programs\Clubschool AX Office`).
-4. 설치가 끝나면 앱이 열립니다. 다음부터는 시작 메뉴·바탕 화면의 **Clubschool AX Office** 로 엽니다.
+3. 설치 위치를 확인하고 진행합니다. 내 사용자 계정에만 설치되므로 **관리자 권한이 필요 없습니다**(기본 `%LOCALAPPDATA%\Programs\Wylie AX Office`).
+4. 설치가 끝나면 앱이 열립니다. 다음부터는 시작 메뉴·바탕 화면의 **Wylie AX Office** 로 엽니다.
 
 ## 2. Claude Code 설치 (처음 한 번)
 
@@ -83,7 +83,7 @@ Claude 데스크톱 앱이 이미 깔려 있으면 이 단계가 필요 없을 �
 
 - 작업 기록·산출물은 이 PC 에만 쌓입니다(`문서\Clubschool AX Office`). 다른 PC 와 공유되지 않습니다.
 - 기획 에이전트 패키지는 설치 파일이 아니라 배포 zip 에 따로 들어 있습니다(6번). 사내 제안 스킬은 들어 있지 않습니다 — 내 Claude 계정에 동기화된 스킬이 있으면 쓰고, 없으면 기본 스킬로 돕니다.
-- 지우기: Windows 설정 → 앱 → Clubschool AX Office → 제거. `문서\Clubschool AX Office` 의 기록·산출물은 남습니다.
+- 지우기: Windows 설정 → 앱 → Wylie AX Office → 제거. `문서\Clubschool AX Office` 의 기록·산출물은 남습니다.
 
 ## 문제가 생기면
 

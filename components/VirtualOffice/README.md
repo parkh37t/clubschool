@@ -23,7 +23,7 @@
 | `PixelAvatar.tsx` | 12×12 픽셀 초상(사무실 캐릭터와 같은 머리·피부·부서색) |
 | `officeBackend.ts` | 백엔드 주소 결정(?api → localhost 상대경로 → 저장값 → 미연결) |
 
-## 화면 구성 (Clubschool AX Office 3단계 1~3차 — Munder Difflin 구조)
+## 화면 구성 (Wylie AX Office 3단계 1~3차 — Munder Difflin 구조)
 창 전체를 고정 배치로 쓴다(페이지 스크롤 없음, 좁은 창에서는 세로로 쌓임 — `virtualOffice.css` 의 `axo-*`).
 - 상단 바: 앱 이름 · hive 연결/모드/동시 작업 수 · 시계 · 애니메이션 일시정지·속도 · 언어(한국어/EN). 그 아래 필요할 때만 Claude 로그인 배너([로그인] → 새 PowerShell 창)·팀장 되물음
 - 왼쪽: 게이트 현황(단계별 작업 집계) + 픽셀 사무실. 책상을 누르면 그 에이전트 선택(점선 테두리 강조)

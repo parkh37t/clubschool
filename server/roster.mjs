@@ -1,4 +1,4 @@
-// 명단 — Clubschool AX Office 의 팀장과 역할 에이전트.
+// 명단 — Wylie AX Office 의 팀장과 역할 에이전트.
 // 기본 12인은 코드에 있고(이름·id 는 가상 사무실 officeSimulator.ts·gates.mjs 와 같다), '인원 추가'로 늘린 사람은
 // hive/agents.json 에 저장한다(설치 폴더는 쓰기 불가). ROSTER·AGENT_IDS·ALL_MAIL_IDS 는 같은 배열을 제자리에서
 // 고쳐 쓰므로, 이 값을 import 한 모듈도 추가·삭제를 그대로 본다.

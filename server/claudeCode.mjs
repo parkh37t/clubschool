@@ -225,7 +225,7 @@ export async function openLoginWindow({ email = '' } = {}) {
   const exe = bin().replace(/'/g, "''");
   const script = [
     '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
-    "$Host.UI.RawUI.WindowTitle = 'Claude 로그인 - Clubschool AX Office'",
+    "$Host.UI.RawUI.WindowTitle = 'Claude 로그인 - Wylie AX Office'",
     "Write-Host 'Claude 로그인을 시작합니다. 브라우저에서 자기 Claude 계정으로 승인한 뒤, 화면에 나온 코드를 이 창에 붙여 넣으세요.'",
     "Write-Host ''",
     `& '${exe}' auth login --claudeai${email ? ` --email '${email}'` : ''}`,

@@ -1,10 +1,10 @@
-# Clubschool AX Office 설치 파일(NSIS) 빌드 설정 — 저장소 루트에서 `npm run desktop:build`
+# Wylie AX Office 설치 파일(NSIS) 빌드 설정 — 저장소 루트에서 `npm run desktop:build`
 #
 # 두 package.json 구조: 앱 본체는 desktop/(main.cjs·아이콘, 의존성 없음), 빌드 도구(electron·electron-builder)는 루트.
 # 서버·화면·에이전트 정의는 실제 파일로 resources/ 아래에 둔다(extraResources). 서버가 별도 Node 프로세스로 돌고,
 # claude.exe 가 스킬 참고자료 폴더를 직접 읽어야 하므로 asar 안에 넣지 않는다.
 appId: com.wylie.ax-office
-productName: Clubschool AX Office
+productName: Wylie AX Office
 copyright: Wylie Convergence
 directories:
   app: desktop
@@ -47,12 +47,12 @@ win:
   icon: desktop/build/icon.png
 nsis:
   oneClick: false
-  perMachine: false            # 사용자 계정에 설치(관리자 권한 불필요) → %LOCALAPPDATA%\Programs\Clubschool AX Office
+  perMachine: false            # 사용자 계정에 설치(관리자 권한 불필요) → %LOCALAPPDATA%\Programs\Wylie AX Office
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: Clubschool AX Office
-  artifactName: Clubschool-AX-Office-Setup-${version}.${ext}
+  shortcutName: Wylie AX Office
+  artifactName: Wylie-AX-Office-Setup-${version}.${ext}
   runAfterFinish: true
   # 설치 프로그램 언어 — Windows 언어가 한국어면 한국어, 아니면 영어(선택 창 없이 자동). 앱 화면 언어는 앱 안에서 바꾼다.
   multiLanguageInstaller: true

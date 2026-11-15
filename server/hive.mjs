@@ -1,4 +1,4 @@
-// hive — Clubschool AX Office 의 공유 작업 공간(평문 파일).
+// hive — Wylie AX Office 의 공유 작업 공간(평문 파일).
 // 팀장·역할 에이전트·대시보드가 전부 이 폴더의 파일만 읽고 쓴다. 메모리 상태는 두지 않는다.
 //
 //   <HIVE_DIR>/            기본 server/hive, OFFICE_HIVE_DIR 로 바꿀 수 있다(설치형 앱: 문서\Clubschool AX Office\hive)
