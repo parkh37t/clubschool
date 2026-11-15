@@ -1,4 +1,4 @@
-# Wylie AX Office — 오케스트레이터 서버
+# Clubschool AX Office — 오케스트레이터 서버
 
 가상 사무실의 **브리핑 콘솔**에 브리핑(결과·맥락·제약·질문 기준)을 넣으면 → **팀장 에이전트**가 작업 3~8건으로 나눠
 → 12 AI 에이전트(`.claude/agents`)에게 **메시지(hive)** 로 배정 → 산출물마다 **QA 게이트**(pass/fail/error/not_run) →

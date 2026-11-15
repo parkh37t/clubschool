@@ -150,7 +150,7 @@ async function loadLeaderPersona(settings) {
     const raw = await fs.readFile(file, 'utf8');
     return raw.replace(/^---[\s\S]*?---\s*/, '').trim() + ownerLine(settings);
   } catch {
-    return '당신은 Wylie AX Office 의 팀장이다. 브리핑을 역할 에이전트의 작업으로 나눈다.' + ownerLine(settings);
+    return '당신은 Clubschool AX Office 의 팀장이다. 브리핑을 역할 에이전트의 작업으로 나눈다.' + ownerLine(settings);
   }
 }
 

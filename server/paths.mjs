@@ -8,7 +8,7 @@
 //   DIST_DIR          빌드된 화면. OFFICE_DIST_DIR (기본 <APP_ROOT>/dist)
 //
 // 설치 폴더(Program Files·AppData\Local\Programs)는 쓰기 권한이 없거나 업데이트 때 지워지므로,
-// 설치형 앱은 문서\Wylie AX Office\hive · 산출물 을 환경 변수로 넘긴다(desktop/main.cjs).
+// 설치형 앱은 문서\Clubschool AX Office\hive · 산출물 을 환경 변수로 넘긴다(desktop/main.cjs).
 //
 // tasks.json 등에 남기는 산출물 경로는 DELIVERABLES_DIR 기준 상대경로(구분자 '/')다.
 // 역할 에이전트도 DELIVERABLES_DIR 를 작업 폴더(cwd)로 돌기 때문에 같은 경로로 읽고 쓴다.

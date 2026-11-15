@@ -1,8 +1,8 @@
-# Wylie AX Office — Desktop app (Windows)
+# Clubschool AX Office — Desktop app (Windows)
 
 > 한국어: [README.md](README.md)
 
-Wylie AX Office as a double-click app, no PowerShell needed. The app starts the orchestrator server (`server/`) inside itself
+Clubschool AX Office as a double-click app, no PowerShell needed. The app starts the orchestrator server (`server/`) inside itself
 and opens the virtual office in a window. The layout and the way of working follow Munder Difflin (no code was copied).
 
 | Area | What it shows |
@@ -14,11 +14,14 @@ and opens the virtual office in a window. The layout and the way of working foll
 
 ## Install
 
-1. Run `release/Wylie-AX-Office-Setup-<version>.exe`. The installer uses Korean on a Korean Windows and English otherwise.
+1. Run `release/Clubschool-AX-Office-Setup-<version>.exe`. The installer uses Korean on a Korean Windows and English otherwise.
 2. **Windows SmartScreen** may warn you because the installer is not code-signed.
    Click [More info] → [Run anyway] to continue.
-3. It installs for your user account only, so no administrator rights are needed (default `%LOCALAPPDATA%\Programs\Wylie AX Office`).
-4. Start **Wylie AX Office** from the Start menu or the desktop.
+3. It installs for your user account only, so no administrator rights are needed (default `%LOCALAPPDATA%\Programs\Clubschool AX Office`).
+4. Start **Clubschool AX Office** from the Start menu or the desktop.
+
+> From 0.17 the name changed from **Wylie AX Office to Clubschool AX Office**. Upgrading from an older version keeps it the same app (same app id),
+> and on first start the data folder `Documents\Wylie AX Office` is renamed to `Documents\Clubschool AX Office` (renamed, not deleted). If a file is open and the rename fails, the old folder stays in use and it tries again next time.
 
 ## Before you start — Claude Code and sign-in
 
@@ -36,7 +39,7 @@ the one bundled with the Claude desktop app → one installed by the official sc
 
 Copy the installer to the other PC, install it, and have the person using that PC sign in with their own Claude account. Steps for the recipient are in [INSTALL.md](INSTALL.md) (Korean).
 
-- Task records and deliverables stay on each PC (`Documents\Wylie AX Office`); PCs do not share them.
+- Task records and deliverables stay on each PC (`Documents\Clubschool AX Office`); PCs do not share them.
 - Company proposal skills (wylie-* and so on) and the planning kit are not in the installer. If the Claude account on that PC syncs such skills they are used; otherwise the public skills apply (see the Skills tab).
 - The decision-maker name in the screens and prompts is still fixed as Jaeha.
 
@@ -97,9 +100,9 @@ Nothing is written to the install folder (no write access, and updates replace i
 
 | Content | Location |
 | --- | --- |
-| Task ledger, approvals, mailboxes, memory, events, queue, questions, settings (hive) | `Documents\Wylie AX Office\hive` |
-| Deliverables and attachments | `Documents\Wylie AX Office\산출물` |
-| App and server log | `Documents\Wylie AX Office\logs\office-server.log` |
+| Task ledger, approvals, mailboxes, memory, events, queue, questions, settings (hive) | `Documents\Clubschool AX Office\hive` |
+| Deliverables and attachments | `Documents\Clubschool AX Office\산출물` |
+| App and server log | `Documents\Clubschool AX Office\logs\office-server.log` |
 
 The deliverables folder keeps its Korean name (`산출물`) in both languages so your data stays in one place.
 
@@ -126,4 +129,4 @@ npm run desktop:icon    # regenerate icons (desktop/scripts/make-icon.mjs)
 
 ## Uninstall
 
-Settings → Apps → Wylie AX Office → Uninstall. Work records and deliverables in `Documents\Wylie AX Office` stay (delete them yourself if you no longer need them).
+Settings → Apps → Clubschool AX Office → Uninstall. Work records and deliverables in `Documents\Clubschool AX Office` stay (delete them yourself if you no longer need them).

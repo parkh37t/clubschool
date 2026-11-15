@@ -1,4 +1,4 @@
-# Wylie AX Office 3단계 작업 지시서 — 설치형 앱(Munder Difflin 구조)
+# Clubschool AX Office 3단계 작업 지시서 — 설치형 앱(Munder Difflin 구조)
 
 작성 2026-11-08 · 요청 박재하 본부장 · 대상: 이 저장소에서 작업하는 Claude Code
 
@@ -14,9 +14,9 @@
 
 ## 1. 목표와 범위
 
-Munder Difflin(오픈소스 Electron 데스크톱 앱, 9장 참고)과 같은 화면 구조로, Wylie AX Office를 더블클릭으로 쓰는 Windows 설치형 앱으로 만듦. 와일리 규칙(브리핑 4요소, QA 판정 4값, 승인 게이트, 12인 역할)은 그대로 유지함. 지금은 서버를 PowerShell로 직접 켜야 하고, 작업이 한 번에 1건씩만 돌고, 일하는 모습을 실시간으로 볼 수 없음 — 이 세 가지를 해소하는 것이 3단계의 목적임.
+Munder Difflin(오픈소스 Electron 데스크톱 앱, 9장 참고)과 같은 화면 구조로, Clubschool AX Office를 더블클릭으로 쓰는 Windows 설치형 앱으로 만듦. 와일리 규칙(브리핑 4요소, QA 판정 4값, 승인 게이트, 12인 역할)은 그대로 유지함. 지금은 서버를 PowerShell로 직접 켜야 하고, 작업이 한 번에 1건씩만 돌고, 일하는 모습을 실시간으로 볼 수 없음 — 이 세 가지를 해소하는 것이 3단계의 목적임.
 
-| 영역 | Munder Difflin | Wylie AX Office |
+| 영역 | Munder Difflin | Clubschool AX Office |
 |---|---|---|
 | 왼쪽 | 픽셀 사무실 | 기존 가상 사무실(`officeSimulator.ts`) 유지 |
 | 오른쪽 | Command Center 탭(terminal·monitor·tasks·ask me·triggers·memory·graph·activity·skills) | 커맨드 센터 탭 — 작업·승인·기억·활동·스킬(1차), 터미널·모니터(2차), 예약·관계도(3차) |
@@ -69,7 +69,7 @@ components/VirtualOffice/
 
 ### 4-1. 데이터 위치 분리
 - hive와 산출물 위치를 환경 변수로 바꿀 수 있게 함: `OFFICE_HIVE_DIR`(기본 `server/hive`), `OFFICE_DELIVERABLES_DIR`(기본 저장소 `DELIVERABLES`)
-- 설치형 앱에서는 `문서\Wylie AX Office\hive`와 `문서\Wylie AX Office\산출물`을 씀. 설치 폴더는 쓰기 권한이 없기 때문임
+- 설치형 앱에서는 `문서\Clubschool AX Office\hive`와 `문서\Clubschool AX Office\산출물`을 씀. 설치 폴더는 쓰기 권한이 없기 때문임
 
 ### 4-2. 동시 작업
 - `orchestrator.mjs`의 1건씩 도는 루프를 작업 풀로 바꿈. `OFFICE_CONCURRENCY` 기본 2, 최대 3
@@ -99,12 +99,12 @@ components/VirtualOffice/
 - `desktop/` 폴더 신설. main 프로세스가 office-server를 자식 프로세스(Electron 내장 Node, `ELECTRON_RUN_AS_NODE=1`)로 띄우고, 창에서 `http://127.0.0.1:8787/?view=virtual-office`를 엶
 - 단일 실행(두 번째 실행 시 기존 창을 앞으로), 창 닫기는 트레이로 숨김
 - 트레이 메뉴: 열기 / 산출물 폴더 열기 / Windows 시작 시 실행(켜기·끄기) / 종료. 종료 시 서버와 claude 자식 프로세스를 모두 정리함
-- 패키징: electron-builder, NSIS 설치 파일, 결과물은 `release/`. 앱 이름 'Wylie AX Office'. 포함 대상: `server/`, `dist/`, `.claude/agents`, `.claude/skills`
+- 패키징: electron-builder, NSIS 설치 파일, 결과물은 `release/`. 앱 이름 'Clubschool AX Office'. 포함 대상: `server/`, `dist/`, `.claude/agents`, `.claude/skills`
 - 스크립트: `npm run desktop:dev`(개발 실행), `npm run desktop:build`(설치 파일 빌드)
 - 코드 서명은 하지 않음. 설치 시 Windows SmartScreen 경고가 뜰 수 있다는 점을 README에 적을 것
 
 ### 4-6. 1차 완료 기준
-- 설치 파일 실행 → 시작 메뉴 'Wylie AX Office' → PowerShell 없이 창이 뜸
+- 설치 파일 실행 → 시작 메뉴 'Clubschool AX Office' → PowerShell 없이 창이 뜸
 - 짧은 브리핑 1건(작업 2~3건)으로 팀장 분해 → 2명 동시 진행 → QA 판정 → 승인 카드 → 보고서까지 화면에서 확인됨
 - 창을 닫아도 트레이에서 계속 진행되고, 트레이 '종료' 후 claude 자식 프로세스가 남지 않음
 - 로그인이 풀린 상태에서 배너와 로그인 버튼이 뜸

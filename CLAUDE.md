@@ -107,9 +107,9 @@ npm run deploy-check # 배포 전 점검 스크립트
 - 색상/간격/폰트는 하드코딩하지 말고 Tailwind 토큰(CSS 변수)을 사용합니다.
 - `any` 사용 자제(ESLint 경고). 부득이하면 사유를 주석으로 남깁니다.
 
-## 8. Wylie AX Office 운영 규칙 (server/ · .claude/agents/leader.md)
+## 8. Clubschool AX Office 운영 규칙 (server/ · .claude/agents/leader.md)
 
-이 저장소의 `server/` 는 **Wylie AX Office** — 팀장 에이전트 1명이 재하의 브리핑을 작업으로 나눠 12인
+이 저장소의 `server/` 는 **Clubschool AX Office** — 팀장 에이전트 1명이 재하의 브리핑을 작업으로 나눠 12인
 에이전트에게 메시지로 배정하고, 가상 사무실(`components/VirtualOffice`)이 그 진행을 보여 준다.
 Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 와일리 업무용으로 옮긴 것이다(코드는 가져오지 않고 운영 방식만 따른다).
 
@@ -206,6 +206,8 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
 - **언어**: 화면·안내·역할 템플릿은 한국어(기본)·영어 두 벌(`components/VirtualOffice/i18n.ts`·`simText.ts`). 설정은 `settings.json` 의 `lang`,
   영어면 팀장·에이전트 프롬프트 끝에 영어로 쓰라는 한 줄을 붙인다. 새 화면 문구는 두 사전에 함께 넣는다.
 - `.claude/agents/leader.md` 가 팀장 페르소나, `server/roster.mjs` 가 명단(기본 12인 + 추가 인원)·스킬·산출물 폴더의 단일 원천이다.
-- **설치형 앱**: `desktop/`(Electron) — 앱이 서버를 내부에서 띄우고(127.0.0.1, claude_code) 데이터는 `문서\Wylie AX Office\hive·산출물`.
+- **설치형 앱**: `desktop/`(Electron) — 앱이 서버를 내부에서 띄우고(127.0.0.1, claude_code) 데이터는 `문서\Clubschool AX Office\hive·산출물`.
   `npm run desktop:dev` · `npm run desktop:build`(→ `release/`, 커밋 금지). 자세한 내용은 `desktop/README.md`.
+  0.17 에서 제품 이름을 Wylie AX Office → Clubschool AX Office 로 바꿨다(화면 머리는 클럽스쿨 워드마크 `components/VirtualOffice/clubschool-logo.png`, 아이콘 'cs').
+  앱 식별자 `com.wylie.ax-office` 는 그대로 둔다(바꾸면 업그레이드가 아니라 두 벌 설치). 예전 데이터 폴더·Electron 사용자 폴더는 `desktop/main.cjs` 가 이어받는다(`migrateDataRoot`).
 - **다음 작업**: 3단계(설치형 앱, Munder Difflin 구조)는 저장소 루트의 `AX_OFFICE_작업지시서.md` 를 따른다(1·2·3차 완료). 이 저장소는 공개 저장소이므로 `DELIVERABLES/` 시험 산출물과 `server/hive` 실행 데이터는 커밋하지 않는다.

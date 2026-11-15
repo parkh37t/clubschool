@@ -1,8 +1,8 @@
-# Wylie AX Office — 설치형 앱(Windows)
+# Clubschool AX Office — 설치형 앱(Windows)
 
 > English: [README.en.md](README.en.md)
 
-PowerShell 없이 더블클릭으로 쓰는 Wylie AX Office. 앱이 오케스트레이터 서버(`server/`)를 내부에서 띄우고,
+PowerShell 없이 더블클릭으로 쓰는 Clubschool AX Office. 앱이 오케스트레이터 서버(`server/`)를 내부에서 띄우고,
 창에서 가상 사무실 화면을 엽니다. 화면 구조와 운영 방식은 Munder Difflin을 따랐습니다(코드는 가져오지 않음).
 
 | 자리 | 내용 |
@@ -14,11 +14,14 @@ PowerShell 없이 더블클릭으로 쓰는 Wylie AX Office. 앱이 오케스트
 
 ## 설치
 
-1. `release/Wylie-AX-Office-Setup-<버전>.exe` 를 실행합니다. 설치 프로그램은 Windows 언어가 한국어면 한국어, 아니면 영어로 뜹니다.
+1. `release/Clubschool-AX-Office-Setup-<버전>.exe` 를 실행합니다. 설치 프로그램은 Windows 언어가 한국어면 한국어, 아니면 영어로 뜹니다.
 2. **Windows SmartScreen 경고**가 뜰 수 있습니다. 코드 서명을 하지 않은 설치 파일이라서입니다.
    [추가 정보] → [실행]을 누르면 설치가 진행됩니다.
-3. 사용자 계정에 설치되므로 관리자 권한이 필요 없습니다(기본 위치 `%LOCALAPPDATA%\Programs\Wylie AX Office`).
-4. 시작 메뉴·바탕 화면의 **Wylie AX Office** 로 실행합니다.
+3. 사용자 계정에 설치되므로 관리자 권한이 필요 없습니다(기본 위치 `%LOCALAPPDATA%\Programs\Clubschool AX Office`).
+4. 시작 메뉴·바탕 화면의 **Clubschool AX Office** 로 실행합니다.
+
+> 0.17 부터 이름이 **Wylie AX Office → Clubschool AX Office** 로 바뀌었습니다. 예전 판에서 올리면 같은 앱으로 업그레이드되고(앱 식별자는 그대로),
+> 처음 켤 때 데이터 폴더 `문서\Wylie AX Office` 를 `문서\Clubschool AX Office` 로 옮깁니다(이름만 바꿈, 지우지 않음). 파일이 열려 있어 옮기지 못하면 예전 폴더를 그대로 쓰고 다음에 다시 시도합니다.
 
 ## 쓰기 전에 — Claude Code 와 로그인
 
@@ -39,7 +42,7 @@ AX Office 는 바뀐 Claude Code 를 다시 시작하지 않아도 찾아 씁니
 
 설치 파일 하나를 다른 PC 에 복사해 설치하고, 그 PC 를 쓰는 사람이 자기 Claude 계정으로 로그인하면 됩니다. 순서는 [INSTALL.md](INSTALL.md)(받는 사람용 안내서)에 있습니다.
 
-- 작업 기록·산출물은 PC 마다 따로 쌓입니다(`문서\Wylie AX Office`). PC 끼리 공유하지 않습니다.
+- 작업 기록·산출물은 PC 마다 따로 쌓입니다(`문서\Clubschool AX Office`). PC 끼리 공유하지 않습니다.
 - 사내 제안 스킬(wylie-* 등)·기획 에이전트 패키지는 설치 파일에 들어 있지 않습니다. 그 PC 의 Claude 계정에 동기화된 스킬이 있으면 쓰고, 없으면 공용 스킬로 돕니다(스킬 탭에서 확인).
 - 결정권자 이름: 설정 창 **결정권자 이름**에 그 PC 사용자의 이름을 넣으면 화면·승인 카드·보고서·지시문에 그 이름이 나옵니다(비우면 '재하').
 
@@ -131,9 +134,9 @@ AX Office 는 바뀐 Claude Code 를 다시 시작하지 않아도 찾아 씁니
 
 | 내용 | 위치 |
 | --- | --- |
-| 작업 원장·승인·메일함·기억·이벤트·대기열·질문·설정(hive) | `문서\Wylie AX Office\hive` |
-| 산출물·첨부 | `문서\Wylie AX Office\산출물` |
-| 앱·서버 기록 | `문서\Wylie AX Office\logs\office-server.log` |
+| 작업 원장·승인·메일함·기억·이벤트·대기열·질문·설정(hive) | `문서\Clubschool AX Office\hive` |
+| 산출물·첨부 | `문서\Clubschool AX Office\산출물` |
+| 앱·서버 기록 | `문서\Clubschool AX Office\logs\office-server.log` |
 
 ## 동작 방식
 
@@ -158,4 +161,4 @@ npm run desktop:icon    # 아이콘 다시 만들기(desktop/scripts/make-icon.m
 
 ## 지우기
 
-설정 → 앱 → Wylie AX Office → 제거. `문서\Wylie AX Office` 의 작업 기록·산출물은 남습니다(필요 없으면 직접 지움).
+설정 → 앱 → Clubschool AX Office → 제거. `문서\Clubschool AX Office` 의 작업 기록·산출물은 남습니다(필요 없으면 직접 지움).

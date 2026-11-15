@@ -233,7 +233,7 @@ export class OfficeSimulator {
       sales: { label: '영업', c: '#D0684A' }, plan: { label: '기획', c: '#4A7DBF' },
       design: { label: '디자인', c: '#B75FA2' }, pub: { label: '퍼블리싱', c: '#7A68C9' },
       dev: { label: '개발', c: '#3E9C8C' }, dm: { label: '데이터·마케팅', c: '#C79A3A' },
-      lead: { label: '팀장', c: '#6A4C9C' }, // Wylie AX Office 팀장(오케스트레이터) — 와일리 보라
+      lead: { label: '팀장', c: '#6A4C9C' }, // Clubschool AX Office 팀장(오케스트레이터) — 와일리 보라
     };
     this.AGENTS = [
       { id: 'han', name: '한도전', role: '영업팀장', dept: 'sales', hair: '#3B2E24', skin: '#EAC49C', hairStyle: 'short', acc: 'headset' },

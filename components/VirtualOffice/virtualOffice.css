@@ -77,7 +77,7 @@
 .apex-btn--approve{cursor:pointer;width:100%;border:1px solid #1F6B3A;background:#2D8C4E;color:#fff;padding:7px 14px;border-radius:8px;font-weight:700;font-size:13.5px;font-family:inherit;}
 .apex-btn--approve:hover{background:#1F6B3A;}
 
-/* ── Wylie AX Office 화면 배치(3단계 1차) — Munder Difflin 구조 ──
+/* ── Clubschool AX Office 화면 배치(3단계 1차) — Munder Difflin 구조 ──
    창 전체를 고정 배치로 쓴다: 상단 바 · [왼쪽 사무실 | 오른쪽 커맨드 센터] · 하단 에이전트 바. 페이지 스크롤 없음. */
 .axo-app{display:flex;flex-direction:column;height:100vh;min-height:620px;box-sizing:border-box;overflow:hidden;background:#EFEAE0;color:#24291F;}
 .axo-top{flex-shrink:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:7px 14px;border-bottom:1px solid #DDD6C8;background:#F7F2E8;}
