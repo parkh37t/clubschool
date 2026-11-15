@@ -12,7 +12,7 @@
 
 import { promises as fs } from 'node:fs';
 import { parseTables } from './xlsxExport.mjs';
-import { ID_RE } from './rfpCheck.mjs';
+import { requirementIdCells } from './rfpCheck.mjs';
 import { stepDef, EV_STATES } from './proposal.mjs';
 import { shortFormHint } from './qa.mjs';
 
@@ -76,16 +76,10 @@ function evRefsCheck(md, priorMds, { optional = false } = {}) {
   return { id: 'ev_refs', status: 'pass', evidence: `EV 인용 ${cited.size}개, 모두 근거표에 있음${added ? ` (덧붙인 근거 ${added}건)` : ''}` };
 }
 
-/** RFP 분석 산출물의 요구 id(표 첫 칸). 'internal:' 내부 id 도 접두어를 떼고 센다. */
+/** RFP 분석 산출물의 요구 id(겹침 없이). 머리줄이 '요구 id' 인 표의 첫 칸, 또는 영문 접두·RFP 목차식(Ⅰ-1-가) 번호. 'internal:' 은 떼고 센다. */
 export function reqIds(md) {
   const ids = [];
-  const bare = (c) => cellText(c).replace(/^internal:\s*/i, '');
-  for (const t of parseTables(md)) {
-    for (const row of rowsOf(t, (c) => ID_RE.test(bare(c)))) {
-      const c = bare(row[0]);
-      if (ID_RE.test(c) && !ids.some((x) => x.toUpperCase() === c.toUpperCase())) ids.push(c);
-    }
-  }
+  for (const c of requirementIdCells(md)) if (!ids.some((x) => x.toUpperCase() === c.toUpperCase())) ids.push(c);
   return ids;
 }
 
@@ -94,7 +88,9 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function reqCoverageCheck(md, rfpMd) {
   const ids = reqIds(rfpMd);
   if (!ids.length) return { id: 'req_coverage', status: 'not_run', evidence: rfpMd ? 'RFP 분석 산출물의 표 첫 칸에서 요구 id 를 찾지 못함' : 'RFP 분석 산출물이 없음', required: false };
-  const missing = ids.filter((id) => !new RegExp(`(?<![A-Za-z0-9-])${esc(id)}(?![A-Za-z0-9])`, 'i').test(md));
+  // 앞뒤 경계 — 'Ⅰ-1-가' 가 'Ⅰ-1-가-1' 안에서 찾아졌다고 덮이지 않게, 번호 마디(숫자·한글 한 글자·원 숫자·※)가 이어지면 다른 번호로 본다
+  const SEG = 'A-Za-z0-9가-힣①-⑳※ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ';
+  const missing = ids.filter((id) => !new RegExp(`(?<![${SEG}-])${esc(id)}(?![${SEG}]|-[${SEG}])`, 'i').test(md));
   if (missing.length) return { id: 'req_coverage', status: 'fail', evidence: `요구 ${ids.length}개 가운데 장표 구성안에 없는 ${missing.length}개: ${sample(missing, 8)}`, issue: `req_coverage: 대응표 역채움에서 빠진 요구 id ${sample(missing, 8)} — 장표 id 를 채우거나 '공백'·발표 제외 사유를 적을 것` };
   return { id: 'req_coverage', status: 'pass', evidence: `요구 ${ids.length}개가 모두 장표 구성안에 나옴` };
 }

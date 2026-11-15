@@ -456,7 +456,20 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
       // 2-3) QA 게이트 — 고지표가 판정. 점수가 아니라 4값 검사 + PASS/CONDITIONAL/FAIL.
       await publish();
       liveNote(task.id, meta, '', 'qa_start');
-      let verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log });
+      // 서버 검사를 먼저 돌려 QA 에 사실로 넘긴다 — 긴 대응표의 행 수·요구 id 대조를 QA 가 다시 세다 놓치거나 '확인 못 함'으로 남기지 않게
+      //   제안 RFP 분석: 인용을 원문에서 다시 찾고 요구 id 중복·비기능 축(mock 은 목업이라 참고로만)
+      //   제안·견적 단계: 근거표(EV id)·대응표 역채움·AI 검수 표기·인력 카드/갭 분석 제목 등(단계 정의의 checks·sections). 앞 산출물은 같은 브리핑의 끝난 작업에서
+      const serverChecks = [];
+      if (task.process === 'proposal' && task.step === 'rfp') serverChecks.push(await rfpChecks(r.file, b, { required: mode === 'claude_code' }));
+      if (task.process === 'proposal' || task.process === 'estimate') {
+        const siblings = (await hive.tasksOf(briefingId))
+          .filter((t) => t.id !== task.id && t.output && ['완료', '승인대기'].includes(t.status))
+          .map((t) => ({ step: t.step || '', file: absData(t.output) }))
+          .filter((s) => s.file);
+        serverChecks.push(await proposalChecks(task, r.file, { siblings, required: mode === 'claude_code' }));
+      }
+      const facts = serverChecks.flatMap((sc) => sc.checks).map((c) => `${c.id} ${c.status}${c.required === false ? '(참고)' : ''} — ${String(c.evidence || '').slice(0, 300)}`);
+      let verdict = await judge({ task, file: r.file, briefing: b, priorFiles: prior, mode, model: process.env.OFFICE_MODEL, log, facts });
       // 기획 화면 생성 — 서버가 린트(L01~L13)·verify(V01~V08)를 돌려 기계 검사에 더한다. 위반이면 FAIL → 1회 보완에 지적으로 붙는다.
       if (plan) {
         const pc = await planningChecks(task, plan, { mode });
@@ -465,23 +478,10 @@ export async function runBriefing(raw, { setState, deliverablesRoot = DELIVERABL
           verdict = { ...verdict, gate, checks: [...verdict.checks, ...pc.checks], issues: gate === 'FAIL' && pc.issues.length ? [...pc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
         }
       }
-      // 제안 RFP 분석 — 서버가 인용을 원문에서 다시 찾고 요구 id 중복·비기능 축을 본다(mock 은 목업이라 참고로만)
-      if (task.process === 'proposal' && task.step === 'rfp') {
-        const rc = await rfpChecks(r.file, b, { required: mode === 'claude_code' });
-        const gate = combineGate(rc.checks, verdict.gate);
-        verdict = { ...verdict, gate, checks: [...verdict.checks, ...rc.checks], issues: gate === 'FAIL' && rc.issues.length ? [...rc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
-      }
-      // 제안·견적 단계 — 근거표(EV id)·대응표 역채움·AI 검수 표기·인력 카드/갭 분석 제목 등(단계 정의의 checks·sections). 앞 산출물은 같은 브리핑의 끝난 작업에서
-      if (task.process === 'proposal' || task.process === 'estimate') {
-        const siblings = (await hive.tasksOf(briefingId))
-          .filter((t) => t.id !== task.id && t.output && ['완료', '승인대기'].includes(t.status))
-          .map((t) => ({ step: t.step || '', file: absData(t.output) }))
-          .filter((s) => s.file);
-        const pc = await proposalChecks(task, r.file, { siblings, required: mode === 'claude_code' });
-        if (pc.checks.length) {
-          const gate = combineGate(pc.checks, verdict.gate);
-          verdict = { ...verdict, gate, checks: [...verdict.checks, ...pc.checks], issues: gate === 'FAIL' && pc.issues.length ? [...pc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
-        }
+      for (const sc of serverChecks) {
+        if (!sc.checks.length) continue;
+        const gate = combineGate(sc.checks, verdict.gate);
+        verdict = { ...verdict, gate, checks: [...verdict.checks, ...sc.checks], issues: gate === 'FAIL' && sc.issues.length ? [...sc.issues, ...verdict.issues].slice(0, 8) : verdict.issues };
       }
       // 보완 재작업 뒤 — 변경 기록(CHG-nn) 표가 있는지(참고, 판정에는 넣지 않는다)
       if (revision && wantsChangeLog(task, b)) {

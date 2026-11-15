@@ -14,6 +14,35 @@ const MIN_QUOTE = 8; // 이보다 짧은 따옴표 안 글은 인용으로 보�
 const MAX_SOURCE = 4 * 1024 * 1024;
 const AXES = ['성능', '가용성', '보안', '접근성', '호환성', '감리'];
 export const ID_RE = /^(?:REQ|FR|NFR|TR|OR|CR|SFR|PER|SER|INR|DAR|QUR|COR|PMR|PSR|ECR)[-_A-Z0-9]*\d+$/i;
+// RFP 목차식 요구 번호 — Ⅰ-1-가 · Ⅲ-4-나-② · Ⅰ-2-나-※2 · 1-가-1. 첫 마디는 로마 숫자(Ⅰ~Ⅹ) 또는 두 자리까지의 숫자(연도 '2026-11' 은 아님)
+const OUTLINE_ID_RE = /^(?:[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]{1,3}|\d{1,2})(?:-(?:\d{1,3}|[가-힣]|[①-⑳]|※\d?))+$/;
+// 표 머리줄 첫 칸이 이런 이름이면 그 표의 첫 칸은 형식과 상관없이 요구 번호로 읽는다('평가 id' 는 아님)
+const ID_HEAD_RE = /^(?:요구\s*(?:사항)?\s*(?:id|아이디|번호|코드)|req(?:uirement)?\s*id|rfp\s*id)$/i;
+const cleanCell = (c) => String(c ?? '').replace(/[*`]/g, '').trim();
+/** 칸 → 요구 번호(앞 'internal:' 내부 표시는 뗀다) */
+export const bareReqId = (c) => cleanCell(c).replace(/^internal:\s*/i, '');
+/** 형식만으로 요구 번호처럼 보이는가(머리줄이 없는 표에서 쓴다) */
+export const looksLikeReqId = (c) => { const b = bareReqId(c); return ID_RE.test(b) || OUTLINE_ID_RE.test(b); };
+
+/**
+ * 산출물의 요구 번호 칸 전부(겹친 것도 그대로) — ① 머리줄 첫 칸이 '요구 id'류인 표는 첫 칸 값 전부,
+ * ② 그 밖의 표는 첫 칸이 영문 접두 번호(REQ-001·SFR-012)나 RFP 목차식 번호(Ⅰ-1-가)인 행.
+ * 영문 형식만 알아보던 때는 목차식 번호를 쓴 RFP(2026-11-15 보장분석 제안)에서 검사가 통째로 건너뛰어졌다.
+ */
+export function requirementIdCells(md) {
+  const out = [];
+  for (const t of parseTables(md)) {
+    const byHead = ID_HEAD_RE.test(cleanCell(t.head?.[0]));
+    const rows = byHead ? t.rows : (looksLikeReqId(t.head?.[0]) ? [t.head, ...t.rows] : t.rows);
+    for (const row of rows) {
+      const id = bareReqId(row[0]);
+      if (!id || id.length > 40 || /^[-—–·]+$/.test(id) || /^(?:소계|합계|계|총계)$/.test(id)) continue;
+      if (!byHead && !looksLikeReqId(row[0])) continue;
+      out.push(id);
+    }
+  }
+  return out;
+}
 
 const xmlText = (xml) => xml.replace(/<\/w:p>|<\/hp:p>|<\/a:p>|<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&amp;/g, '&');
 
@@ -98,14 +127,8 @@ export async function rfpChecks(file, briefing, { required = true } = {}) {
     if (none.length) issues.push(`quote_verify: 원문에 없는 인용 ${none.length}건 — ${sample}. 원문 문장을 그대로 옮기거나 인용 표시를 빼고 '해석'으로 적을 것`);
   }
 
-  // 요구 id 중복 — 표의 첫 칸이 id 인 행
-  const ids = [];
-  for (const t of parseTables(md)) {
-    for (const row of t.rows) {
-      const c = String(row[0] || '').trim();
-      if (ID_RE.test(c)) ids.push(c.toUpperCase());
-    }
-  }
+  // 요구 id 중복 — 머리줄이 '요구 id' 인 표의 첫 칸, 또는 첫 칸이 요구 번호 형식인 행
+  const ids = requirementIdCells(md).map((c) => c.toUpperCase());
   if (!ids.length) {
     checks.push({ id: 'req_ids', status: 'not_run', evidence: '표 첫 칸에서 요구 id 를 찾지 못함', required: false });
   } else {
