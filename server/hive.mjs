@@ -702,6 +702,95 @@ export async function recordUsage({ agent, tokens, usd = 0, briefing, what }) {
   await appendEvent({ kind: 'usage', agent, tokens: t, tokens_w: weighted(t), cost_usd: Number(Number(usd || 0).toFixed(4)), briefing, what });
 }
 
+// ── 작업 초기화(보관) ──
+// 진행하던 작업판을 지우지 않고 hive/_archive/reset-<시각>/ 으로 옮긴 뒤 빈 상태로 다시 시작한다.
+//   옮기는 것   작업 원장·승인·질문·대기열(복사 후 비움) · 편지함(inbox·outbox) · 브리핑 기록 · 실시간 기록(live) · 현황판 · 미확정 · (선택) 에이전트 기억
+//   남기는 것   설정·추가 인원·서킷 브레이커·사용 한도·예약·템플릿·이벤트 기록(events.log — 감사 기록) · 산출물 폴더(hive 밖)
+//   번호        원장·승인·질문·대기열의 번호(seq 등 배열이 아닌 값)는 그대로 둔다 — 새 작업이 T-0001 부터 다시 시작해 옛 산출물과 헷갈리지 않게
+//   사용량      옮긴 작업의 사용 토큰은 usage_carry.json 에 원래 날짜로 남긴다 — 초기화로 오늘 사용량·하루 한도가 풀리지 않게
+// 진행 중인 브리핑·대기열이 없을 때만 부른다(office-server 가 확인). 각 파일은 그 파일의 쓰기 잠금 안에서 옮긴다.
+const CARRY_FILE = () => p('usage_carry.json');
+const WORK_DIRS = ['inbox', 'outbox', 'briefings', 'live'];
+const WORK_FILES = ['blackboard.md', 'open_items.md'];
+
+async function moveIfExists(from, to) {
+  try { await fs.access(from); } catch { return false; }
+  await fs.mkdir(path.dirname(to), { recursive: true });
+  for (let i = 0; ; i++) {
+    try { await fs.rename(from, to); return true; } catch (e) {
+      if (i >= 6 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      await sleep(60 * (i + 1));
+    }
+  }
+}
+
+/** JSON 원장 하나를 보관함에 복사하고, 배열 값은 비우고 번호 같은 나머지 값은 남겨 다시 쓴다. 옮긴 항목 수를 돌려준다. */
+async function archiveLedger(name, dest, fallback, onData) {
+  const file = p(name);
+  const data = await readJson(file, null);
+  if (!data) return 0;
+  await fs.copyFile(file, path.join(dest, name));
+  let count = 0;
+  const next = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (Array.isArray(v)) { count += v.length; next[k] = []; } else next[k] = v;
+  }
+  if (onData) await onData(data);
+  await writeJson(file, { ...fallback, ...next });
+  return count;
+}
+
+/**
+ * @param opts.memory  에이전트 기억(memory/)도 옮길지
+ * @param opts.by·reason  누가·왜(보관함 manifest.json 과 events.log 에 남긴다)
+ * @returns {Promise<{ dir, name, counts: {tasks, approvals, questions, queue}, moved: string[] }>}
+ */
+export async function archiveWork({ memory = false, by = '', reason = '' } = {}) {
+  const name = `reset-${stamp()}${String(new Date().getSeconds()).padStart(2, '0')}`;
+  const dest = p('_archive', name);
+  await fs.mkdir(dest, { recursive: true });
+  const counts = {};
+  const carry = [];
+  counts.tasks = await ledgerLock(() => archiveLedger('tasks.json', dest, { seq: 0, tasks: [] }, (ledger) => {
+    for (const t of ledger.tasks || []) {
+      if (weighted(t.tokens || {}) || Number(t.cost_usd)) carry.push({ agent: t.owner, tokens: t.tokens || null, cost_usd: Number(t.cost_usd) || 0, at: t.cost_at || t.updated || t.created, task: t.id });
+      if (t.qa && (weighted(t.qa.tokens || {}) || Number(t.qa.cost_usd))) carry.push({ role: 'qa', tokens: t.qa.tokens || null, cost_usd: Number(t.qa.cost_usd) || 0, at: t.qa.at || t.updated || t.created, task: t.id });
+    }
+  }));
+  if (carry.length) {
+    await appendLock(async () => {
+      const book = await readJson(CARRY_FILE(), { entries: [] });
+      book.entries.push(...carry.map((c) => ({ ...c, archive: name })));
+      await writeJson(CARRY_FILE(), book);
+    });
+  }
+  counts.approvals = await approvalLock(() => archiveLedger('approvals.json', dest, { approvals: [] }));
+  counts.questions = await questionLock(() => archiveLedger('questions.json', dest, { questions: [] }));
+  counts.queue = await archiveLedger('queue.json', dest, { items: [] });
+  const moved = [];
+  await routeLock(async () => {
+    for (const d of [...WORK_DIRS, ...(memory ? ['memory'] : [])]) if (await moveIfExists(p(d), path.join(dest, d))) moved.push(d + '/');
+  });
+  await appendLock(async () => {
+    for (const f of WORK_FILES) if (await moveIfExists(p(f), path.join(dest, f))) moved.push(f);
+  });
+  await writeJson(path.join(dest, 'manifest.json'), { name, at: nowIso(), by, reason, memory, counts, moved, carried_usage: carry.length });
+  await appendEvent({ kind: 'reset', archive: name, by, reason, memory, counts });
+  return { dir: dest, name, counts, moved };
+}
+
+/** 보관함 목록(최근 것부터) — 초기화 때 남긴 manifest.json. */
+export async function listArchives() {
+  let names = [];
+  try { names = await fs.readdir(p('_archive')); } catch { return []; }
+  const out = [];
+  for (const n of names.filter((x) => x.startsWith('reset-')).sort().reverse().slice(0, 20)) {
+    const m = await readJson(p('_archive', n, 'manifest.json'), null);
+    if (m) out.push({ name: n, at: m.at, by: m.by, reason: m.reason, memory: Boolean(m.memory), counts: m.counts || {} });
+  }
+  return out;
+}
+
 /**
  * 사용량 합계 — 사용 토큰(tokens.mjs). 역할 실행은 담당에게, QA 판정은 고지표(go)에게, 원장 밖 사용(usage 이벤트)은 그 에이전트에게.
  * 토큰을 기록하기 전(금액만 남은) 작업은 토큰 합계에 넣지 못하므로 따로 센다(untracked). usd_ref 는 API 환산 참고 합계.
@@ -735,6 +824,9 @@ export async function usageSummary({ qaAgent = 'go' } = {}) {
     if (t.qa) add(qaAgent, t.qa.tokens, t.qa.cost_usd, t.qa.at || t.updated || t.created);
   }
   for (const e of events) if (e.kind === 'usage') add(e.agent, e.tokens, e.cost_usd, e.ts);
+  // 초기화로 보관한 작업의 사용량 — 원래 날짜로 더한다(오늘 사용량·하루 한도가 초기화로 풀리지 않게)
+  const carry = await readJson(CARRY_FILE(), { entries: [] });
+  for (const c of carry.entries || []) add(c.role === 'qa' ? qaAgent : c.agent, c.tokens, c.cost_usd, c.at);
   return {
     total, byAgent, byDay, byAgentDay, parts, parts_today: partsToday,
     usd_ref: Number(usdRef.toFixed(2)), untracked,

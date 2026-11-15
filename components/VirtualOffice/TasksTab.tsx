@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, FileText, FolderOpen } from 'lucide-react';
 import type { HiveState, HiveTask } from './officeSimulator';
 import { postJson } from './officeApi';
 import { PixelAvatar } from './PixelAvatar';
+import { WorkReset } from './WorkReset';
 import { gateLabel, statusLabel, useOfficeLang } from './i18n';
 import { BAD_FG, GATE_COLOR, INK, LINE, LINE_SOFT, MONO, MUTED, OK_FG, STATUS_COLOR, WARN_FG, WYLIE, WYLIE_DARK, WYLIE_TINT, h2Style, smallMuted, tok } from './officeTheme';
 
@@ -40,8 +41,9 @@ export function TasksTab({ connected, hive, selected, concurrency, apiBase }: Ta
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <h2 style={h2Style}>{t('tasks.title')}</h2>
+        {apiBase !== undefined && <WorkReset apiBase={apiBase} busy={Boolean(concurrency && concurrency.running > 0)} />}
         {concurrency && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: WYLIE_DARK, background: WYLIE_TINT, border: `1px solid ${WYLIE}`, borderRadius: 999, padding: '1px 8px', whiteSpace: 'nowrap' }}>{t('top.concurrency', { r: concurrency.running, l: concurrency.limit })}</span>}
       </div>
       {b && (

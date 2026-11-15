@@ -645,6 +645,33 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // ── 작업 초기화 ──
+    // 작업판·승인·질문·대기열·편지·실시간 기록을 보관함(hive/_archive/reset-…)으로 옮기고 빈 상태로 다시 시작한다(hive.archiveWork).
+    // 지우지 않는다. 이 PC 화면에서, 확인(confirm:true)·행위자·사유를 받아, 브리핑·대기열이 돌지 않을 때만.
+    // 팀장 상주 세션도 새로 시작한다(옛 작업을 기억한 채 답하지 않게). 산출물 폴더·설정·추가 인원·서킷 브레이커는 그대로.
+    if (req.method === 'POST' && url.pathname === '/api/work/reset') {
+      if (!sameOrigin(req)) { sendJson(res, 403, { error: '이 PC 의 AX Office 화면에서만 초기화할 수 있습니다.' }); return; }
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || '{}'); } catch { /* 아래에서 거절 */ }
+      if (body?.confirm !== true) { sendJson(res, 400, { error: '초기화하려면 확인이 필요합니다(confirm:true).' }); return; }
+      const by = String(body?.by || '').trim().slice(0, 40);
+      const reason = String(body?.reason || '').trim().slice(0, 300);
+      if (!by || !reason) { sendJson(res, 400, { error: '초기화에는 행위자(by)와 사유(reason)가 필요합니다.' }); return; }
+      if (running()) { sendJson(res, 409, { error: '브리핑이 진행 중입니다. 끝난 뒤에 초기화하세요.' }); return; }
+      const open = (await loadQueue()).items.filter((i) => i.status === 'queued' || i.status === 'running');
+      if (open.length) { sendJson(res, 409, { error: `대기열에 차례를 기다리거나 도는 항목이 ${open.length}건 있습니다. 취소하거나 끝난 뒤에 초기화하세요.` }); return; }
+      const r = await hive.archiveWork({ memory: body?.memory === true, by, reason });
+      await clearState();
+      await updateSettings({ leader_session_id: '' });
+      log(`작업 초기화 — 보관함 ${r.name}(작업 ${r.counts.tasks}·승인 ${r.counts.approvals}·질문 ${r.counts.questions}·대기열 ${r.counts.queue}${body?.memory === true ? '·기억' : ''}) — ${by}: ${reason}`);
+      sendJson(res, 200, { ok: true, archive: r.name, counts: r.counts, moved: r.moved, ...(localViewer(req) ? { path: r.dir } : {}) });
+      return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/work/archives') {
+      sendJson(res, 200, { archives: await hive.listArchives(), ...(localViewer(req) ? { dir: path.join(HIVE_DIR, '_archive') } : {}) });
+      return;
+    }
+
     // ── 질문(ask me) ──
     if (req.method === 'GET' && url.pathname === '/api/questions') {
       const book = await hive.loadQuestions();

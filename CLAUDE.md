@@ -180,6 +180,10 @@ Munder Difflin 식 운영(오케스트레이터 + hive + 사무실 화면)을 �
   Claude Code 가 없는 PC 는 [Claude Code 설치] — 공식 설치 스크립트(`claude.ai/install.ps1`)를 창 없이 돌려 `%USERPROFILE%\.local\bin` 에 깐다(확인 필수).
   실행 파일 찾는 순서: `CLAUDE_BIN` → 데스크톱 앱 내장 → `.local\bin\claude.exe` → PATH. 다른 PC 배포 안내는 `desktop/INSTALL.md`.
   시험은 가짜 claude(`CLAUDE_BIN`, 설치는 `OFFICE_CLI_INSTALL_CMD`)로 한다 — 실제 계정을 로그아웃시키거나 실제 설치를 돌리지 않는다.
+- **작업 초기화**: 작업판 머리의 [초기화](`WorkReset.tsx` → `POST /api/work/reset`, `hive.archiveWork`). 작업판·승인·질문·대기열(복사 후 비움)과 편지함·브리핑 기록·live·현황판·미확정을
+  `hive/_archive/reset-<시각>/` 으로 옮긴다 — **지우지 않는다**. 확인·행위자·사유 필수, 브리핑·대기열이 돌면 409, 에이전트 기억은 고를 때만. 원장 번호(seq)는 남기고(새 작업이 T-0001 로 돌아가지 않게),
+  옮긴 작업의 사용 토큰은 `usage_carry.json` 에 원래 날짜로 남겨 `usageSummary` 가 계속 더한다(초기화로 하루 한도가 풀리지 않게). 팀장 상주 세션 id 를 비워 새로 시작한다.
+  설정·추가 인원·서킷 브레이커·사용 한도·예약·템플릿·events.log·산출물 폴더는 그대로. 보관함 목록 `GET /api/work/archives`(manifest.json).
 - **설정·산출물 위치**: 설정 창에서 산출물 폴더·비용 한도·QA 자동 보완·동시 작업 수(1~3)를 바꾼다. 산출물 폴더는 `server/storage.mjs` 가 쓰기 시험 후
   `paths.mjs` 의 `DELIVERABLES_DIR`(live binding)를 바꾸고 `settings.json` 의 `deliverables_dir` 에 남긴다. 브리핑 진행 중에는 바꾸지 않고, 예전 폴더 파일은 지우지 않는다.
   파일 열기(`/api/open`)는 산출물 폴더 안의 문서만, 이 PC 화면에서 온 요청만 받는다.
