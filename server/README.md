@@ -92,5 +92,5 @@ OFFICE_MODE=live node office-server.mjs  # Windows: $env:OFFICE_MODE="live"; nod
 - 무인 실행 에이전트는 **문서 읽기·쓰기만** 허용합니다(PC 명령 실행 `Bash` 차단).
 - 작업 1건마다 **비용 상한(`OFFICE_MAX_USD`)·턴 상한(`OFFICE_MAX_TURNS`)** 이 걸려 있어, 넘으면 그때까지 쓴 내용으로 마감합니다.
   표시되는 비용은 SDK 추정치이며 청구서가 아닙니다 — 실제 사용량은 Anthropic 콘솔에서 확인하세요.
-- 업로드한 고객 원본(`DELIVERABLES/_inbox/`, `*/_attachments/`)은 커밋되지 않습니다(`.gitignore`).
+- `DELIVERABLES/` 폴더 전체(산출물과 업로드한 고객 원본 `_inbox/`, `*/_attachments/` 포함)는 커밋되지 않습니다(`.gitignore`). 산출물은 각 PC에만 남습니다.
 - 터널로 공개한 엔드포인트에는 인증이 없습니다. 쓸 때만 켜고, 상시 운영하려면 인증을 앞단에 두세요.

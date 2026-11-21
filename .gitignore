@@ -43,6 +43,6 @@ dist-standalone/
 .claude/skills/ba-agent/
 .claude/skills/proposal-maker/
 
-# 고객 첨부 원본(RFP 등) — 업로드 임시함과 과제별 첨부 사본은 커밋하지 않는다
-DELIVERABLES/_inbox/
-DELIVERABLES/**/_attachments/
+# 고객 산출물 — 제안서·회의록·시안 등 고객사 자료가 들어가므로 폴더 전체를 커밋하지 않는다
+# (각 PC에만 둔다. 서버가 실행 시 폴더를 자동 생성한다. 업로드 임시함 _inbox/·_attachments/ 포함)
+DELIVERABLES/
