@@ -43,6 +43,7 @@ dist-standalone/
 .claude/skills/ba-agent/
 .claude/skills/proposal-maker/
 
-# 고객 첨부 원본(RFP 등) — 업로드 임시함과 과제별 첨부 사본은 커밋하지 않는다
-DELIVERABLES/_inbox/
-DELIVERABLES/**/_attachments/
+# 산출물(고객사 제안서·RFP 기반 문서·내부 보고) — 공개 저장소에 올리지 않는다.
+# 서버 파이프라인이 각 PC의 DELIVERABLES/<과제명>/ 에 생성하며, 로컬에만 둔다.
+# (업로드 임시함 _inbox/ 와 _attachments/ 도 이 규칙으로 함께 제외된다)
+DELIVERABLES/
